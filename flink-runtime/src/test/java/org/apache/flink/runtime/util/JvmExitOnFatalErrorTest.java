@@ -53,6 +53,7 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
 import org.apache.flink.runtime.jobgraph.tasks.InputSplitProvider;
 import org.apache.flink.runtime.memory.MemoryManager;
+import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.metrics.groups.UnregisteredMetricGroups;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
 import org.apache.flink.runtime.state.TaskLocalStateStore;
@@ -271,6 +272,13 @@ public class JvmExitOnFatalErrorTest {
 			@Override
 			public CompletableFuture<ExecutionState> requestPartitionProducerState(
 					JobID jobId, IntermediateDataSetID intermediateDataSetId, ResultPartitionID r) {
+				return null;
+			}
+
+			@Override
+			public CompletableFuture<Acknowledge> triggerFailProducer(IntermediateDataSetID intermediateDataSetId,
+																	  ResultPartitionID resultPartitionId,
+																	  Throwable cause) {
 				return null;
 			}
 		}

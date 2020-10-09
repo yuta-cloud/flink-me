@@ -22,6 +22,7 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.core.testutils.OneShotLatch;
 import org.apache.flink.runtime.checkpoint.CheckpointMetaData;
 import org.apache.flink.runtime.checkpoint.CheckpointMetrics;
+import org.apache.flink.runtime.checkpoint.JobManagerTaskRestore;
 import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
 import org.apache.flink.runtime.checkpoint.PrioritizedOperatorSubtaskState;
 import org.apache.flink.runtime.checkpoint.TaskStateSnapshot;
@@ -166,6 +167,16 @@ public class TestTaskStateManager implements TaskStateManager {
 	@Override
 	public void notifyCheckpointComplete(long checkpointId) throws Exception {
 
+	}
+
+	@Override
+	public void setTaskRestore(JobManagerTaskRestore taskRestore) {
+
+	}
+
+	@Override
+	public long getCurrentCheckpointRestoreID() {
+		return reportedCheckpointId;
 	}
 
 	public JobID getJobId() {

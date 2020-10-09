@@ -25,6 +25,9 @@ import javax.annotation.concurrent.ThreadSafe;
 
 import java.nio.ByteBuffer;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
 
@@ -34,6 +37,8 @@ import static org.apache.flink.util.Preconditions.checkState;
  */
 @NotThreadSafe
 public class BufferBuilder {
+	private static final Logger LOG = LoggerFactory.getLogger(BufferBuilder.class);
+
 	private final MemorySegment memorySegment;
 
 	private final BufferRecycler recycler;
@@ -47,6 +52,14 @@ public class BufferBuilder {
 		this.recycler = checkNotNull(recycler);
 	}
 
+	public BufferBuilder(BufferBuilder bufferBuilder, MemorySegment memorySegment, BufferRecycler recycler) {
+		bufferBuilder.memorySegment.copyTo(0, memorySegment, 0, bufferBuilder.getWrittenBytes());
+		this.memorySegment = memorySegment;
+		this.recycler = recycler;
+		this.positionMarker.move(bufferBuilder.getWrittenBytes());
+		LOG.debug("Created {} from {}. Copied {} to {}.", this, bufferBuilder, bufferBuilder.memorySegment, memorySegment);
+	}
+
 	/**
 	 * @return created matching instance of {@link BufferConsumer} to this {@link BufferBuilder}. There can exist only
 	 * one {@link BufferConsumer} per each {@link BufferBuilder} and vice versa.
@@ -54,6 +67,7 @@ public class BufferBuilder {
 	public BufferConsumer createBufferConsumer() {
 		checkState(!bufferConsumerCreated, "There can not exists two BufferConsumer for one BufferBuilder");
 		bufferConsumerCreated = true;
+		LOG.debug("New BufferConsumer wrapping memory segment {} (hash: {}) with positionMarker {}", memorySegment, System.identityHashCode(memorySegment), positionMarker.getCached());
 		return new BufferConsumer(
 			memorySegment,
 			recycler,
@@ -81,6 +95,8 @@ public class BufferBuilder {
 		int needed = source.remaining();
 		int available = getMaxCapacity() - positionMarker.getCached();
 		int toCopy = Math.min(needed, available);
+
+		LOG.debug("append to memorySegment (hash: {}): positionMarker: {}, needed: {}, available: {}, toCopy: {}", System.identityHashCode(memorySegment), positionMarker.getCached(), needed, available, toCopy);
 
 		memorySegment.put(positionMarker.getCached(), source, toCopy);
 		positionMarker.move(toCopy);
@@ -120,6 +136,23 @@ public class BufferBuilder {
 
 	public int getMaxCapacity() {
 		return memorySegment.size();
+	}
+
+	public int getMemorySegmentHash() {
+		return System.identityHashCode(memorySegment);
+	}
+
+	public MemorySegment getMemorySegment() {
+		return memorySegment;
+	}
+
+	private int getWrittenBytes() {
+		return positionMarker.getCached();
+	}
+
+	@Override
+	public String toString() {
+		return String.format("BufferBuilder [isFinished: %b, isFull: %b, max capacity: %d, memory segment hash: %d, written bytes: %d]", isFinished(), isFull(),  getMaxCapacity(), getMemorySegmentHash(), getWrittenBytes());
 	}
 
 	/**

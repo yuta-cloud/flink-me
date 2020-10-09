@@ -19,6 +19,7 @@ package org.apache.flink.streaming.connectors.kafka.internal;
 
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.metrics.MetricGroup;
+import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
 import org.apache.flink.streaming.api.functions.AssignerWithPeriodicWatermarks;
 import org.apache.flink.streaming.api.functions.AssignerWithPunctuatedWatermarks;
 import org.apache.flink.streaming.api.functions.source.SourceFunction;
@@ -86,7 +87,7 @@ public class KafkaFetcher<T> extends AbstractFetcher<T, TopicPartition> {
 		long pollTimeout,
 		MetricGroup subtaskMetricGroup,
 		MetricGroup consumerMetricGroup,
-		boolean useMetrics) throws Exception {
+		boolean useMetrics, IRecoveryManager recoveryManager) throws Exception {
 		super(
 			sourceContext,
 			assignedPartitionsWithInitialOffsets,
@@ -96,7 +97,7 @@ public class KafkaFetcher<T> extends AbstractFetcher<T, TopicPartition> {
 			autoWatermarkInterval,
 			userCodeClassLoader,
 			consumerMetricGroup,
-			useMetrics);
+			useMetrics, recoveryManager);
 
 		this.deserializer = deserializer;
 		this.handover = new Handover();

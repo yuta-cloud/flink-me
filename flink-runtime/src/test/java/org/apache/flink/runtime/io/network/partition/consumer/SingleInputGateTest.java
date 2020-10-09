@@ -205,7 +205,7 @@ public class SingleInputGateTest {
 		verify(taskEventDispatcher, times(1)).publish(any(ResultPartitionID.class), any(TaskEvent.class));
 
 		// After the update, the pending event should be send to local channel
-		inputGate.updateInputChannel(new InputChannelDeploymentDescriptor(new ResultPartitionID(unknownPartitionId.getPartitionId(), unknownPartitionId.getProducerId()), ResultPartitionLocation.createLocal()));
+		inputGate.updateInputChannel(new InputChannelDeploymentDescriptor(new ResultPartitionID(unknownPartitionId.getPartitionId(), unknownPartitionId.getProducerId()), ResultPartitionLocation.createLocal()), null, null);
 
 		verify(partitionManager, times(2)).createSubpartitionView(any(ResultPartitionID.class), anyInt(), any(BufferAvailabilityListener.class));
 		verify(taskEventDispatcher, times(2)).publish(any(ResultPartitionID.class), any(TaskEvent.class));
@@ -223,6 +223,7 @@ public class SingleInputGateTest {
 
 		ResultPartitionManager partitionManager = mock(ResultPartitionManager.class);
 
+
 		InputChannel unknown = new UnknownInputChannel(
 			inputGate,
 			0,
@@ -237,7 +238,7 @@ public class SingleInputGateTest {
 		// Update to a local channel and verify that no request is triggered
 		inputGate.updateInputChannel(new InputChannelDeploymentDescriptor(
 			unknown.partitionId,
-			ResultPartitionLocation.createLocal()));
+			ResultPartitionLocation.createLocal()), null, null);
 
 		verify(partitionManager, never()).createSubpartitionView(
 			any(ResultPartitionID.class), anyInt(), any(BufferAvailabilityListener.class));
@@ -342,7 +343,7 @@ public class SingleInputGateTest {
 		int maxBackoff = 1001;
 
 		final NetworkEnvironment netEnv = new NetworkEnvironment(
-			100, 32, initialBackoff, maxBackoff, 2, 8, enableCreditBasedFlowControl);
+			100, 32, initialBackoff, maxBackoff, 2, 8, 2, 8, enableCreditBasedFlowControl);
 
 		SingleInputGate gate = SingleInputGate.create(
 			"TestTask",
@@ -402,7 +403,7 @@ public class SingleInputGateTest {
 		int buffersPerChannel = 2;
 		int extraNetworkBuffersPerGate = 8;
 		final NetworkEnvironment network = new NetworkEnvironment(
-			100, 32, 0, 0, buffersPerChannel, extraNetworkBuffersPerGate, enableCreditBasedFlowControl);
+			100, 32, 0, 0, buffersPerChannel, extraNetworkBuffersPerGate, buffersPerChannel, extraNetworkBuffersPerGate, enableCreditBasedFlowControl);
 
 		try {
 			final ResultPartitionID resultPartitionId = new ResultPartitionID();
@@ -441,7 +442,7 @@ public class SingleInputGateTest {
 		int buffersPerChannel = 2;
 		int extraNetworkBuffersPerGate = 8;
 		final NetworkEnvironment network = new NetworkEnvironment(
-			100, 32, 0, 0, buffersPerChannel, extraNetworkBuffersPerGate, enableCreditBasedFlowControl);
+			100, 32, 0, 0, buffersPerChannel, extraNetworkBuffersPerGate, buffersPerChannel, extraNetworkBuffersPerGate, enableCreditBasedFlowControl);
 
 		try {
 			final ResultPartitionID resultPartitionId = new ResultPartitionID();
@@ -463,7 +464,7 @@ public class SingleInputGateTest {
 			final ConnectionID connectionId = new ConnectionID(new InetSocketAddress("localhost", 5000), 0);
 			inputGate.updateInputChannel(new InputChannelDeploymentDescriptor(
 				resultPartitionId,
-				ResultPartitionLocation.createRemote(connectionId)));
+				ResultPartitionLocation.createRemote(connectionId)), null, null);
 
 			if (enableCreditBasedFlowControl) {
 				RemoteInputChannel remote = (RemoteInputChannel) inputGate.getInputChannels()
@@ -493,7 +494,7 @@ public class SingleInputGateTest {
 		final SingleInputGate inputGate = createInputGate(2);
 		int buffersPerChannel = 2;
 		final NetworkEnvironment network = new NetworkEnvironment(
-			100, 32, 0, 0, buffersPerChannel, 8, enableCreditBasedFlowControl);
+			100, 32, 0, 0, buffersPerChannel, 8, 2, 8, enableCreditBasedFlowControl);
 
 		try {
 			final ResultPartitionID localResultPartitionId = new ResultPartitionID();
@@ -513,7 +514,7 @@ public class SingleInputGateTest {
 			final ConnectionID remoteConnectionId = new ConnectionID(new InetSocketAddress("localhost", 5000), 0);
 			inputGate.updateInputChannel(new InputChannelDeploymentDescriptor(
 				remoteResultPartitionId,
-				ResultPartitionLocation.createRemote(remoteConnectionId)));
+				ResultPartitionLocation.createRemote(remoteConnectionId)), null, null);
 
 			assertThat(inputGate.getInputChannels().get(remoteResultPartitionId.getPartitionId()),
 				is(instanceOf((RemoteInputChannel.class))));
@@ -523,7 +524,7 @@ public class SingleInputGateTest {
 			// Trigger updates to local input channel from unknown input channel
 			inputGate.updateInputChannel(new InputChannelDeploymentDescriptor(
 				localResultPartitionId,
-				ResultPartitionLocation.createLocal()));
+				ResultPartitionLocation.createLocal()),null,null);
 
 			assertThat(inputGate.getInputChannels().get(remoteResultPartitionId.getPartitionId()),
 				is(instanceOf((RemoteInputChannel.class))));

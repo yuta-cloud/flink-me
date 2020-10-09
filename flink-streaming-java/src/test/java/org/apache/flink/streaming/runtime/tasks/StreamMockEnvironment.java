@@ -26,6 +26,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.accumulators.AccumulatorRegistry;
 import org.apache.flink.runtime.broadcast.BroadcastVariableManager;
+import org.apache.flink.runtime.causal.log.CausalLogManager;
 import org.apache.flink.runtime.checkpoint.CheckpointMetaData;
 import org.apache.flink.runtime.checkpoint.CheckpointMetrics;
 import org.apache.flink.runtime.checkpoint.TaskStateSnapshot;
@@ -36,8 +37,9 @@ import org.apache.flink.runtime.io.disk.iomanager.IOManagerAsync;
 import org.apache.flink.runtime.io.network.TaskEventDispatcher;
 import org.apache.flink.runtime.io.network.api.writer.RecordOrEventCollectingResultPartitionWriter;
 import org.apache.flink.runtime.io.network.api.writer.ResultPartitionWriter;
-import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
+import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGate;
 import org.apache.flink.runtime.io.network.util.TestPooledBufferProvider;
+import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.tasks.InputSplitProvider;
 import org.apache.flink.runtime.memory.MemoryManager;
@@ -47,6 +49,7 @@ import org.apache.flink.runtime.operators.testutils.MockInputSplitProvider;
 import org.apache.flink.runtime.query.KvStateRegistry;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
 import org.apache.flink.runtime.state.TaskStateManager;
+import org.apache.flink.runtime.taskmanager.Task;
 import org.apache.flink.runtime.taskmanager.TaskManagerRuntimeInfo;
 import org.apache.flink.runtime.util.TestingTaskManagerRuntimeInfo;
 import org.apache.flink.util.Preconditions;
@@ -78,7 +81,7 @@ public class StreamMockEnvironment implements Environment {
 
 	private final Configuration taskConfiguration;
 
-	private final List<InputGate> inputs;
+	private final LinkedList<SingleInputGate> inputs;
 
 	private final List<ResultPartitionWriter> outputs;
 
@@ -145,7 +148,7 @@ public class StreamMockEnvironment implements Environment {
 			0 /* attempt number */);
 		this.jobConfiguration = jobConfig;
 		this.taskConfiguration = taskConfig;
-		this.inputs = new LinkedList<InputGate>();
+		this.inputs = new LinkedList<SingleInputGate>();
 		this.outputs = new LinkedList<ResultPartitionWriter>();
 		this.memManager = new MemoryManager(memorySize, 1);
 		this.ioManager = new IOManagerAsync();
@@ -171,7 +174,7 @@ public class StreamMockEnvironment implements Environment {
 		this(jobConfig, taskConfig, new ExecutionConfig(), memorySize, inputSplitProvider, bufferSize, taskStateManager);
 	}
 
-	public void addInputGate(InputGate gate) {
+	public void addInputGate(SingleInputGate gate) {
 		inputs.add(gate);
 	}
 
@@ -191,6 +194,11 @@ public class StreamMockEnvironment implements Environment {
 	@Override
 	public Configuration getTaskConfiguration() {
 		return this.taskConfiguration;
+	}
+
+	@Override
+	public Task getContainingTask() {
+		return null;
 	}
 
 	@Override
@@ -249,13 +257,13 @@ public class StreamMockEnvironment implements Environment {
 	}
 
 	@Override
-	public InputGate getInputGate(int index) {
+	public SingleInputGate getInputGate(int index) {
 		return inputs.get(index);
 	}
 
 	@Override
-	public InputGate[] getAllInputGates() {
-		InputGate[] gates = new InputGate[inputs.size()];
+	public SingleInputGate[] getAllInputGates() {
+		SingleInputGate[] gates = new SingleInputGate[inputs.size()];
 		inputs.toArray(gates);
 		return gates;
 	}
@@ -266,8 +274,18 @@ public class StreamMockEnvironment implements Environment {
 	}
 
 	@Override
+	public CausalLogManager getCausalLogManager() {
+		return null;
+	}
+
+	@Override
 	public JobVertexID getJobVertexId() {
 		return new JobVertexID(new byte[16]);
+	}
+
+	@Override
+	public List<JobVertex> getTopologicallySortedJobVertexes() {
+		return null;
 	}
 
 	@Override

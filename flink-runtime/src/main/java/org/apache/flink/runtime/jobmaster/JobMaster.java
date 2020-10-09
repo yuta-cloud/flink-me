@@ -46,11 +46,13 @@ import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.execution.SuppressRestartsException;
 import org.apache.flink.runtime.executiongraph.ArchivedExecutionGraph;
 import org.apache.flink.runtime.executiongraph.Execution;
+import org.apache.flink.runtime.executiongraph.ExecutionVertex;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.executiongraph.ExecutionGraph;
 import org.apache.flink.runtime.executiongraph.ExecutionGraphBuilder;
 import org.apache.flink.runtime.executiongraph.ExecutionJobVertex;
 import org.apache.flink.runtime.executiongraph.IntermediateResult;
+import org.apache.flink.runtime.executiongraph.IntermediateResultPartition;
 import org.apache.flink.runtime.executiongraph.JobStatusListener;
 import org.apache.flink.runtime.executiongraph.restart.RestartStrategy;
 import org.apache.flink.runtime.executiongraph.restart.RestartStrategyResolving;
@@ -630,6 +632,73 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 	}
 
 	@Override
+	public CompletableFuture<Acknowledge> requestFailProducer(
+			final IntermediateDataSetID intermediateResultId,
+			final ResultPartitionID resultPartitionId,
+			final Throwable cause) {
+
+		Execution producerExecutionToFail = executionGraph.getRegisteredExecutions().get(resultPartitionId.getProducerId());
+		if (producerExecutionToFail == null) {
+			return CompletableFuture.completedFuture(Acknowledge.get());
+		}
+		else {
+			final IntermediateResult intermediateResult =
+					executionGraph.getAllIntermediateResults().get(intermediateResultId);
+
+			if (intermediateResult != null) {
+				final ExecutionVertex producerVertex = intermediateResult
+								.getPartitionById(resultPartitionId.getPartitionId())
+								.getProducer();
+
+				// Try to find the producing execution
+				Execution producerExecutionCurrent = producerVertex.getCurrentExecutionAttempt();
+
+				if (producerExecutionToFail.getAttemptNumber() == producerExecutionCurrent.getAttemptNumber() &&
+					producerExecutionCurrent.getState() == ExecutionState.RUNNING) {
+					log.info("Fail externally producer execution {} of result partition {} because of {}.", producerExecutionCurrent, resultPartitionId, cause);
+					producerExecutionCurrent.fail(cause);
+				}
+				return CompletableFuture.completedFuture(Acknowledge.get());
+			} else {
+				return FutureUtils.completedExceptionally(new IllegalArgumentException("Intermediate data set with ID "
+						+ intermediateResultId + " not found."));
+			}
+		}
+	}
+
+	@Override
+	public CompletableFuture<Acknowledge> requestFailConsumer(
+			final ResultPartitionID resultPartitionId,
+			int subpartitionIndex,
+			final Throwable cause,
+			final Time timeout) {
+
+		final Execution producerExecution = executionGraph.getRegisteredExecutions().get(resultPartitionId.getProducerId());
+		// If producer failed no need to fail consumer.
+		if (producerExecution == null) {
+			return CompletableFuture.completedFuture(Acknowledge.get());
+		}
+
+		final ExecutionVertex producerExecutionVertex = producerExecution.getVertex();
+		final IntermediateResultPartition irp = producerExecutionVertex.getProducedPartitions().get(resultPartitionId.getPartitionId());
+		final ExecutionVertex consumerVertex = irp.getConsumers().get(0).get(subpartitionIndex).getTarget();
+
+		// Check whether another fail signal for the same vertex was sent recently
+		if (consumerVertex.concurrentFailExecutionSignal()) {
+			return CompletableFuture.completedFuture(Acknowledge.get());
+		}
+
+		final Execution consumerExecution = consumerVertex.getCurrentExecutionAttempt();
+		if (consumerExecution.getState() == ExecutionState.RUNNING) {
+			log.info("Fail externally consumer execution {} of result partition {} subpartition {} because of {}.", consumerExecution, resultPartitionId, subpartitionIndex, cause);
+			consumerExecution.fail(cause);
+		}
+
+		return CompletableFuture.completedFuture(Acknowledge.get());
+	}
+
+
+	@Override
 	public CompletableFuture<Acknowledge> scheduleOrUpdateConsumers(
 			final ResultPartitionID partitionID,
 			final Time timeout) {
@@ -1151,7 +1220,7 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 	private ExecutionGraph createAndRestoreExecutionGraph(JobManagerJobMetricGroup currentJobManagerJobMetricGroup) throws Exception {
 
 		ExecutionGraph newExecutionGraph = createExecutionGraph(currentJobManagerJobMetricGroup);
-
+		newExecutionGraph.setSlotPool(this.slotPool);
 		final CheckpointCoordinator checkpointCoordinator = newExecutionGraph.getCheckpointCoordinator();
 
 		if (checkpointCoordinator != null) {
@@ -1335,6 +1404,8 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 			establishedResourceManagerConnection = new EstablishedResourceManagerConnection(
 				resourceManagerGateway,
 				resourceManagerResourceId);
+
+			this.executionGraph.setResourceManagerConnection(establishedResourceManagerConnection);
 
 			slotPoolGateway.connectToResourceManager(resourceManagerGateway);
 

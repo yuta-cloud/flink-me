@@ -33,8 +33,10 @@ import org.apache.flink.api.common.typeutils.TypeSerializerConfigSnapshot;
 import org.apache.flink.api.common.typeutils.TypeSerializerSnapshot;
 import org.apache.flink.api.common.typeutils.UnloadableDummyTypeSerializer;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.DataOutputView;
+import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
 import org.apache.flink.runtime.state.CheckpointListener;
 import org.apache.flink.runtime.state.FunctionInitializationContext;
 import org.apache.flink.runtime.state.FunctionSnapshotContext;
@@ -110,6 +112,10 @@ public abstract class TwoPhaseCommitSinkFunction<IN, TXN, CONTEXT>
 	 */
 	private double transactionTimeoutWarningRatio = -1;
 
+	private boolean isRestored;
+
+	protected boolean hasUninitializedState;
+
 	/**
 	 * Use default {@link ListStateDescriptor} for internal state serialization. Helpful utilities for using this
 	 * constructor are {@link TypeInformation#of(Class)}, {@link org.apache.flink.api.common.typeinfo.TypeHint} and
@@ -134,6 +140,8 @@ public abstract class TwoPhaseCommitSinkFunction<IN, TXN, CONTEXT>
 		TypeSerializer<TXN> transactionSerializer,
 		TypeSerializer<CONTEXT> contextSerializer,
 		Clock clock) {
+		this.isRestored = false;
+		this.hasUninitializedState = false;
 		this.stateDescriptor =
 			new ListStateDescriptor<>(
 				"state",
@@ -341,9 +349,25 @@ public abstract class TwoPhaseCommitSinkFunction<IN, TXN, CONTEXT>
 		// for the reasons discussed in the 'notifyCheckpointComplete()' method.
 
 		state = context.getOperatorStateStore().getListState(stateDescriptor);
+		isRestored = context.isRestored();
+		if(!context.isStandby())
+			restoreTransactionStateCorrectness();
+		else
+			hasUninitializedState = true;
+	}
 
+	@Override
+	public void open(Configuration parameters) throws Exception {
+		if(hasUninitializedState){
+			restoreTransactionStateCorrectness();
+			hasUninitializedState = false;
+		}
+		super.open(parameters);
+	}
+
+	private void restoreTransactionStateCorrectness() throws Exception {
 		boolean recoveredUserContext = false;
-		if (context.isRestored()) {
+		if (isRestored) {
 			LOG.info("{} - restoring state", name());
 			for (State<TXN, CONTEXT> operatorState : state.get()) {
 				userContext = operatorState.getContext();

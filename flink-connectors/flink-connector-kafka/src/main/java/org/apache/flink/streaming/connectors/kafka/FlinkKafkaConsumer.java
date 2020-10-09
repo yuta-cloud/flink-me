@@ -20,6 +20,7 @@ package org.apache.flink.streaming.connectors.kafka;
 import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.api.common.serialization.DeserializationSchema;
 import org.apache.flink.metrics.MetricGroup;
+import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
 import org.apache.flink.streaming.api.functions.AssignerWithPeriodicWatermarks;
 import org.apache.flink.streaming.api.functions.AssignerWithPunctuatedWatermarks;
 import org.apache.flink.streaming.api.operators.StreamingRuntimeContext;
@@ -209,16 +210,33 @@ public class FlinkKafkaConsumer<T> extends FlinkKafkaConsumerBase<T> {
 	}
 
 	@Override
-	protected AbstractFetcher<T, ?> createFetcher(
-		SourceContext<T> sourceContext,
-		Map<KafkaTopicPartition, Long> assignedPartitionsWithInitialOffsets,
-		SerializedValue<AssignerWithPeriodicWatermarks<T>> watermarksPeriodic,
-		SerializedValue<AssignerWithPunctuatedWatermarks<T>> watermarksPunctuated,
-		StreamingRuntimeContext runtimeContext,
-		OffsetCommitMode offsetCommitMode,
-		MetricGroup consumerMetricGroup,
-		boolean useMetrics) throws Exception {
+	protected AbstractPartitionDiscoverer createPartitionDiscoverer(
+		KafkaTopicsDescriptor topicsDescriptor,
+		int indexOfThisSubtask,
+		int numParallelSubtasks) {
 
+		return new KafkaPartitionDiscoverer(topicsDescriptor, indexOfThisSubtask, numParallelSubtasks, properties);
+	}
+
+	// ------------------------------------------------------------------------
+	//  Timestamp-based startup
+	// ------------------------------------------------------------------------
+
+	@Override
+	public FlinkKafkaConsumerBase<T> setStartFromTimestamp(long startupOffsetsTimestamp) {
+		// the purpose of this override is just to publicly expose the method for Kafka 0.10+;
+		// the base class doesn't publicly expose it since not all Kafka versions support the functionality
+		return super.setStartFromTimestamp(startupOffsetsTimestamp);
+	}
+
+	@Override
+	protected AbstractFetcher<T, ?> createFetcher(SourceContext<T> sourceContext,
+												  Map<KafkaTopicPartition, Long> assignedPartitionsWithInitialOffsets,
+												  SerializedValue<AssignerWithPeriodicWatermarks<T>> watermarksPeriodic,
+												  SerializedValue<AssignerWithPunctuatedWatermarks<T>> watermarksPunctuated,
+												  StreamingRuntimeContext runtimeContext, OffsetCommitMode offsetCommitMode,
+												  MetricGroup consumerMetricGroup, boolean useMetrics,
+												  IRecoveryManager recoveryManager) throws Exception {
 		// make sure that auto commit is disabled when our offset commit mode is ON_CHECKPOINTS;
 		// this overwrites whatever setting the user configured in the properties
 		if (offsetCommitMode == OffsetCommitMode.ON_CHECKPOINTS || offsetCommitMode == OffsetCommitMode.DISABLED) {
@@ -239,28 +257,9 @@ public class FlinkKafkaConsumer<T> extends FlinkKafkaConsumerBase<T> {
 			pollTimeout,
 			runtimeContext.getMetricGroup(),
 			consumerMetricGroup,
-			useMetrics);
+			useMetrics, recoveryManager);
 	}
 
-	@Override
-	protected AbstractPartitionDiscoverer createPartitionDiscoverer(
-		KafkaTopicsDescriptor topicsDescriptor,
-		int indexOfThisSubtask,
-		int numParallelSubtasks) {
-
-		return new KafkaPartitionDiscoverer(topicsDescriptor, indexOfThisSubtask, numParallelSubtasks, properties);
-	}
-
-	// ------------------------------------------------------------------------
-	//  Timestamp-based startup
-	// ------------------------------------------------------------------------
-
-	@Override
-	public FlinkKafkaConsumerBase<T> setStartFromTimestamp(long startupOffsetsTimestamp) {
-		// the purpose of this override is just to publicly expose the method for Kafka 0.10+;
-		// the base class doesn't publicly expose it since not all Kafka versions support the functionality
-		return super.setStartFromTimestamp(startupOffsetsTimestamp);
-	}
 
 	@Override
 	protected Map<KafkaTopicPartition, Long> fetchOffsetsWithTimestamp(

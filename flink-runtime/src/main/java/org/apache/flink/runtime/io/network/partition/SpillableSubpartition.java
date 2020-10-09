@@ -256,6 +256,7 @@ class SpillableSubpartition extends ResultSubpartition {
 
 		while (!buffers.isEmpty()) {
 			BufferConsumer bufferConsumer = buffers.getFirst();
+			// TODO: Revisit the following: hard-coded input
 			Buffer buffer = bufferConsumer.build();
 			updateStatistics(buffer);
 			int bufferSize = buffer.getSize();
@@ -293,6 +294,16 @@ class SpillableSubpartition extends ResultSubpartition {
 	@Override
 	public boolean isReleased() {
 		return isReleased;
+	}
+
+	@Override
+	public void notifyCheckpointBarrier(long checkpointId) {
+
+	}
+
+	@Override
+	public void notifyCheckpointComplete(long checkpointId) {
+
 	}
 
 	@Override

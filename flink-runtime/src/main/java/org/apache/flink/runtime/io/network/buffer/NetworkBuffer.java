@@ -25,6 +25,10 @@ import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBufAllocator;
 import org.apache.flink.shaded.netty4.io.netty.buffer.Unpooled;
 
+import org.apache.flink.shaded.netty4.io.netty.util.IllegalReferenceCountException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -45,11 +49,13 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  */
 public class NetworkBuffer extends AbstractReferenceCountedByteBuf implements Buffer {
 
+	private static final Logger LOG = LoggerFactory.getLogger(NetworkBuffer.class);
+
 	/** The backing {@link MemorySegment} instance. */
 	private final MemorySegment memorySegment;
 
 	/** The recycler for the backing {@link MemorySegment}. */
-	private final BufferRecycler recycler;
+	private BufferRecycler recycler;
 
 	/** Whether this buffer represents a buffer or an event. */
 	private boolean isBuffer;
@@ -62,6 +68,7 @@ public class NetworkBuffer extends AbstractReferenceCountedByteBuf implements Bu
 	 * size of the backing {@link MemorySegment} (inclusive).
 	 */
 	private int currentSize;
+
 
 	/**
 	 * Creates a new buffer instance backed by the given <tt>memorySegment</tt> with <tt>0</tt> for
@@ -143,7 +150,13 @@ public class NetworkBuffer extends AbstractReferenceCountedByteBuf implements Bu
 	}
 
 	@Override
+	public void setRecycler(BufferRecycler recycler) {
+		this.recycler = recycler;
+	}
+
+	@Override
 	public void recycleBuffer() {
+		LOG.debug("Recycle buffer {} (hash: {}, memorySegment hash: {}).", this, System.identityHashCode(this), System.identityHashCode(this.getMemorySegment()));
 		release();
 	}
 
@@ -609,4 +622,5 @@ public class NetworkBuffer extends AbstractReferenceCountedByteBuf implements Bu
 	public ByteBuf asByteBuf() {
 		return this;
 	}
+
 }

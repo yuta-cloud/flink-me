@@ -34,6 +34,8 @@ import org.apache.flink.streaming.runtime.streamstatus.StreamStatus;
 import org.apache.flink.streaming.runtime.streamstatus.StreamStatusProvider;
 import org.apache.flink.streaming.runtime.tasks.OperatorChain;
 import org.apache.flink.util.OutputTag;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
@@ -44,6 +46,8 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  */
 @Internal
 public class RecordWriterOutput<OUT> implements OperatorChain.WatermarkGaugeExposingOutput<StreamRecord<OUT>> {
+
+	private static final Logger LOG = LoggerFactory.getLogger(RecordWriterOutput.class);
 
 	private StreamRecordWriter<SerializationDelegate<StreamElement>> recordWriter;
 
@@ -68,6 +72,7 @@ public class RecordWriterOutput<OUT> implements OperatorChain.WatermarkGaugeExpo
 		// with multiplexed records and watermarks
 		this.recordWriter = (StreamRecordWriter<SerializationDelegate<StreamElement>>)
 				(StreamRecordWriter<?>) recordWriter;
+
 
 		TypeSerializer<StreamElement> outRecordSerializer =
 				new StreamElementSerializer<>(outSerializer);
@@ -148,7 +153,7 @@ public class RecordWriterOutput<OUT> implements OperatorChain.WatermarkGaugeExpo
 		}
 	}
 
-	public void broadcastEvent(AbstractEvent event) throws IOException {
+	public void broadcastEvent(AbstractEvent event) throws IOException, InterruptedException {
 		recordWriter.broadcastEvent(event);
 	}
 
@@ -158,11 +163,19 @@ public class RecordWriterOutput<OUT> implements OperatorChain.WatermarkGaugeExpo
 
 	@Override
 	public void close() {
-		recordWriter.close();
+		try {
+			recordWriter.close();
+		}
+		catch (Exception e) {
+			throw new RuntimeException(e.getMessage(), e);
+		}
+
 	}
 
 	@Override
 	public Gauge<Long> getWatermarkGauge() {
 		return watermarkGauge;
 	}
+
+
 }

@@ -25,7 +25,11 @@ import org.apache.flink.core.memory.DataInputViewStreamWrapper;
 import org.apache.flink.core.memory.MemorySegment;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.util.FileUtils;
+import org.apache.flink.runtime.io.network.buffer.NetworkBuffer;
 import org.apache.flink.util.StringUtils;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.BufferedInputStream;
 import java.io.EOFException;
@@ -44,6 +48,8 @@ import java.util.Random;
  * @param <T> The type of the record to be deserialized.
  */
 public class SpillingAdaptiveSpanningRecordDeserializer<T extends IOReadableWritable> implements RecordDeserializer<T> {
+
+	private static final Logger LOG = LoggerFactory.getLogger(SpillingAdaptiveSpanningRecordDeserializer.class);
 
 	private static final String BROKEN_SERIALIZATION_ERROR_MESSAGE =
 					"Serializer consumed more bytes than the record had. " +
@@ -86,6 +92,11 @@ public class SpillingAdaptiveSpanningRecordDeserializer<T extends IOReadableWrit
 		Buffer tmp = currentBuffer;
 		currentBuffer = null;
 		return tmp;
+	}
+
+	@Override
+	public Buffer getBuffer() {
+		return currentBuffer;
 	}
 
 	@Override

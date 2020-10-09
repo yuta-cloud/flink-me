@@ -32,28 +32,14 @@ import org.apache.flink.core.fs.CloseableRegistry;
 import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.MetricGroup;
+import org.apache.flink.runtime.causal.log.job.JobCausalLog;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
 import org.apache.flink.runtime.execution.Environment;
 import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.metrics.groups.OperatorMetricGroup;
 import org.apache.flink.runtime.metrics.groups.TaskManagerJobMetricGroup;
 import org.apache.flink.runtime.metrics.groups.UnregisteredMetricGroups;
-import org.apache.flink.runtime.state.AbstractKeyedStateBackend;
-import org.apache.flink.runtime.state.CheckpointStreamFactory;
-import org.apache.flink.runtime.state.DefaultKeyedStateStore;
-import org.apache.flink.runtime.state.KeyGroupRange;
-import org.apache.flink.runtime.state.KeyGroupStatePartitionStreamProvider;
-import org.apache.flink.runtime.state.KeyGroupsList;
-import org.apache.flink.runtime.state.KeyedStateBackend;
-import org.apache.flink.runtime.state.KeyedStateCheckpointOutputStream;
-import org.apache.flink.runtime.state.OperatorStateBackend;
-import org.apache.flink.runtime.state.StateInitializationContext;
-import org.apache.flink.runtime.state.StateInitializationContextImpl;
-import org.apache.flink.runtime.state.StatePartitionStreamProvider;
-import org.apache.flink.runtime.state.StateSnapshotContext;
-import org.apache.flink.runtime.state.StateSnapshotContextSynchronousImpl;
-import org.apache.flink.runtime.state.VoidNamespace;
-import org.apache.flink.runtime.state.VoidNamespaceSerializer;
+import org.apache.flink.runtime.state.*;
 import org.apache.flink.streaming.api.graph.StreamConfig;
 import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.runtime.streamrecord.LatencyMarker;
@@ -61,12 +47,7 @@ import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import org.apache.flink.streaming.runtime.tasks.ProcessingTimeService;
 import org.apache.flink.streaming.runtime.tasks.StreamTask;
 import org.apache.flink.streaming.util.LatencyStats;
-import org.apache.flink.util.CloseableIterable;
-import org.apache.flink.util.ExceptionUtils;
-import org.apache.flink.util.IOUtils;
-import org.apache.flink.util.OutputTag;
-import org.apache.flink.util.Preconditions;
-
+import org.apache.flink.util.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -90,11 +71,15 @@ import java.util.Locale;
  */
 @PublicEvolving
 public abstract class AbstractStreamOperator<OUT>
-		implements StreamOperator<OUT>, Serializable {
+	implements StreamOperator<OUT>, Serializable {
 
 	private static final long serialVersionUID = 1L;
 
-	/** The logger used by the operator class and its subclasses. */
+	//todo provide an efficient runtime Id to each instance of an operator.
+
+	/**
+	 * The logger used by the operator class and its subclasses.
+	 */
 	protected static final Logger LOG = LoggerFactory.getLogger(AbstractStreamOperator.class);
 
 	// ----------- configuration properties -------------
@@ -104,14 +89,18 @@ public abstract class AbstractStreamOperator<OUT>
 
 	// ---------------- runtime fields ------------------
 
-	/** The task that contains this operator (and other operators in the same chain). */
+	/**
+	 * The task that contains this operator (and other operators in the same chain).
+	 */
 	private transient StreamTask<?, ?> container;
 
 	protected transient StreamConfig config;
 
 	protected transient Output<StreamRecord<OUT>> output;
 
-	/** The runtime context for UDFs. */
+	/**
+	 * The runtime context for UDFs.
+	 */
 	private transient StreamingRuntimeContext runtimeContext;
 
 	// ---------------- key/value state ------------------
@@ -255,7 +244,17 @@ public abstract class AbstractStreamOperator<OUT>
 				streamTaskCloseableRegistry,
 				metrics);
 
+		// Required for StandbyTaskFailoverStrategy
+		if (this.operatorStateBackend != null) {
+			this.operatorStateBackend.dispose();
+		}
 		this.operatorStateBackend = context.operatorStateBackend();
+
+		// Required for StandbyTaskFailoverStrategy
+		if (this.keyedStateBackend != null) {
+			this.keyedStateBackend.dispose();
+		}
+
 		this.keyedStateBackend = context.keyedStateBackend();
 
 		if (keyedStateBackend != null) {
@@ -270,6 +269,7 @@ public abstract class AbstractStreamOperator<OUT>
 		try {
 			StateInitializationContext initializationContext = new StateInitializationContextImpl(
 				context.isRestored(), // information whether we restore or start for the first time
+				!containingTask.getRecoveryManager().isRunning(),
 				operatorStateBackend, // access to operator state backend
 				keyedStateStore, // access to keyed state backend
 				keyedStateInputs, // access to keyed state stream
@@ -645,6 +645,10 @@ public abstract class AbstractStreamOperator<OUT>
 
 	public KeyedStateStore getKeyedStateStore() {
 		return keyedStateStore;
+	}
+
+	public JobCausalLog getCausalLog() {
+		return this.container.getCausalLog();
 	}
 
 	// ------------------------------------------------------------------------

@@ -25,6 +25,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.accumulators.AccumulatorRegistry;
 import org.apache.flink.runtime.broadcast.BroadcastVariableManager;
+import org.apache.flink.runtime.causal.log.CausalLogManager;
 import org.apache.flink.runtime.checkpoint.CheckpointMetrics;
 import org.apache.flink.runtime.checkpoint.TaskStateSnapshot;
 import org.apache.flink.runtime.execution.Environment;
@@ -34,9 +35,10 @@ import org.apache.flink.runtime.io.disk.iomanager.IOManagerAsync;
 import org.apache.flink.runtime.io.network.TaskEventDispatcher;
 import org.apache.flink.runtime.io.network.api.writer.RecordCollectingResultPartitionWriter;
 import org.apache.flink.runtime.io.network.api.writer.ResultPartitionWriter;
-import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
 import org.apache.flink.runtime.io.network.partition.consumer.IteratorWrappingTestSingleInputGate;
+import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGate;
 import org.apache.flink.runtime.io.network.util.TestPooledBufferProvider;
+import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.tasks.InputSplitProvider;
 import org.apache.flink.runtime.memory.MemoryManager;
@@ -44,21 +46,16 @@ import org.apache.flink.runtime.metrics.groups.TaskMetricGroup;
 import org.apache.flink.runtime.query.KvStateRegistry;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
 import org.apache.flink.runtime.state.TaskStateManager;
+import org.apache.flink.runtime.taskmanager.Task;
 import org.apache.flink.runtime.taskmanager.TaskManagerRuntimeInfo;
 import org.apache.flink.types.Record;
 import org.apache.flink.util.MutableObjectIterator;
 import org.apache.flink.util.Preconditions;
 
-import java.util.Collections;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.Future;
 
-import static org.apache.flink.util.Preconditions.checkArgument;
-import static org.apache.flink.util.Preconditions.checkNotNull;
-import static org.apache.flink.util.Preconditions.checkState;
+import static org.apache.flink.util.Preconditions.*;
 import static org.junit.Assert.fail;
 
 /**
@@ -82,7 +79,7 @@ public class MockEnvironment implements Environment, AutoCloseable {
 
 	private final Configuration taskConfiguration;
 
-	private final List<InputGate> inputs;
+	private final List<SingleInputGate> inputs;
 
 	private final List<ResultPartitionWriter> outputs;
 
@@ -137,7 +134,7 @@ public class MockEnvironment implements Environment, AutoCloseable {
 		this.taskInfo = new TaskInfo(taskName, maxParallelism, subtaskIndex, parallelism, 0);
 		this.jobConfiguration = new Configuration();
 		this.taskConfiguration = taskConfiguration;
-		this.inputs = new LinkedList<InputGate>();
+		this.inputs = new LinkedList<SingleInputGate>();
 		this.outputs = new LinkedList<ResultPartitionWriter>();
 
 		this.memManager = new MemoryManager(memorySize, 1);
@@ -254,13 +251,13 @@ public class MockEnvironment implements Environment, AutoCloseable {
 	}
 
 	@Override
-	public InputGate getInputGate(int index) {
+	public SingleInputGate getInputGate(int index) {
 		return inputs.get(index);
 	}
 
 	@Override
-	public InputGate[] getAllInputGates() {
-		InputGate[] gates = new InputGate[inputs.size()];
+	public SingleInputGate[] getAllInputGates() {
+		SingleInputGate[] gates = new SingleInputGate[inputs.size()];
 		inputs.toArray(gates);
 		return gates;
 	}
@@ -271,8 +268,18 @@ public class MockEnvironment implements Environment, AutoCloseable {
 	}
 
 	@Override
+	public CausalLogManager getCausalLogManager() {
+		return null;
+	}
+
+	@Override
 	public JobVertexID getJobVertexId() {
 		return jobVertexID;
+	}
+
+	@Override
+	public List<JobVertex> getTopologicallySortedJobVertexes() {
+		return null;
 	}
 
 	@Override
@@ -344,5 +351,10 @@ public class MockEnvironment implements Environment, AutoCloseable {
 
 	public Optional<Throwable> getActualExternalFailureCause() {
 		return actualExternalFailureCause;
+	}
+
+	@Override
+	public Task getContainingTask() {
+		throw new UnsupportedOperationException();
 	}
 }

@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.io.network.partition.consumer;
 
+import org.apache.flink.api.common.JobID;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.runtime.event.TaskEvent;
 import org.apache.flink.runtime.execution.CancelTaskException;
@@ -69,6 +70,7 @@ public abstract class InputChannel {
 	/** The current backoff (in ms). */
 	private int currentBackoff;
 
+
 	protected InputChannel(
 			SingleInputGate inputGate,
 			int channelIndex,
@@ -101,13 +103,15 @@ public abstract class InputChannel {
 	// Properties
 	// ------------------------------------------------------------------------
 
-	int getChannelIndex() {
+	public int getChannelIndex() {
 		return channelIndex;
 	}
 
 	public ResultPartitionID getPartitionId() {
 		return partitionId;
 	}
+
+	public SingleInputGate getInputGate(){return inputGate;}
 
 	/**
 	 * Notifies the owning {@link SingleInputGate} that this channel became non-empty.
@@ -155,7 +159,7 @@ public abstract class InputChannel {
 	 * the producer will wait for all backwards events. Otherwise, this will lead to an Exception
 	 * at runtime.
 	 */
-	abstract void sendTaskEvent(TaskEvent event) throws IOException;
+	public abstract void sendTaskEvent(TaskEvent event) throws IOException, InterruptedException;
 
 	// ------------------------------------------------------------------------
 	// Life cycle
@@ -197,7 +201,7 @@ public abstract class InputChannel {
 	 * Atomically sets an error for this channel and notifies the input gate about available data to
 	 * trigger querying this channel by the task thread.
 	 */
-	protected void setError(Throwable cause) {
+	public void setError(Throwable cause) {
 		if (this.cause.compareAndSet(null, checkNotNull(cause))) {
 			// Notify the input gate.
 			notifyChannelNonEmpty();
@@ -244,7 +248,11 @@ public abstract class InputChannel {
 		return false;
 	}
 
-	// ------------------------------------------------------------------------
+    public JobID getJobID(){
+		return this.inputGate.getJobID();
+	}
+
+    // ------------------------------------------------------------------------
 
 	/**
 	 * A combination of a {@link Buffer} and a flag indicating availability of further buffers,
@@ -256,11 +264,16 @@ public abstract class InputChannel {
 		private final Buffer buffer;
 		private final boolean moreAvailable;
 		private final int buffersInBacklog;
+		private final long epochID;
 
-		public BufferAndAvailability(Buffer buffer, boolean moreAvailable, int buffersInBacklog) {
+		public BufferAndAvailability(Buffer buffer, boolean moreAvailable, int buffersInBacklog){
+			this(buffer, moreAvailable, buffersInBacklog, -1L);
+		}
+		public BufferAndAvailability(Buffer buffer, boolean moreAvailable, int buffersInBacklog, long epochID) {
 			this.buffer = checkNotNull(buffer);
 			this.moreAvailable = moreAvailable;
 			this.buffersInBacklog = buffersInBacklog;
+			this.epochID = epochID;
 		}
 
 		public Buffer buffer() {
@@ -273,6 +286,10 @@ public abstract class InputChannel {
 
 		public int buffersInBacklog() {
 			return buffersInBacklog;
+		}
+
+		public long getEpochID() {
+			return epochID;
 		}
 	}
 }

@@ -25,22 +25,15 @@ import org.apache.flink.api.common.time.Time;
 import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.runtime.JobException;
 import org.apache.flink.runtime.blob.PermanentBlobKey;
+import org.apache.flink.runtime.causal.VertexID;
 import org.apache.flink.runtime.checkpoint.JobManagerTaskRestore;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
-import org.apache.flink.runtime.deployment.InputChannelDeploymentDescriptor;
-import org.apache.flink.runtime.deployment.InputGateDeploymentDescriptor;
-import org.apache.flink.runtime.deployment.PartialInputChannelDeploymentDescriptor;
-import org.apache.flink.runtime.deployment.ResultPartitionDeploymentDescriptor;
-import org.apache.flink.runtime.deployment.TaskDeploymentDescriptor;
+import org.apache.flink.runtime.deployment.*;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.instance.SimpleSlot;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionType;
-import org.apache.flink.runtime.jobgraph.DistributionPattern;
-import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
-import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
-import org.apache.flink.runtime.jobgraph.JobEdge;
-import org.apache.flink.runtime.jobgraph.JobVertexID;
+import org.apache.flink.runtime.jobgraph.*;
 import org.apache.flink.runtime.jobmanager.scheduler.CoLocationConstraint;
 import org.apache.flink.runtime.jobmanager.scheduler.CoLocationGroup;
 import org.apache.flink.runtime.jobmanager.scheduler.LocationPreferenceConstraint;
@@ -53,25 +46,17 @@ import org.apache.flink.types.Either;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.SerializedValue;
-
 import org.slf4j.Logger;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 import static org.apache.flink.runtime.execution.ExecutionState.FINISHED;
+import static org.apache.flink.runtime.execution.ExecutionState.RUNNING;
 
 /**
  * The ExecutionVertex is a parallel subtask of the execution. It may be executed once, or several times, each of
@@ -91,11 +76,23 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 
 	private final ExecutionEdge[][] inputEdges;
 
+	private final VertexID vertexId;
+
 	private final int subTaskIndex;
 
 	private final EvictingBoundedList<ArchivedExecution> priorExecutions;
 
+	private final ArrayList<Execution> standbyExecutions;
+
 	private final Time timeout;
+
+	/** If two subsequent fail signals for an execution span less than the following time range
+	 *  then it's probably the same signal triggered by many neighbors.
+	 */
+	private final Time failSignalTimeSpan;
+
+	/** When in absolute time was the last fail signal recorded. */
+	private int lastKillAttemptNumber;
 
 	/** The name in the format "myTask (2/7)", cached to avoid frequent string concatenations. */
 	private final String taskNameWithSubtask;
@@ -112,13 +109,14 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 	 */
 	@VisibleForTesting
 	ExecutionVertex(
-			ExecutionJobVertex jobVertex,
-			int subTaskIndex,
-			IntermediateResult[] producedDataSets,
-			Time timeout) {
+		ExecutionJobVertex jobVertex,
+		int subTaskIndex,
+		IntermediateResult[] producedDataSets,
+		Time timeout) {
 
 		this(
 			jobVertex,
+			null,
 			subTaskIndex,
 			producedDataSets,
 			timeout,
@@ -140,18 +138,20 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 	 *            The number of prior Executions (= execution attempts) to keep.
 	 */
 	public ExecutionVertex(
-			ExecutionJobVertex jobVertex,
-			int subTaskIndex,
-			IntermediateResult[] producedDataSets,
-			Time timeout,
-			long initialGlobalModVersion,
-			long createTimestamp,
-			int maxPriorExecutionHistoryLength) {
+		ExecutionJobVertex jobVertex,
+		VertexID vertexId,
+		int subTaskIndex,
+		IntermediateResult[] producedDataSets,
+		Time timeout,
+		long initialGlobalModVersion,
+		long createTimestamp,
+		int maxPriorExecutionHistoryLength) {
 
 		this.jobVertex = jobVertex;
+		this.vertexId = vertexId;
 		this.subTaskIndex = subTaskIndex;
 		this.taskNameWithSubtask = String.format("%s (%d/%d)",
-				jobVertex.getJobVertex().getName(), subTaskIndex + 1, jobVertex.getParallelism());
+			jobVertex.getJobVertex().getName(), subTaskIndex + 1, jobVertex.getParallelism());
 
 		this.resultPartitions = new LinkedHashMap<>(producedDataSets.length, 1);
 
@@ -165,6 +165,9 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 		this.inputEdges = new ExecutionEdge[jobVertex.getJobVertex().getInputs().size()][];
 
 		this.priorExecutions = new EvictingBoundedList<>(maxPriorExecutionHistoryLength);
+
+		// We can make the size match a replication factor
+		this.standbyExecutions = new ArrayList<Execution>();
 
 		this.currentExecution = new Execution(
 			getExecutionGraph().getFutureExecutor(),
@@ -186,7 +189,12 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 		getExecutionGraph().registerExecution(currentExecution);
 
 		this.timeout = timeout;
+
+		this.failSignalTimeSpan = Time.milliseconds(2000L);
+
+		this.lastKillAttemptNumber = -1;
 	}
+
 
 
 	// --------------------------------------------------------------------------------------------
@@ -338,6 +346,10 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 
 	public Map<IntermediateResultPartitionID, IntermediateResultPartition> getProducedPartitions() {
 		return resultPartitions;
+	}
+
+	public ArrayList<Execution> getStandbyExecutions() {
+		return new ArrayList<>(standbyExecutions);
 	}
 
 	// --------------------------------------------------------------------------------------------
@@ -655,7 +667,13 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 		// we copy a reference to the stack to make sure both calls go to the same Execution
 		final Execution exec = this.currentExecution;
 		exec.cancel();
-		return exec.getReleaseFuture();
+
+		final CompletableFuture<?> standbyExecutionReleaseFuture = cancelStandbyExecution();
+		if (standbyExecutionReleaseFuture != null) {
+			return CompletableFuture.allOf(exec.getReleaseFuture(), standbyExecutionReleaseFuture);
+		} else {
+			return exec.getReleaseFuture();
+		}
 	}
 
 	public void stop() {
@@ -664,6 +682,62 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 
 	public void fail(Throwable t) {
 		this.currentExecution.fail(t);
+	}
+
+
+	public void runStandbyExecution() throws IllegalStateException {
+		if (standbyExecutions.isEmpty()) {
+			throw new IllegalStateException("No standby execution to run.");
+		}
+
+		Execution firstStandbyExecution = this.standbyExecutions.remove(0);
+		priorExecutions.add(currentExecution.archive());
+		currentExecution = firstStandbyExecution;
+
+		currentExecution.runStandbyExecution();
+
+
+		boolean updateConsumersOnFailover = true;
+
+		//Tell consumers of failed operator to reconfigure connections
+		LOG.debug("Update the to-run standby task's " + currentExecution + " consumer vertices (if any).");
+		for (IntermediateResultPartition partition : resultPartitions.values()) {
+			checkPartition(partition);
+			currentExecution.scheduleOrUpdateConsumers(partition.getConsumers(),
+				updateConsumersOnFailover);
+		}
+
+		//Tell producers for failed operator to reconfigure connections
+		for (ExecutionEdge[] edges : inputEdges) {
+			for (ExecutionEdge edge : edges) {
+				List<List<ExecutionEdge>> currentConsumerEdge = new ArrayList<List<ExecutionEdge>>(0);
+				currentConsumerEdge.add(new ArrayList<ExecutionEdge>(0));
+				currentConsumerEdge.get(0).add(edge);
+
+				checkPartition(edge.getSource());
+				Execution producer = edge.getSource().getProducer().getCurrentExecutionAttempt();
+
+				LOG.debug("Update the " + producer + " producer execution's consumer execution " + currentExecution + ".");
+				producer.scheduleOrUpdateConsumers(currentConsumerEdge,
+				//producer.scheduleOrUpdateConsumers(edge.getSource().getConsumers(),
+					updateConsumersOnFailover);
+			}
+		}
+
+	}
+
+	/**
+	 * Check intermediate result partition is pipelined and not null.
+	 */
+	private void checkPartition(IntermediateResultPartition partition) {
+		if (partition == null) {
+			throw new IllegalStateException("Unknown partition " + partition + ".");
+		}
+
+		if (!partition.getIntermediateResult().getResultType().isPipelined()) {
+			throw new IllegalArgumentException("ScheduleOrUpdateConsumers msg is only valid for" +
+					"pipelined partitions.");
+		}
 	}
 
 	/**
@@ -680,18 +754,11 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 
 		final IntermediateResultPartition partition = resultPartitions.get(partitionId.getPartitionId());
 
-		if (partition == null) {
-			throw new IllegalStateException("Unknown partition " + partitionId + ".");
-		}
+		checkPartition(partition);
 
-		if (partition.getIntermediateResult().getResultType().isPipelined()) {
-			// Schedule or update receivers of this partition
-			execution.scheduleOrUpdateConsumers(partition.getConsumers());
-		}
-		else {
-			throw new IllegalArgumentException("ScheduleOrUpdateConsumers msg is only valid for" +
-					"pipelined partitions.");
-		}
+		// Schedule or update receivers of this partition
+		boolean updateConsumersOnFailover = false;
+		execution.scheduleOrUpdateConsumers(partition.getConsumers(), updateConsumersOnFailover);
 	}
 
 	public void cachePartitionInfo(PartialInputChannelDeploymentDescriptor partitionInfo){
@@ -726,6 +793,29 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 		}
 	}
 
+	public boolean concurrentFailExecutionSignal() {
+		final long currentTimeMillis = System.currentTimeMillis();
+		final int currentAttemptNumber = currentExecution.getAttemptNumber();
+		final long currentRunningTime = currentExecution.getStateTimestamp(RUNNING);
+
+		if (currentExecution.getState() == RUNNING &&
+				// The following condition states that a standby execution is running
+				// at least for a minimal amount of time. This is an empirical rule
+				// to try and rule out subsequent fail signals that arrive late.
+				(currentAttemptNumber > 0 && currentTimeMillis - currentRunningTime >
+									failSignalTimeSpan.toMilliseconds() ||
+				currentAttemptNumber == 0)) {
+			// Ignore subsequent signals for failing the same execution instance.
+			if (currentAttemptNumber > lastKillAttemptNumber) {
+				lastKillAttemptNumber = currentAttemptNumber;
+				LOG.debug("Allow to fail current execution {}.", currentExecution);
+				return false;
+			}
+		}
+		LOG.debug("Ignore subsequent signal to fail current execution {} of vertex {}.", currentExecution, this);
+		return true;
+	}
+
 	// --------------------------------------------------------------------------------------------
 	//   Notifications from the Execution Attempt
 	// --------------------------------------------------------------------------------------------
@@ -757,15 +847,20 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 		}
 	}
 
+	public VertexID getVertexId() {
+		return vertexId;
+	}
+
 	/**
 	 * Creates a task deployment descriptor to deploy a subtask to the given target slot.
 	 * TODO: This should actually be in the EXECUTION
 	 */
 	TaskDeploymentDescriptor createDeploymentDescriptor(
-			ExecutionAttemptID executionId,
-			LogicalSlot targetSlot,
-			@Nullable JobManagerTaskRestore taskRestore,
-			int attemptNumber) throws ExecutionGraphException {
+		ExecutionAttemptID executionId,
+		LogicalSlot targetSlot,
+		@Nullable JobManagerTaskRestore taskRestore,
+		int attemptNumber,
+		boolean isStandby) throws ExecutionGraphException {
 
 		// Produced intermediate results
 		List<ResultPartitionDeploymentDescriptor> producedPartitions = new ArrayList<>(resultPartitions.size());
@@ -855,7 +950,41 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 			targetSlot.getPhysicalSlotNumber(),
 			taskRestore,
 			producedPartitions,
-			consumedPartitions);
+			consumedPartitions,
+			isStandby);
+	}
+
+	public CompletableFuture<Void> addStandbyExecution() {
+		final long globalModVersion = currentExecution.getGlobalModVersion();
+		final long createTimestamp = System.currentTimeMillis();
+		final boolean isStandby = true;
+
+		Execution newStandbyExecution = new Execution(
+			getExecutionGraph().getFutureExecutor(),
+			this,
+			currentExecution.getAttemptNumber() + 1,
+			globalModVersion,
+			createTimestamp,
+			timeout,
+			isStandby);
+
+		standbyExecutions.add(newStandbyExecution);
+		// register this execution at the execution graph, to receive call backs such as task state updates.
+		getExecutionGraph().registerExecution(newStandbyExecution);
+		LOG.debug("Added standby execution for task " + taskNameWithSubtask + "and registered it to running executions. Now scheduling it.");
+
+		return newStandbyExecution.scheduleForExecution();
+
+	}
+
+	public CompletableFuture<?> cancelStandbyExecution() {
+		if (!standbyExecutions.isEmpty()) {
+			LOG.debug(String.format("Cancelling standby execution %s", this));
+			final Execution standbyExecution = standbyExecutions.remove(0);
+			standbyExecution.cancel();
+			return standbyExecution.getReleaseFuture();
+		}
+		return null;
 	}
 
 	// --------------------------------------------------------------------------------------------
@@ -870,5 +999,18 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 	@Override
 	public ArchivedExecutionVertex archive() {
 		return new ArchivedExecutionVertex(this);
+	}
+
+    public void ignoreCheckpoint(long checkpointId) {
+		//TODO all of the code here messing with "current execution" feels fairly unprotected. Should probably introduce a lock.
+
+		try {
+			this.currentExecution.ignoreCheckpointRpcCall(checkpointId).get();
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		} catch (ExecutionException e) {
+			e.printStackTrace();
+		}
+
 	}
 }

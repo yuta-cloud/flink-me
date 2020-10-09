@@ -125,10 +125,13 @@ public class ConfigOption<T> {
 	 *
 	 * @param description The description for this option.
 	 * @return A new config option, with given description.
+	 * @deprecated use version with {@link Description}
 	 */
+	@Deprecated
 	public ConfigOption<T> withDescription(final String description) {
 		return withDescription(Description.builder().text(description).build());
 	}
+
 
 	/**
 	 * Creates a new config option, using this option's key and default value, and

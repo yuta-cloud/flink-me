@@ -19,12 +19,15 @@
 package org.apache.flink.runtime.io.network.partition;
 
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.runtime.inflightlogging.InFlightLogFactory;
+import org.apache.flink.runtime.inflightlogging.InMemoryInFlightLogFactory;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.disk.iomanager.IOManagerAsync;
 import org.apache.flink.runtime.io.network.NetworkEnvironment;
 import org.apache.flink.runtime.io.network.buffer.BufferBuilder;
 import org.apache.flink.runtime.io.network.buffer.BufferBuilderTestUtils;
 import org.apache.flink.runtime.io.network.buffer.BufferConsumer;
+import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.taskmanager.TaskActions;
 
 import org.junit.AfterClass;
@@ -49,6 +52,8 @@ public class ResultPartitionTest {
 
 	/** Asynchronous I/O manager. */
 	private static final IOManager ioManager = new IOManagerAsync();
+
+	private static final InFlightLogFactory inFlightLogFactory = new InMemoryInFlightLogFactory();
 
 	@AfterClass
 	public static void shutdown() {
@@ -225,7 +230,7 @@ public class ResultPartitionTest {
 	 */
 	private void testReleaseMemory(final ResultPartitionType resultPartitionType) throws Exception {
 		final int numAllBuffers = 10;
-		final NetworkEnvironment network = new NetworkEnvironment(numAllBuffers, 128, 0, 0, 2, 8, true);
+		final NetworkEnvironment network = new NetworkEnvironment(numAllBuffers, 128, 0, 0, 2, 8,2,8, true);
 		final ResultPartitionConsumableNotifier notifier = new NoOpResultPartitionConsumableNotifier();
 		final ResultPartition resultPartition = createPartition(notifier, resultPartitionType, false);
 		try {
@@ -273,6 +278,7 @@ public class ResultPartitionTest {
 			mock(ResultPartitionManager.class),
 			notifier,
 			ioManager,
+			inFlightLogFactory,
 			sendScheduleOrUpdateConsumersMessage);
 	}
 }

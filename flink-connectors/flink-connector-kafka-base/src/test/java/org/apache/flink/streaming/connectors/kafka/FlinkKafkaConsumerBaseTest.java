@@ -30,6 +30,7 @@ import org.apache.flink.core.testutils.CheckedThread;
 import org.apache.flink.core.testutils.OneShotLatch;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.metrics.groups.UnregisteredMetricsGroup;
+import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
 import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
 import org.apache.flink.runtime.state.FunctionInitializationContext;
 import org.apache.flink.runtime.state.StateSnapshotContextSynchronousImpl;
@@ -913,18 +914,11 @@ public class FlinkKafkaConsumerBaseTest extends TestLogger {
 			this.isAutoCommitEnabled = isAutoCommitEnabled;
 		}
 
+
 		@Override
-		@SuppressWarnings("unchecked")
-		protected AbstractFetcher<T, ?> createFetcher(
-				SourceContext<T> sourceContext,
-				Map<KafkaTopicPartition, Long> thisSubtaskPartitionsWithStartOffsets,
-				SerializedValue<AssignerWithPeriodicWatermarks<T>> watermarksPeriodic,
-				SerializedValue<AssignerWithPunctuatedWatermarks<T>> watermarksPunctuated,
-				StreamingRuntimeContext runtimeContext,
-				OffsetCommitMode offsetCommitMode,
-				MetricGroup consumerMetricGroup,
-				boolean useMetrics) throws Exception {
-			return testFetcherSupplier.get();
+		protected AbstractFetcher<T, ?> createFetcher(SourceContext<T> sourceContext,
+													  Map<KafkaTopicPartition, Long> subscribedPartitionsToStartOffsets, SerializedValue<AssignerWithPeriodicWatermarks<T>> watermarksPeriodic, SerializedValue<AssignerWithPunctuatedWatermarks<T>> watermarksPunctuated, StreamingRuntimeContext runtimeContext, OffsetCommitMode offsetCommitMode, MetricGroup kafkaMetricGroup, boolean useMetrics, IRecoveryManager recoveryManager) throws Exception {
+			return null;
 		}
 
 		@Override
@@ -964,9 +958,9 @@ public class FlinkKafkaConsumerBaseTest extends TestLogger {
 		}
 
 		@Override
-		protected AbstractFetcher<T, ?> createFetcher(SourceContext<T> sourceContext, Map<KafkaTopicPartition, Long> thisSubtaskPartitionsWithStartOffsets, SerializedValue<AssignerWithPeriodicWatermarks<T>> watermarksPeriodic, SerializedValue<AssignerWithPunctuatedWatermarks<T>> watermarksPunctuated, StreamingRuntimeContext runtimeContext, OffsetCommitMode offsetCommitMode, MetricGroup consumerMetricGroup, boolean useMetrics) throws Exception {
-			return new TestingFetcher<T, String>(sourceContext, thisSubtaskPartitionsWithStartOffsets, watermarksPeriodic, watermarksPunctuated, runtimeContext.getProcessingTimeService(), 0L, getClass().getClassLoader(), consumerMetricGroup, useMetrics);
-
+		protected AbstractFetcher<T, ?> createFetcher(SourceContext<T> sourceContext,
+													  Map<KafkaTopicPartition, Long> subscribedPartitionsToStartOffsets, SerializedValue<AssignerWithPeriodicWatermarks<T>> watermarksPeriodic, SerializedValue<AssignerWithPunctuatedWatermarks<T>> watermarksPunctuated, StreamingRuntimeContext runtimeContext, OffsetCommitMode offsetCommitMode, MetricGroup kafkaMetricGroup, boolean useMetrics, IRecoveryManager recoveryManager) throws Exception {
+			return null;
 		}
 
 		@Override
@@ -1180,6 +1174,11 @@ public class FlinkKafkaConsumerBaseTest extends TestLogger {
 		@Override
 		public boolean isRestored() {
 			return isRestored;
+		}
+
+		@Override
+		public boolean isStandby() {
+			return false;
 		}
 
 		@Override

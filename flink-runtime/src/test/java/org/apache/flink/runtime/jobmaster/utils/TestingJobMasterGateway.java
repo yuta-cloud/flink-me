@@ -47,6 +47,7 @@ import org.apache.flink.runtime.query.KvStateLocation;
 import org.apache.flink.runtime.registration.RegistrationResponse;
 import org.apache.flink.runtime.resourcemanager.ResourceManagerId;
 import org.apache.flink.runtime.rest.handler.legacy.backpressure.OperatorBackPressureStatsResponse;
+import org.apache.flink.runtime.rpc.RpcTimeout;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.taskexecutor.AccumulatorReport;
 import org.apache.flink.runtime.taskexecutor.slot.SlotOffer;
@@ -283,6 +284,23 @@ public class TestingJobMasterGateway implements JobMasterGateway {
 	@Override
 	public void failSlot(ResourceID taskManagerId, AllocationID allocationId, Exception cause) {
 		failSlotConsumer.accept(taskManagerId, allocationId, cause);
+	}
+
+	@Override
+	public CompletableFuture<Acknowledge> requestFailProducer(
+			final IntermediateDataSetID intermediateResultId,
+			final ResultPartitionID partitionId,
+			final Throwable cause) {
+		throw new UnsupportedOperationException();
+	}
+
+	@Override
+	public CompletableFuture<Acknowledge> requestFailConsumer(
+			final ResultPartitionID partitionId,
+			final int subpartitionIndex,
+			final Throwable cause,
+			@RpcTimeout final Time timeout) {
+		throw new UnsupportedOperationException();
 	}
 
 	@Override

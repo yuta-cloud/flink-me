@@ -18,11 +18,10 @@
 
 package org.apache.flink.streaming.runtime.io;
 
+import org.apache.flink.api.common.JobID;
 import org.apache.flink.runtime.event.TaskEvent;
 import org.apache.flink.runtime.io.network.api.EndOfPartitionEvent;
-import org.apache.flink.runtime.io.network.partition.consumer.BufferOrEvent;
-import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
-import org.apache.flink.runtime.io.network.partition.consumer.InputGateListener;
+import org.apache.flink.runtime.io.network.partition.consumer.*;
 
 import java.util.ArrayDeque;
 import java.util.List;
@@ -61,6 +60,26 @@ public class MockInputGate implements InputGate {
 	@Override
 	public int getPageSize() {
 		return pageSize;
+	}
+
+	@Override
+	public InputChannel getInputChannel(int i) {
+		return null;
+	}
+
+	@Override
+	public int getAbsoluteChannelIndex(InputGate gate, int channelIndex) {
+		return 0;
+	}
+
+	@Override
+	public SingleInputGate[] getInputGates() {
+		return new SingleInputGate[0];
+	}
+
+	@Override
+	public JobID getJobID() {
+		return null;
 	}
 
 	@Override

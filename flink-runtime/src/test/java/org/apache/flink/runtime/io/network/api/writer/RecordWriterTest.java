@@ -23,6 +23,7 @@ import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.DataOutputView;
 import org.apache.flink.core.memory.MemorySegment;
 import org.apache.flink.core.memory.MemorySegmentFactory;
+import org.apache.flink.api.common.services.RandomService;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
 import org.apache.flink.runtime.event.AbstractEvent;
 import org.apache.flink.runtime.io.network.api.CheckpointBarrier;
@@ -37,6 +38,7 @@ import org.apache.flink.runtime.io.network.buffer.BufferConsumer;
 import org.apache.flink.runtime.io.network.buffer.BufferProvider;
 import org.apache.flink.runtime.io.network.buffer.BufferRecycler;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
+import org.apache.flink.runtime.io.network.partition.ResultSubpartition;
 import org.apache.flink.runtime.io.network.partition.consumer.BufferOrEvent;
 import org.apache.flink.runtime.io.network.util.DeserializationUtils;
 import org.apache.flink.runtime.io.network.util.TestPooledBufferProvider;
@@ -484,6 +486,22 @@ public class RecordWriterTest {
 		}
 
 		@Override
+		public String getTaskName() {
+			return null;
+		}
+
+		@Override
+		public void notifyCheckpointBarrier(long checkpointId) {
+
+		}
+
+		@Override
+		public void notifyCheckpointComplete(long checkpointId) {
+
+		}
+
+
+		@Override
 		public BufferProvider getBufferProvider() {
 			return bufferProvider;
 		}
@@ -501,6 +519,11 @@ public class RecordWriterTest {
 		@Override
 		public int getNumTargetKeyGroups() {
 			return 1;
+		}
+
+		@Override
+		public ResultSubpartition[] getResultSubpartitions() {
+			return new ResultSubpartition[0];
 		}
 
 		@Override
@@ -541,6 +564,21 @@ public class RecordWriterTest {
 		}
 
 		@Override
+		public String getTaskName() {
+			return null;
+		}
+
+		@Override
+		public void notifyCheckpointBarrier(long checkpointId) {
+
+		}
+
+		@Override
+		public void notifyCheckpointComplete(long checkpointId) {
+
+		}
+
+		@Override
 		public BufferProvider getBufferProvider() {
 			return bufferProvider;
 		}
@@ -558,6 +596,11 @@ public class RecordWriterTest {
 		@Override
 		public int getNumTargetKeyGroups() {
 			return 1;
+		}
+
+		@Override
+		public ResultSubpartition[] getResultSubpartitions() {
+			return new ResultSubpartition[0];
 		}
 
 		@Override
@@ -605,6 +648,16 @@ public class RecordWriterTest {
 			nextChannel[0] = (nextChannel[0] + 1) % numberOfOutputChannels;
 			return nextChannel;
 		}
+
+		@Override
+		public void setRandomService(RandomService randomService) {
+
+		}
+
+		@Override
+		public void notifyCheckpointBarrier(long checkpointID) {
+
+		}
 	}
 
 	/**
@@ -625,6 +678,16 @@ public class RecordWriterTest {
 				}
 				return returnChannel;
 			}
+		}
+
+		@Override
+		public void setRandomService(RandomService randomService) {
+
+		}
+
+		@Override
+		public void notifyCheckpointBarrier(long checkpointID) {
+
 		}
 	}
 

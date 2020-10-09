@@ -22,6 +22,11 @@ import org.apache.flink.core.io.IOReadableWritable;
 import org.apache.flink.core.memory.DataOutputSerializer;
 import org.apache.flink.runtime.io.network.buffer.BufferBuilder;
 
+import javax.annotation.Nullable;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -34,6 +39,8 @@ import java.nio.ByteOrder;
  * @param <T> The type of the records that are serialized.
  */
 public class SpanningRecordSerializer<T extends IOReadableWritable> implements RecordSerializer<T> {
+
+	private static final Logger LOG = LoggerFactory.getLogger(SpanningRecordSerializer.class);
 
 	/** Flag to enable/disable checks, if buffer not set/full or pending serialization. */
 	private static final boolean CHECKED = false;
@@ -73,6 +80,8 @@ public class SpanningRecordSerializer<T extends IOReadableWritable> implements R
 
 		serializationBuffer.clear();
 		lengthBuffer.clear();
+
+		LOG.debug("addRecord(): State of serializer {}.", this);
 
 		// write data and length
 		record.write(serializationBuffer);
@@ -124,4 +133,5 @@ public class SpanningRecordSerializer<T extends IOReadableWritable> implements R
 	public boolean hasSerializedData() {
 		return lengthBuffer.hasRemaining() || dataBuffer.hasRemaining();
 	}
+
 }

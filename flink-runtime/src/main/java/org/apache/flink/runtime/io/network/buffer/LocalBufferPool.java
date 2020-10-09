@@ -27,6 +27,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayDeque;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.Optional;
 
 import static org.apache.flink.util.Preconditions.checkArgument;
@@ -226,6 +227,7 @@ class LocalBufferPool implements BufferPool {
 	}
 
 	private BufferBuilder toBufferBuilder(MemorySegment memorySegment) {
+		LOG.debug("Got memory segment {}.", memorySegment);
 		if (memorySegment == null) {
 			return null;
 		}
@@ -233,7 +235,9 @@ class LocalBufferPool implements BufferPool {
 	}
 
 	private MemorySegment requestMemorySegment(boolean isBlocking) throws InterruptedException, IOException {
+		LOG.debug("Request memory segment blocking? {}. Available memory segments: {}.", isBlocking, availableMemorySegments.size());
 		synchronized (availableMemorySegments) {
+			LOG.debug("{}: Acquired memory segment request lock.", this);
 			returnExcessMemorySegments();
 
 			boolean askToRecycle = owner.isPresent();
@@ -258,7 +262,9 @@ class LocalBufferPool implements BufferPool {
 				}
 
 				if (isBlocking) {
+					LOG.debug("{}: availableMemorySegments empty.", this);
 					availableMemorySegments.wait(2000);
+					LOG.debug("{}: thread awakened or wait expired.", this);
 				}
 				else {
 					return null;
@@ -315,6 +321,7 @@ class LocalBufferPool implements BufferPool {
 	@Override
 	public void lazyDestroy() {
 		// NOTE: if you change this logic, be sure to update recycle() as well!
+		LOG.debug("LazyDestroy segments.");
 		synchronized (availableMemorySegments) {
 			if (!isDestroyed) {
 				MemorySegment segment;
@@ -345,6 +352,7 @@ class LocalBufferPool implements BufferPool {
 				return false;
 			}
 
+			LOG.debug("addBufferListener: Add buffer availability listener {}.", listener);
 			registeredListeners.add(listener);
 			return true;
 		}

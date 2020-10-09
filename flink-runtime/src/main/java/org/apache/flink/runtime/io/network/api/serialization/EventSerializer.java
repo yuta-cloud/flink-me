@@ -206,7 +206,7 @@ public class EventSerializer {
 		final byte[] locationBytes = checkpointOptions.getTargetLocation().isDefaultReference() ?
 				null : checkpointOptions.getTargetLocation().getReferenceBytes();
 
-		final ByteBuffer buf = ByteBuffer.allocate(28 + (locationBytes == null ? 0 : locationBytes.length));
+		final ByteBuffer buf = ByteBuffer.allocate(28 + (locationBytes == null ? 0 : locationBytes.length) );
 
 		// we do not use checkpointType.ordinal() here to make the serialization robust
 		// against changes in the enum (such as changes in the order of the values)

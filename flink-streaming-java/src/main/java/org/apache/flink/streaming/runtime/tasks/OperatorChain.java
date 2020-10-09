@@ -51,18 +51,12 @@ import org.apache.flink.streaming.runtime.streamstatus.StreamStatusMaintainer;
 import org.apache.flink.streaming.runtime.streamstatus.StreamStatusProvider;
 import org.apache.flink.util.OutputTag;
 import org.apache.flink.util.XORShiftRandom;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
-
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
+import java.util.*;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
@@ -195,14 +189,14 @@ public class OperatorChain<OUT, OP extends StreamOperator<OUT>> implements Strea
 		}
 	}
 
-	public void broadcastCheckpointBarrier(long id, long timestamp, CheckpointOptions checkpointOptions) throws IOException {
+	public void broadcastCheckpointBarrier(long id, long timestamp, CheckpointOptions checkpointOptions) throws IOException, InterruptedException {
 		CheckpointBarrier barrier = new CheckpointBarrier(id, timestamp, checkpointOptions);
 		for (RecordWriterOutput<?> streamOutput : streamOutputs) {
 			streamOutput.broadcastEvent(barrier);
 		}
 	}
 
-	public void broadcastCheckpointCancelMarker(long id) throws IOException {
+	public void broadcastCheckpointCancelMarker(long id) throws IOException, InterruptedException {
 		CancelCheckpointMarker barrier = new CancelCheckpointMarker(id);
 		for (RecordWriterOutput<?> streamOutput : streamOutputs) {
 			streamOutput.broadcastEvent(barrier);

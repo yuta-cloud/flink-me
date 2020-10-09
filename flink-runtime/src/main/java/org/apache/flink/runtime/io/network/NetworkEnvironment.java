@@ -20,11 +20,13 @@ package org.apache.flink.runtime.io.network;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.runtime.causal.log.CausalLogManager;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager.IOMode;
 import org.apache.flink.runtime.io.network.buffer.BufferPool;
 import org.apache.flink.runtime.io.network.buffer.NetworkBufferPool;
+import org.apache.flink.runtime.io.network.netty.NettyConnectionManager;
 import org.apache.flink.runtime.io.network.partition.ResultPartition;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionManager;
 import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGate;
@@ -86,7 +88,13 @@ public class NetworkEnvironment {
 	/** Number of extra network buffers to use for each outgoing/incoming gate (result partition/input gate). */
 	private final int extraNetworkBuffersPerGate;
 
+	private final int senderExtraNetworkBuffersPerChannel;
+
+	private final int senderExtraNetworkBuffersPerGate;
+
 	private final boolean enableCreditBased;
+
+	private final CausalLogManager causalLogManager;
 
 	private boolean isShutdown;
 
@@ -97,6 +105,8 @@ public class NetworkEnvironment {
 		int partitionRequestMaxBackoff,
 		int networkBuffersPerChannel,
 		int extraNetworkBuffersPerGate,
+		int senderExtraNetworkBuffersPerChannel,
+		int senderExtraNetworkBuffersPerGate,
 		boolean enableCreditBased) {
 		this(
 			new NetworkBufferPool(numBuffers, memorySegmentSize),
@@ -111,7 +121,9 @@ public class NetworkEnvironment {
 			partitionRequestMaxBackoff,
 			networkBuffersPerChannel,
 			extraNetworkBuffersPerGate,
-			enableCreditBased);
+			senderExtraNetworkBuffersPerChannel,
+			senderExtraNetworkBuffersPerGate,
+			enableCreditBased, null);
 	}
 
 	public NetworkEnvironment(
@@ -127,7 +139,9 @@ public class NetworkEnvironment {
 		int partitionRequestMaxBackoff,
 		int networkBuffersPerChannel,
 		int extraNetworkBuffersPerGate,
-		boolean enableCreditBased) {
+		int senderExtraNetworkBuffersPerChannel,
+		int senderExtraNetworkBuffersPerGate,
+		boolean enableCreditBased, CausalLogManager causalLogManager) {
 
 		this.networkBufferPool = checkNotNull(networkBufferPool);
 		this.connectionManager = checkNotNull(connectionManager);
@@ -146,8 +160,14 @@ public class NetworkEnvironment {
 		isShutdown = false;
 		this.networkBuffersPerChannel = networkBuffersPerChannel;
 		this.extraNetworkBuffersPerGate = extraNetworkBuffersPerGate;
+		this.senderExtraNetworkBuffersPerChannel = senderExtraNetworkBuffersPerChannel;
+		this.senderExtraNetworkBuffersPerGate = senderExtraNetworkBuffersPerGate;
 
 		this.enableCreditBased = enableCreditBased;
+
+		this.causalLogManager = causalLogManager;
+
+
 	}
 
 	// --------------------------------------------------------------------------------------------
@@ -184,6 +204,10 @@ public class NetworkEnvironment {
 
 	public boolean isCreditBased() {
 		return enableCreditBased;
+	}
+
+	public CausalLogManager getCausalLogManager() {
+		return causalLogManager;
 	}
 
 	public KvStateRegistry getKvStateRegistry() {
@@ -229,6 +253,7 @@ public class NetworkEnvironment {
 	@VisibleForTesting
 	public void setupPartition(ResultPartition partition) throws IOException {
 		BufferPool bufferPool = null;
+		BufferPool inFlightBufferPool = null;
 
 		try {
 			int maxNumberOfMemorySegments = partition.getPartitionType().isBounded() ?
@@ -241,6 +266,11 @@ public class NetworkEnvironment {
 				partition.getPartitionType().hasBackPressure() ? Optional.empty() : Optional.of(partition));
 
 			partition.registerBufferPool(bufferPool);
+
+			int inFlightMaxNumberOfMemorySegments = senderExtraNetworkBuffersPerChannel * partition.getNumberOfSubpartitions() + senderExtraNetworkBuffersPerGate;
+
+			inFlightBufferPool = networkBufferPool.createBufferPool(inFlightMaxNumberOfMemorySegments, inFlightMaxNumberOfMemorySegments);
+			partition.registerInFlightBufferPool(inFlightBufferPool);
 
 			resultPartitionManager.registerResultPartition(partition);
 		} catch (Throwable t) {
@@ -315,7 +345,7 @@ public class NetworkEnvironment {
 				for (SingleInputGate gate : inputGates) {
 					try {
 						if (gate != null) {
-							gate.releaseAllResources();
+							gate.releaseAllResources(task.getFailureCause());
 						}
 					}
 					catch (IOException e) {
@@ -323,6 +353,7 @@ public class NetworkEnvironment {
 					}
 				}
 			}
+			causalLogManager.unregisterJob(task.getJobID());
 		}
 	}
 

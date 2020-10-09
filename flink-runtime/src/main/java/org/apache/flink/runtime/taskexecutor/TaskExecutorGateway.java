@@ -23,12 +23,15 @@ import org.apache.flink.api.common.time.Time;
 import org.apache.flink.runtime.blob.BlobServer;
 import org.apache.flink.runtime.blob.TransientBlobKey;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
+import org.apache.flink.runtime.checkpoint.JobManagerTaskRestore;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.clusterframework.types.SlotID;
 import org.apache.flink.runtime.deployment.TaskDeploymentDescriptor;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.executiongraph.PartitionInfo;
+import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
+import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobmaster.JobMasterId;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.messages.StackTraceSampleResponse;
@@ -129,6 +132,16 @@ public interface TaskExecutorGateway extends RpcGateway {
 	CompletableFuture<Acknowledge> confirmCheckpoint(ExecutionAttemptID executionAttemptID, long checkpointId, long checkpointTimestamp);
 
 	/**
+	 * Fail the given task.
+	 *
+	 * @param executionAttemptID identifying the task
+	 * @param t cause of failure
+	 * @param timeout for the stop operation
+	 * @return Future acknowledge if the task is successfully failed
+	 */
+	CompletableFuture<Acknowledge> failTask(ExecutionAttemptID executionAttemptID, Throwable t, @RpcTimeout Time timeout);
+
+	/**
 	 * Stop the given task.
 	 *
 	 * @param executionAttemptID identifying the task
@@ -145,6 +158,26 @@ public interface TaskExecutorGateway extends RpcGateway {
 	 * @return Future acknowledge if the task is successfully canceled
 	 */
 	CompletableFuture<Acknowledge> cancelTask(ExecutionAttemptID executionAttemptID, @RpcTimeout Time timeout);
+
+	/**
+	 * Dispatch a checkpointed state snapshot of a running task to its standby task.
+	 *
+	 * @param executionAttemptID identifying the standby task
+	 * @param taskRestore identifying the state snapshot that is dispatchred
+	 * @param timeout for the cancel operation
+	 * @return Future acknowledge if the task is successfully canceled
+	 */
+	public CompletableFuture<Acknowledge> dispatchStateToStandbyTask(ExecutionAttemptID executionAttemptID, JobManagerTaskRestore taskRestore, Time timeout);
+
+	/**
+	 * Switch the given (standby) task to running.
+	 *
+	 * @param executionAttemptID identifying the task
+	 * @param timeout for the cancel operation
+	 * @return Future acknowledge if the task is successfully canceled
+	 */
+	CompletableFuture<Acknowledge> switchStandbyTaskToRunning(ExecutionAttemptID executionAttemptID, @RpcTimeout Time timeout);
+
 
 	/**
 	 * Heartbeat request from the job manager.
@@ -196,6 +229,8 @@ public interface TaskExecutorGateway extends RpcGateway {
 	 * @return Future which is completed with the {@link TransientBlobKey} of the uploaded file.
 	 */
 	CompletableFuture<TransientBlobKey> requestFileUpload(FileType fileType, @RpcTimeout Time timeout);
+
+    CompletableFuture<Acknowledge> ignoreCheckpoint(ExecutionAttemptID attemptId, long checkpointId, Time rpcTimeout);
 
 	/**
 	 * Returns the fully qualified address of Metric Query Service on the TaskManager.

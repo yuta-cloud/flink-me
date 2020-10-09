@@ -81,6 +81,9 @@ public class SlotSharingManager {
 
 	private static final Logger LOG = LoggerFactory.getLogger(SlotSharingManager.class);
 
+	/** Lock for the internal data structures. */
+	private final Object lock = new Object();
+
 	private final SlotSharingGroupId slotSharingGroupId;
 
 	/** Actions to release allocated slots after a complete multi task slot hierarchy has been released. */

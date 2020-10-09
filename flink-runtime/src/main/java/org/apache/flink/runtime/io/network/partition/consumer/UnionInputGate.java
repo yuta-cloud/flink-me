@@ -18,11 +18,15 @@
 
 package org.apache.flink.runtime.io.network.partition.consumer;
 
+import org.apache.flink.api.common.JobID;
 import org.apache.flink.runtime.event.TaskEvent;
 import org.apache.flink.runtime.io.network.api.EndOfPartitionEvent;
 
 import org.apache.flink.shaded.guava18.com.google.common.collect.Maps;
 import org.apache.flink.shaded.guava18.com.google.common.collect.Sets;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayDeque;
@@ -65,12 +69,18 @@ import static org.apache.flink.util.Preconditions.checkState;
  */
 public class UnionInputGate implements InputGate, InputGateListener {
 
-	/** The input gates to union. */
-	private final InputGate[] inputGates;
+	private static final Logger LOG = LoggerFactory.getLogger(UnionInputGate.class);
+
+	/**
+	 * The input gates to union.
+	 */
+	private final SingleInputGate[] inputGates;
 
 	private final Set<InputGate> inputGatesWithRemainingData;
 
-	/** Gates, which notified this input gate about available data. */
+	/**
+	 * Gates, which notified this input gate about available data.
+	 */
 	private final ArrayDeque<InputGate> inputGatesWithData = new ArrayDeque<>();
 
 	/**
@@ -78,10 +88,14 @@ public class UnionInputGate implements InputGate, InputGateListener {
 	 */
 	private final Set<InputGate> enqueuedInputGatesWithData = new HashSet<>();
 
-	/** The total number of input channels across all unioned input gates. */
+	/**
+	 * The total number of input channels across all unioned input gates.
+	 */
 	private final int totalNumberOfInputChannels;
 
-	/** Registered listener to forward input gate notifications to. */
+	/**
+	 * Registered listener to forward input gate notifications to.
+	 */
 	private volatile InputGateListener inputGateListener;
 
 	/**
@@ -90,10 +104,16 @@ public class UnionInputGate implements InputGate, InputGateListener {
 	 */
 	private final Map<InputGate, Integer> inputGateToIndexOffsetMap;
 
-	/** Flag indicating whether partitions have been requested. */
+	/**
+	 * Flag indicating whether partitions have been requested.
+	 */
 	private boolean requestedPartitionsFlag;
 
-	public UnionInputGate(InputGate... inputGates) {
+	private String taskName;
+
+	private JobID jobId;
+
+	public UnionInputGate(SingleInputGate... inputGates) {
 		this.inputGates = checkNotNull(inputGates);
 		checkArgument(inputGates.length > 1, "Union input gate should union at least two input gates.");
 
@@ -102,10 +122,16 @@ public class UnionInputGate implements InputGate, InputGateListener {
 
 		int currentNumberOfInputChannels = 0;
 
+		taskName = new String("Unknown");
+
+		this.jobId = inputGates[0].getJobID();
+
 		for (InputGate inputGate : inputGates) {
 			if (inputGate instanceof UnionInputGate) {
 				// if we want to add support for this, we need to implement pollNextBufferOrEvent()
 				throw new UnsupportedOperationException("Cannot union a union of input gates.");
+			} else {
+				taskName = inputGate.getOwningTaskName();
 			}
 
 			// The offset to use for buffer or event instances received from this input gate.
@@ -119,6 +145,10 @@ public class UnionInputGate implements InputGate, InputGateListener {
 		}
 
 		this.totalNumberOfInputChannels = currentNumberOfInputChannels;
+	}
+
+	public String getTaskName() {
+		return taskName;
 	}
 
 	/**
@@ -159,7 +189,9 @@ public class UnionInputGate implements InputGate, InputGateListener {
 
 	@Override
 	public Optional<BufferOrEvent> getNextBufferOrEvent() throws IOException, InterruptedException {
+		LOG.debug("UnionInputGate getNextBufferOrEvent()");
 		if (inputGatesWithRemainingData.isEmpty()) {
+			LOG.debug("...is empty.");
 			return Optional.empty();
 		}
 
@@ -171,6 +203,7 @@ public class UnionInputGate implements InputGate, InputGateListener {
 		BufferOrEvent bufferOrEvent = inputGateWithData.bufferOrEvent;
 
 		if (bufferOrEvent.moreAvailable()) {
+			LOG.debug("bufferOrEvent has more available.");
 			// this buffer or event was now removed from the non-empty gates queue
 			// we re-add it in case it has more data, because in that case no "non-empty" notification
 			// will come for that gate
@@ -191,6 +224,7 @@ public class UnionInputGate implements InputGate, InputGateListener {
 		// Set the channel index to identify the input channel (across all unioned input gates)
 		final int channelIndexOffset = inputGateToIndexOffsetMap.get(inputGate);
 
+		LOG.debug("channelIndexOffset: {} + bufferOrEvent channel index: {}.", channelIndexOffset, bufferOrEvent.getChannelIndex());
 		bufferOrEvent.setChannelIndex(channelIndexOffset + bufferOrEvent.getChannelIndex());
 		bufferOrEvent.setMoreAvailable(bufferOrEvent.moreAvailable() || inputGateWithData.moreInputGatesAvailable);
 
@@ -236,7 +270,7 @@ public class UnionInputGate implements InputGate, InputGateListener {
 	}
 
 	@Override
-	public void sendTaskEvent(TaskEvent event) throws IOException {
+	public void sendTaskEvent(TaskEvent event) throws IOException, InterruptedException {
 		for (InputGate inputGate : inputGates) {
 			inputGate.sendTaskEvent(event);
 		}
@@ -262,6 +296,35 @@ public class UnionInputGate implements InputGate, InputGateListener {
 			}
 		}
 		return pageSize;
+	}
+
+	@Override
+	public InputChannel getInputChannel(int i) {
+		InputChannel result = null;
+		for (InputGate gate : inputGates) {
+			if (gate.getNumberOfInputChannels() <= i)
+				i -= gate.getNumberOfInputChannels();
+			else {
+				result = gate.getInputChannel(i);
+				break;
+			}
+		}
+		return result;
+	}
+
+	@Override
+	public int getAbsoluteChannelIndex(InputGate gate, int channelIndex) {
+		return inputGateToIndexOffsetMap.get(gate) + channelIndex;
+	}
+
+	@Override
+	public SingleInputGate[] getInputGates() {
+		return inputGates;
+	}
+
+	@Override
+	public JobID getJobID() {
+		return jobId;
 	}
 
 	@Override

@@ -20,6 +20,7 @@ package org.apache.flink.runtime.messages
 
 import java.util
 
+import org.apache.flink.runtime.checkpoint.JobManagerTaskRestore
 import org.apache.flink.runtime.deployment.{InputChannelDeploymentDescriptor, TaskDeploymentDescriptor}
 import org.apache.flink.runtime.executiongraph.{ExecutionAttemptID, PartitionInfo}
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID
@@ -59,6 +60,40 @@ object TaskMessages {
     extends TaskMessage with RequiresLeaderSessionID
 
   /**
+   * Dispatches a checkpointed state snapshot of a running task to its
+   * standby task associated with [[attemptID]].
+   * The result is sent back to the sender as a
+   * [[TaskOperationResult]] message.
+   *
+   * @param attemptID The standby task's execution attempt ID.
+   * @param taskRestore The task's latest checkpointed state snapshot.
+   */
+  case class dispatchStateToStandbyTask(
+      attemptID: ExecutionAttemptID,
+      taskRestore: JobManagerTaskRestore)
+    extends TaskMessage with RequiresLeaderSessionID
+
+  /**
+   * Acknowledges an in-flight log prepare request to the task associated with [[attemptID]].
+   * The result is sent back to the sender as a
+   * [[TaskOperationResult]] message.
+   *
+   * @param attemptID The task's execution attempt ID.
+   */
+  case class ackInFlightLogPrepareRequest(attemptID: ExecutionAttemptID)
+    extends TaskMessage with RequiresLeaderSessionID
+
+  /**
+   * Switches the state of the standby task associated with [[attemptID]] into RUNNING.
+   * The result is sent back to the sender as a
+   * [[TaskOperationResult]] message.
+   *
+   * @param attemptID The task's execution attempt ID.
+   */
+  case class switchStandbyTaskToRunning(attemptID: ExecutionAttemptID)
+    extends TaskMessage with RequiresLeaderSessionID
+
+  /**
    * Stops the task associated with [[attemptID]]. The result is sent back to the sender as a
    * [[TaskOperationResult]] message.
    *
@@ -86,6 +121,18 @@ object TaskMessages {
   case class TaskInFinalState(executionID: ExecutionAttemptID)
     extends TaskMessage
 
+  /**
+   * Informs task that it should ignore any barriers regarding the provided
+   * checkpoint id. This causes the task to unblock the connections, but not
+   * emit a cancel checkpoint marker.
+   *
+   * @param attemptID The standby task's execution attempt ID.
+   * @param checkpointID The checkpoint to ignore from now on
+   */
+  case class IgnoreCheckpoint(
+                                         attemptID: ExecutionAttemptID,
+                                         checkpointID: Long)
+    extends TaskMessage
 
   // --------------------------------------------------------------------------
   //  Updates to Intermediate Results

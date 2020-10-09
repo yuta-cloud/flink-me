@@ -17,6 +17,7 @@
 
 package org.apache.flink.streaming.runtime.io;
 
+import org.apache.flink.api.common.JobID;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
 import org.apache.flink.runtime.event.TaskEvent;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
@@ -25,9 +26,7 @@ import org.apache.flink.runtime.io.network.api.CheckpointBarrier;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.buffer.BufferPool;
 import org.apache.flink.runtime.io.network.buffer.NetworkBufferPool;
-import org.apache.flink.runtime.io.network.partition.consumer.BufferOrEvent;
-import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
-import org.apache.flink.runtime.io.network.partition.consumer.InputGateListener;
+import org.apache.flink.runtime.io.network.partition.consumer.*;
 
 import org.junit.Test;
 
@@ -204,6 +203,26 @@ public class BarrierBufferMassiveRandomTest {
 		@Override
 		public int getPageSize() {
 			return PAGE_SIZE;
+		}
+
+		@Override
+		public InputChannel getInputChannel(int i) {
+			return null;
+		}
+
+		@Override
+		public int getAbsoluteChannelIndex(InputGate gate, int channelIndex) {
+			return 0;
+		}
+
+		@Override
+		public SingleInputGate[] getInputGates() {
+			return new SingleInputGate[0];
+		}
+
+		@Override
+		public JobID getJobID() {
+			return null;
 		}
 	}
 }

@@ -23,6 +23,9 @@ import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.SimpleCounter;
+import org.apache.flink.runtime.causal.RecordCountProvider;
+import org.apache.flink.runtime.causal.RecordCountTargetForceable;
+import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
 import org.apache.flink.runtime.event.AbstractEvent;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.network.api.EndOfPartitionEvent;
@@ -32,6 +35,7 @@ import org.apache.flink.runtime.io.network.api.serialization.SpillingAdaptiveSpa
 import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.partition.consumer.BufferOrEvent;
 import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
+import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGate;
 import org.apache.flink.runtime.metrics.groups.OperatorMetricGroup;
 import org.apache.flink.runtime.metrics.groups.TaskIOMetricGroup;
 import org.apache.flink.runtime.plugable.DeserializationDelegate;
@@ -70,7 +74,7 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  * @param <IN> The type of the record that can be read with this record reader.
  */
 @Internal
-public class StreamInputProcessor<IN> {
+public class StreamInputProcessor<IN> implements RecordCountTargetForceable {
 
 	private static final Logger LOG = LoggerFactory.getLogger(StreamInputProcessor.class);
 
@@ -86,10 +90,15 @@ public class StreamInputProcessor<IN> {
 
 	// ---------------- Status and Watermark Valve ------------------
 
-	/** Valve that controls how watermarks and stream statuses are forwarded. */
+	/**
+	 * Valve that controls how watermarks and stream statuses are forwarded.
+	 */
 	private StatusWatermarkValve statusWatermarkValve;
 
-	/** Number of input channels the valve needs to handle. */
+	private final InputGate inputGate;
+	/**
+	 * Number of input channels the valve needs to handle.
+	 */
 	private final int numInputChannels;
 
 	/**
@@ -109,21 +118,34 @@ public class StreamInputProcessor<IN> {
 
 	private boolean isFinished;
 
+	private final IRecoveryManager recoveryManager;
+	private final RecordCountProvider recordCountProvider;
+
+
+	private int asyncEventRecordCountTarget;
+
+
 	@SuppressWarnings("unchecked")
 	public StreamInputProcessor(
-			InputGate[] inputGates,
-			TypeSerializer<IN> inputSerializer,
-			StreamTask<?, ?> checkpointedTask,
-			CheckpointingMode checkpointMode,
-			Object lock,
-			IOManager ioManager,
-			Configuration taskManagerConfig,
-			StreamStatusMaintainer streamStatusMaintainer,
-			OneInputStreamOperator<IN, ?> streamOperator,
-			TaskIOMetricGroup metrics,
-			WatermarkGauge watermarkGauge) throws IOException {
+		SingleInputGate[] inputGates,
+		TypeSerializer<IN> inputSerializer,
+		StreamTask<?, ?> checkpointedTask,
+		CheckpointingMode checkpointMode,
+		Object lock,
+		IOManager ioManager,
+		Configuration taskManagerConfig,
+		StreamStatusMaintainer streamStatusMaintainer,
+		OneInputStreamOperator<IN, ?> streamOperator,
+		TaskIOMetricGroup metrics,
+		WatermarkGauge watermarkGauge) throws IOException {
 
-		InputGate inputGate = InputGateUtil.createInputGate(inputGates);
+		this.recoveryManager = checkpointedTask.getRecoveryManager();
+
+		asyncEventRecordCountTarget = -1;
+
+		this.recordCountProvider = checkpointedTask.getRecordCountProvider();
+		inputGate = InputGateUtil.createInputGate(inputGates);
+		checkpointedTask.getRecoveryManager().setInputGate(inputGate);
 
 		this.barrierHandler = InputProcessorUtil.createCheckpointBarrierHandler(
 			checkpointedTask, checkpointMode, ioManager, inputGate, taskManagerConfig);
@@ -134,7 +156,8 @@ public class StreamInputProcessor<IN> {
 		this.deserializationDelegate = new NonReusingDeserializationDelegate<>(ser);
 
 		// Initialize one deserializer per input channel
-		this.recordDeserializers = new SpillingAdaptiveSpanningRecordDeserializer[inputGate.getNumberOfInputChannels()];
+		this.recordDeserializers =
+			new SpillingAdaptiveSpanningRecordDeserializer[inputGate.getNumberOfInputChannels()];
 
 		for (int i = 0; i < recordDeserializers.length; i++) {
 			recordDeserializers[i] = new SpillingAdaptiveSpanningRecordDeserializer<>(
@@ -147,20 +170,21 @@ public class StreamInputProcessor<IN> {
 		this.streamOperator = checkNotNull(streamOperator);
 
 		this.statusWatermarkValve = new StatusWatermarkValve(
-				numInputChannels,
-				new ForwardingValveOutputHandler(streamOperator, lock));
+			numInputChannels,
+			new ForwardingValveOutputHandler(streamOperator, lock));
 
 		this.watermarkGauge = watermarkGauge;
 		metrics.gauge("checkpointAlignmentTime", barrierHandler::getAlignmentDurationNanos);
 	}
 
 	public boolean processInput() throws Exception {
-		if (isFinished) {
+		if (isFinished)
 			return false;
-		}
+
 		if (numRecordsIn == null) {
 			try {
-				numRecordsIn = ((OperatorMetricGroup) streamOperator.getMetricGroup()).getIOMetricGroup().getNumRecordsInCounter();
+				numRecordsIn =
+					((OperatorMetricGroup) streamOperator.getMetricGroup()).getIOMetricGroup().getNumRecordsInCounter();
 			} catch (Exception e) {
 				LOG.warn("An exception occurred during the metrics setup.", e);
 				numRecordsIn = new SimpleCounter();
@@ -180,23 +204,31 @@ public class StreamInputProcessor<IN> {
 					StreamElement recordOrMark = deserializationDelegate.getInstance();
 
 					if (recordOrMark.isWatermark()) {
-						// handle watermark
-						statusWatermarkValve.inputWatermark(recordOrMark.asWatermark(), currentChannel);
-						continue;
-					} else if (recordOrMark.isStreamStatus()) {
-						// handle stream status
-						statusWatermarkValve.inputStreamStatus(recordOrMark.asStreamStatus(), currentChannel);
-						continue;
-					} else if (recordOrMark.isLatencyMarker()) {
-						// handle latency marker
 						synchronized (lock) {
+							recordCountProvider.incRecordCount();
+							// handle watermark
+							statusWatermarkValve.inputWatermark(recordOrMark.asWatermark(), currentChannel);
+						}
+						return true;
+					} else if (recordOrMark.isStreamStatus()) {
+						synchronized (lock) {
+							recordCountProvider.incRecordCount();
+							// handle stream status
+							statusWatermarkValve.inputStreamStatus(recordOrMark.asStreamStatus(), currentChannel);
+						}
+						return true;
+					} else if (recordOrMark.isLatencyMarker()) {
+						synchronized (lock) {
+							recordCountProvider.incRecordCount();
+							// handle latency marker
 							streamOperator.processLatencyMarker(recordOrMark.asLatencyMarker());
 						}
-						continue;
+						return true;
 					} else {
 						// now we can do the actual processing
 						StreamRecord<IN> record = recordOrMark.asRecord();
 						synchronized (lock) {
+							recordCountProvider.incRecordCount();
 							numRecordsIn.inc();
 							streamOperator.setKeyContextElement1(record);
 							streamOperator.processElement(record);
@@ -212,16 +244,13 @@ public class StreamInputProcessor<IN> {
 					currentChannel = bufferOrEvent.getChannelIndex();
 					currentRecordDeserializer = recordDeserializers[currentChannel];
 					currentRecordDeserializer.setNextBuffer(bufferOrEvent.getBuffer());
-				}
-				else {
-					// Event received
+				} else {// Event received
 					final AbstractEvent event = bufferOrEvent.getEvent();
 					if (event.getClass() != EndOfPartitionEvent.class) {
 						throw new IOException("Unexpected event: " + event);
 					}
 				}
-			}
-			else {
+			} else {
 				isFinished = true;
 				if (!barrierHandler.isEmpty()) {
 					throw new IllegalStateException("Trailing data in checkpoint barrier handler.");
@@ -229,6 +258,22 @@ public class StreamInputProcessor<IN> {
 				return false;
 			}
 		}
+	}
+
+	public boolean recover() throws Exception {
+		//While we are recovering
+		//		 	Trigger any asynchronous events that should be triggered at this point
+		//			Process a record
+		while(recoveryManager.isRecovering()) {
+			//Process a few thousand records before querying if still recovering. This is just to go around some design limitations
+			for(int i = 0; i < 10000; i++ ) {
+				while (asyncEventRecordCountTarget != -1 && recordCountProvider.getRecordCount() == asyncEventRecordCountTarget)
+					recoveryManager.triggerAsyncEvent();
+				if (!processInput())
+					return false;
+			}
+		}
+		return true;
 	}
 
 	public void cleanup() throws IOException {
@@ -244,6 +289,17 @@ public class StreamInputProcessor<IN> {
 		// cleanup the barrier handler resources
 		barrierHandler.cleanup();
 	}
+
+	@Override
+	public void setRecordCountTarget(int target) {
+		asyncEventRecordCountTarget = target;
+	}
+
+	public CheckpointBarrierHandler getCheckpointBarrierHandlers() {
+		return this.barrierHandler;
+	}
+
+
 
 	private class ForwardingValveOutputHandler implements StatusWatermarkValve.ValveOutputHandler {
 		private final OneInputStreamOperator<IN, ?> operator;
@@ -279,4 +335,11 @@ public class StreamInputProcessor<IN> {
 		}
 	}
 
+	public void resetInputChannelDeserializer(InputGate gate, int channelIndex) {
+		int absoluteChannelIndex = this.inputGate.getAbsoluteChannelIndex(gate, channelIndex);
+
+		recordDeserializers[absoluteChannelIndex].clear();
+		barrierHandler.unblockChannelIfBlocked(absoluteChannelIndex);
+
+	}
 }

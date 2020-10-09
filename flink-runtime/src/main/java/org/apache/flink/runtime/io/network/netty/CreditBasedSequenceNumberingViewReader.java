@@ -19,6 +19,8 @@
 package org.apache.flink.runtime.io.network.netty;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.api.common.JobID;
+import org.apache.flink.runtime.causal.VertexID;
 import org.apache.flink.runtime.io.network.NetworkSequenceViewReader;
 import org.apache.flink.runtime.io.network.partition.BufferAvailabilityListener;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
@@ -29,6 +31,9 @@ import org.apache.flink.runtime.io.network.partition.consumer.InputChannel.Buffe
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannelID;
 import org.apache.flink.runtime.io.network.partition.consumer.LocalInputChannel;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 
 /**
@@ -38,6 +43,8 @@ import java.io.IOException;
  * handler about non-emptiness, similar to the {@link LocalInputChannel}.
  */
 class CreditBasedSequenceNumberingViewReader implements BufferAvailabilityListener, NetworkSequenceViewReader {
+
+	private static final Logger LOG = LoggerFactory.getLogger(CreditBasedSequenceNumberingViewReader.class);
 
 	private final Object requestLock = new Object();
 
@@ -60,6 +67,8 @@ class CreditBasedSequenceNumberingViewReader implements BufferAvailabilityListen
 	private int numCreditsAvailable;
 
 	private int sequenceNumber = -1;
+	private JobID jobID;
+	private VertexID vertexID;
 
 	CreditBasedSequenceNumberingViewReader(
 			InputChannelID receiverId,
@@ -87,6 +96,8 @@ class CreditBasedSequenceNumberingViewReader implements BufferAvailabilityListen
 					resultPartitionId,
 					subPartitionIndex,
 					this);
+				this.jobID = subpartitionView.getJobID();
+				this.vertexID = subpartitionView.getVertexID();
 			} else {
 				throw new IllegalStateException("Subpartition already requested");
 			}
@@ -96,6 +107,7 @@ class CreditBasedSequenceNumberingViewReader implements BufferAvailabilityListen
 	@Override
 	public void addCredit(int creditDeltas) {
 		numCreditsAvailable += creditDeltas;
+		LOG.debug("{}: added credit {}. Now {} credits available.", this, creditDeltas, numCreditsAvailable);
 	}
 
 	@Override
@@ -141,8 +153,18 @@ class CreditBasedSequenceNumberingViewReader implements BufferAvailabilityListen
 	}
 
 	@Override
+	public JobID getJobID() {
+		return jobID;
+	}
+
+	@Override
 	public int getSequenceNumber() {
 		return sequenceNumber;
+	}
+
+	@Override
+	public VertexID getVertexID() {
+		return vertexID;
 	}
 
 	@VisibleForTesting
@@ -164,9 +186,10 @@ class CreditBasedSequenceNumberingViewReader implements BufferAvailabilityListen
 			if (next.buffer().isBuffer() && --numCreditsAvailable < 0) {
 				throw new IllegalStateException("no credit available");
 			}
+			LOG.debug("{}: decrement credit. Now {} credits available.", this, numCreditsAvailable);
 
 			return new BufferAndAvailability(
-				next.buffer(), isAvailable(next), next.buffersInBacklog());
+				next.buffer(), isAvailable(next), next.buffersInBacklog(), next.getEpochID());
 		} else {
 			return null;
 		}
@@ -174,6 +197,7 @@ class CreditBasedSequenceNumberingViewReader implements BufferAvailabilityListen
 
 	@Override
 	public void notifySubpartitionConsumed() throws IOException {
+		LOG.info("Reader {} issues release notification for subpartition view {}.", this, subpartitionView);
 		subpartitionView.notifySubpartitionConsumed();
 	}
 
@@ -188,7 +212,14 @@ class CreditBasedSequenceNumberingViewReader implements BufferAvailabilityListen
 	}
 
 	@Override
+	public void releaseAllResources(Throwable cause) throws IOException {
+		LOG.info("Reader {} DOES NOT issue release resources call for subpartition view {} (it releases only the available buffers). Instead it sends fail consumer trigger.", this, subpartitionView);
+		subpartitionView.sendFailConsumerTrigger(cause);
+	}
+
+	@Override
 	public void releaseAllResources() throws IOException {
+		LOG.info("Reader {} issues release resources call for subpartition view {}.", this, subpartitionView);
 		subpartitionView.releaseAllResources();
 	}
 

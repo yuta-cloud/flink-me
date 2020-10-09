@@ -20,6 +20,7 @@ package org.apache.flink.runtime.io.network;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.TaskManagerOptions;
+import org.apache.flink.runtime.inflightlogging.InFlightLogFactory;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.network.partition.NoOpResultPartitionConsumableNotifier;
 import org.apache.flink.runtime.io.network.partition.ResultPartition;
@@ -78,7 +79,7 @@ public class NetworkEnvironmentTest {
 	@Test
 	public void testRegisterTaskUsesBoundedBuffers() throws Exception {
 		final NetworkEnvironment network = new NetworkEnvironment(
-			numBuffers, memorySegmentSize, 0, 0, 2, 8, enableCreditBasedFlowControl);
+			numBuffers, memorySegmentSize, 0, 0, 2, 8, 2, 8, enableCreditBasedFlowControl);
 
 		// result partitions
 		ResultPartition rp1 = createResultPartition(ResultPartitionType.PIPELINED, 2);
@@ -182,7 +183,7 @@ public class NetworkEnvironmentTest {
 
 	private void testRegisterTaskWithLimitedBuffers(int bufferPoolSize) throws Exception {
 		final NetworkEnvironment network = new NetworkEnvironment(
-			bufferPoolSize, memorySegmentSize, 0, 0, 2, 8, enableCreditBasedFlowControl);
+			bufferPoolSize, memorySegmentSize, 0, 0, 2, 8,2,8, enableCreditBasedFlowControl);
 
 		final ConnectionManager connManager = createDummyConnectionManager();
 
@@ -288,6 +289,7 @@ public class NetworkEnvironmentTest {
 			mock(ResultPartitionManager.class),
 			new NoOpResultPartitionConsumableNotifier(),
 			mock(IOManager.class),
+			mock(InFlightLogFactory.class),
 			false);
 	}
 

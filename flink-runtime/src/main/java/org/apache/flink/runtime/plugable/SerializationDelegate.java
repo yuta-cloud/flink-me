@@ -31,11 +31,16 @@ import java.io.IOException;
  *
  * @param <T> The type to be represented as an IOReadableWritable.
  */
-public class SerializationDelegate<T> implements IOReadableWritable {
+public class SerializationDelegate<T> implements IOReadableWritable{
 
 	private T instance;
 
 	private final TypeSerializer<T> serializer;
+
+	/* Use a fake argument copyConstructor to disambiguate between the two constructors. */
+	public SerializationDelegate(SerializationDelegate<T> serializationDelegate, boolean copyConstructor) {
+		this.serializer = serializationDelegate.serializer;
+	}
 
 	public SerializationDelegate(TypeSerializer<T> serializer) {
 		this.serializer = serializer;
@@ -47,6 +52,10 @@ public class SerializationDelegate<T> implements IOReadableWritable {
 
 	public T getInstance() {
 		return this.instance;
+	}
+
+	public T copyInstance() {
+		return this.serializer.copy(instance);
 	}
 
 	@Override

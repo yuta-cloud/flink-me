@@ -44,6 +44,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.SocketAddress;
+import java.net.InetSocketAddress;
 import java.util.ArrayDeque;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -80,6 +81,11 @@ class CreditBasedPartitionRequestClientHandler extends ChannelInboundHandlerAdap
 	 * be accessed by task thread or canceler thread to cancel partition request during releasing resources.
 	 */
 	private volatile ChannelHandlerContext ctx;
+
+
+	public CreditBasedPartitionRequestClientHandler(){
+	}
+
 
 	// ------------------------------------------------------------------------
 	// Input channel/receiver registration
@@ -132,13 +138,29 @@ class CreditBasedPartitionRequestClientHandler extends ChannelInboundHandlerAdap
 		// channels have been removed. This indicates a problem with the remote task manager.
 		if (!inputChannels.isEmpty()) {
 			final SocketAddress remoteAddr = ctx.channel().remoteAddress();
+			RemoteTransportException cause = new RemoteTransportException(
+					"Connection unexpectedly closed by remote task manager '" + remoteAddr + "'. "
+						+ "This might indicate that the remote task manager was lost.", remoteAddr);
 
-			notifyAllChannelsOfErrorAndClose(new RemoteTransportException(
-				"Connection unexpectedly closed by remote task manager '" + remoteAddr + "'. "
-					+ "This might indicate that the remote task manager was lost.", remoteAddr));
+			try {
+				InetSocketAddress inetRemoteAddr = (InetSocketAddress) remoteAddr;
+				for (RemoteInputChannel remoteInputChannel : inputChannels.values()) {
+					if (remoteInputChannel.getConnectionId().getAddress().equals(inetRemoteAddr)) {
+						LOG.debug("Send fail producer trigger to {}.", remoteInputChannel);
+						removeInputChannel(remoteInputChannel);
+						remoteInputChannel.triggerFailProducer(cause);
+						break;
+					}
+				}
+			} catch (ClassCastException e) {
+				LOG.warn("On unexpected network error, the channel's remote address is not of type InetSocketAddress. Therefore, it is not possible to identify the culprit remote channel.");
+
+				notifyAllChannelsOfErrorAndClose(cause);
+				super.channelInactive(ctx);
+			}
+		} else {
+			super.channelInactive(ctx);
 		}
-
-		super.channelInactive(ctx);
 	}
 
 	/**
@@ -159,13 +181,28 @@ class CreditBasedPartitionRequestClientHandler extends ChannelInboundHandlerAdap
 			if (cause instanceof IOException && cause.getMessage().equals("Connection reset by peer")) {
 				tex = new RemoteTransportException("Lost connection to task manager '" + remoteAddr + "'. " +
 					"This indicates that the remote task manager was lost.", remoteAddr, cause);
+				try {
+					InetSocketAddress inetRemoteAddr = (InetSocketAddress) remoteAddr;
+					for (RemoteInputChannel remoteInputChannel : inputChannels.values()) {
+						if (remoteInputChannel.getConnectionId().getAddress().equals(inetRemoteAddr)) {
+							LOG.debug("Send fail producer trigger to {}.", remoteInputChannel);
+							removeInputChannel(remoteInputChannel);
+							remoteInputChannel.triggerFailProducer(cause);
+							break;
+						}
+					}
+				} catch (ClassCastException e) {
+					LOG.warn("On unexpected network error, the channel's remote address is not of type InetSocketAddress. Therefore, it is not possible to identify the culprit remote channel.");
+
+					notifyAllChannelsOfErrorAndClose(tex);
+				}
 			} else {
 				final SocketAddress localAddr = ctx.channel().localAddress();
 				tex = new LocalTransportException(
 					String.format("%s (connection to '%s')", cause.getMessage(), remoteAddr), localAddr, cause);
+				notifyAllChannelsOfErrorAndClose(tex);
 			}
 
-			notifyAllChannelsOfErrorAndClose(tex);
 		}
 	}
 
@@ -305,6 +342,7 @@ class CreditBasedPartitionRequestClientHandler extends ChannelInboundHandlerAdap
 
 				Buffer buffer = inputChannel.requestBuffer();
 				if (buffer != null) {
+					LOG.debug("decodeBufferOrEvent(): {} received buffer {}.", inputChannel, buffer);
 					nettyBuffer.readBytes(buffer.asByteBuf(), receivedSize);
 
 					inputChannel.onBuffer(buffer, bufferOrEvent.sequenceNumber, bufferOrEvent.backlog);

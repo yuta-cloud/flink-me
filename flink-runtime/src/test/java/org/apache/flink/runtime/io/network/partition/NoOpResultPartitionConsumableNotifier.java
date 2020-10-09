@@ -27,4 +27,10 @@ import org.apache.flink.runtime.taskmanager.TaskActions;
 public class NoOpResultPartitionConsumableNotifier implements ResultPartitionConsumableNotifier {
 	@Override
 	public void notifyPartitionConsumable(JobID jobId, ResultPartitionID partitionId, TaskActions taskActions) {}
+
+	@Override
+	public void requestFailConsumer(ResultPartitionID partitionId, int subpartitionIndex, Throwable cause,
+									TaskActions taskActions) {
+
+	}
 }

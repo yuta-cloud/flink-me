@@ -62,17 +62,8 @@ import org.slf4j.Logger;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.Executor;
-import java.util.concurrent.TimeoutException;
+import java.util.*;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 import java.util.stream.Collectors;
 
@@ -84,6 +75,7 @@ import static org.apache.flink.runtime.execution.ExecutionState.FAILED;
 import static org.apache.flink.runtime.execution.ExecutionState.FINISHED;
 import static org.apache.flink.runtime.execution.ExecutionState.RUNNING;
 import static org.apache.flink.runtime.execution.ExecutionState.SCHEDULED;
+import static org.apache.flink.runtime.execution.ExecutionState.STANDBY;
 import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
 
@@ -147,6 +139,11 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 
 	private final ConcurrentLinkedQueue<PartialInputChannelDeploymentDescriptor> partialInputChannelDeploymentDescriptors;
 
+	/** Whether this is a standby execution.
+	 *  In this case the underlying task waits in STANDBY state to substitute a specific failed task
+	 *  if this is required */
+	private boolean isStandby;
+
 	/** A future that completes once the Execution reaches a terminal ExecutionState. */
 	private final CompletableFuture<ExecutionState> terminalStateFuture;
 
@@ -204,6 +201,17 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 			long globalModVersion,
 			long startTimestamp,
 			Time rpcTimeout) {
+		this(executor, vertex, attemptNumber, globalModVersion, startTimestamp, rpcTimeout, false);
+	}
+
+	public Execution(
+			Executor executor,
+			ExecutionVertex vertex,
+			int attemptNumber,
+			long globalModVersion,
+			long startTimestamp,
+			Time rpcTimeout,
+			boolean isStandby) {
 
 		this.executor = checkNotNull(executor);
 		this.vertex = checkNotNull(vertex);
@@ -217,6 +225,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 		markTimestamp(ExecutionState.CREATED, startTimestamp);
 
 		this.partialInputChannelDeploymentDescriptors = new ConcurrentLinkedQueue<>();
+		this.isStandby = isStandby;
 		this.terminalStateFuture = new CompletableFuture<>();
 		this.releaseFuture = new CompletableFuture<>();
 		this.taskManagerLocationFuture = new CompletableFuture<>();
@@ -250,6 +259,15 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	@Nullable
 	public AllocationID getAssignedAllocationID() {
 		return assignedAllocationID;
+	}
+
+	public boolean getIsStandby() {
+		return isStandby;
+	}
+
+	@VisibleForTesting
+	boolean setState(ExecutionState newState) {
+		return transitionState(state, newState);
 	}
 
 	/**
@@ -352,8 +370,20 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	 * @param taskRestore information to restore the state
 	 */
 	public void setInitialState(@Nullable JobManagerTaskRestore taskRestore) {
-		checkState(state == CREATED, "Can only assign operator state when execution attempt is in CREATED");
+		checkState(state == CREATED || (isStandby && state == STANDBY),
+				"Can only assign operator state when execution attempt is a) in CREATED state or b) a standby execution attempt in STANDBY state. execution: %s, isStandby: %s, state: %s.", this, isStandby, state);
 		this.taskRestore = taskRestore;
+
+		if (isStandby && state == STANDBY) {
+			CompletableFuture<Acknowledge> ack = dispatchStateToStandbyTaskRpcCall(taskRestore);
+			//We must synchronously wait for the result
+			try {
+				ack.get();
+			} catch (InterruptedException | ExecutionException e) {
+				e.printStackTrace();
+			}
+			LOG.debug("Dispatch state snapshot {} to standby task {}.", taskRestore, vertex.getTaskNameWithSubtaskIndex());
+		}
 	}
 
 	/**
@@ -596,15 +626,20 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 			}
 
 			if (LOG.isInfoEnabled()) {
-				LOG.info(String.format("Deploying %s (attempt #%d) to %s", vertex.getTaskNameWithSubtaskIndex(),
-						attemptNumber, getAssignedResourceLocation().getHostname()));
+				LOG.info(String.format("Deploying %s to %s (TaskManager location: %s)", this,
+						getAssignedResourceLocation().getHostname(),
+						slot.getTaskManagerLocation()
+						));
 			}
+
+			LOG.info("Creating deployment descriptor for {}", this.getVertex().getVertexId());
 
 			final TaskDeploymentDescriptor deployment = vertex.createDeploymentDescriptor(
 				attemptId,
 				slot,
 				taskRestore,
-				attemptNumber);
+				attemptNumber,
+				isStandby);
 
 			// null taskRestore to let it be GC'ed
 			taskRestore = null;
@@ -674,7 +709,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 			}
 
 			// these two are the common cases where we need to send a cancel call
-			else if (current == RUNNING || current == DEPLOYING) {
+			else if (current == RUNNING || current == STANDBY || current == DEPLOYING) {
 				// try to transition to canceling, if successful, send the cancel call
 				if (transitionState(current, CANCELING)) {
 					sendCancelRpcCall();
@@ -718,7 +753,20 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 		}
 	}
 
-	void scheduleOrUpdateConsumers(List<List<ExecutionEdge>> allConsumers) {
+	CompletableFuture<Acknowledge> runStandbyExecution() throws IllegalStateException {
+		if (!this.isStandby) {
+			markFailed(new Exception("Tried to run a standby execution instance that is not a standby one."));
+		}
+
+		ExecutionState current = this.state;
+		if (current != STANDBY) {
+			throw new IllegalStateException("Tried to run a standby execution that is not in STANDBY state, but in " + current + " state.");
+		}
+
+		return sendSwitchStandbyToRunningRpcCall();
+	}
+
+	void scheduleOrUpdateConsumers(List<List<ExecutionEdge>> allConsumers, boolean updateConsumersOnFailover) {
 		final int numConsumers = allConsumers.size();
 
 		if (numConsumers > 1) {
@@ -735,6 +783,8 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 			final ExecutionState consumerState = consumer.getState();
 
 			final IntermediateResultPartition partition = edge.getSource();
+
+			LOG.debug("Update consumer execution in ExecutionEdge {}.", edge);
 
 			// ----------------------------------------------------------------
 			// Consumer is created => try to deploy and cache input channel
@@ -778,11 +828,11 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 					consumerVertex.sendPartitionInfos();
 				}
 			}
-			// ----------------------------------------------------------------
-			// Consumer is running => send update message now
-			// ----------------------------------------------------------------
+			// --------------------------------------------------------------------------------
+			// Consumer is running (or a standby task called to run) => send update message now
+			// --------------------------------------------------------------------------------
 			else {
-				if (consumerState == RUNNING) {
+				if (consumerState == RUNNING || consumerState == STANDBY) {
 					final LogicalSlot consumerSlot = consumer.getAssignedResource();
 
 					if (consumerSlot == null) {
@@ -814,13 +864,15 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 					}
 
 					final InputChannelDeploymentDescriptor descriptor = new InputChannelDeploymentDescriptor(
-							partitionId, partitionLocation);
+							partitionId, partitionLocation, updateConsumersOnFailover);
+					LOG.debug("New InputChannelDeploymentDescriptor " + descriptor + " for updating consumer " + consumer + ".");
 
 					consumer.sendUpdatePartitionInfoRpcCall(
 						Collections.singleton(
 							new PartitionInfo(
 								partition.getIntermediateResult().getId(),
 								descriptor)));
+
 				}
 				// ----------------------------------------------------------------
 				// Consumer is scheduled or deploying => cache input channel
@@ -966,7 +1018,9 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 									.getIntermediateResult().getPartitions();
 
 							for (IntermediateResultPartition partition : allPartitions) {
-								scheduleOrUpdateConsumers(partition.getConsumers());
+								boolean updateConsumersOnFailover = false;
+								scheduleOrUpdateConsumers(partition.getConsumers(),
+										updateConsumersOnFailover);
 							}
 						}
 
@@ -1131,7 +1185,11 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 
 					try {
 						if (assignedResource != null) {
-							sendCancelRpcCall();
+							if (t != null) {
+								sendFailRpcCall(t);
+							} else {
+								sendCancelRpcCall();
+							}
 						}
 					} catch (Throwable tt) {
 						// no reason this should ever happen, but log it to be safe
@@ -1145,9 +1203,22 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 		}
 	}
 
+	boolean switchToStandby() {
+
+		if (!this.isStandby) {
+			markFailed(new Exception("Tried to switch to STANDBY state a non-standby execution instance."));
+		}
+
+		return transitionState(DEPLOYING, STANDBY);
+	}
+
 	boolean switchToRunning() {
 
 		if (transitionState(DEPLOYING, RUNNING)) {
+			sendPartitionInfos();
+			return true;
+		}
+		else if (this.isStandby && transitionState(STANDBY, RUNNING)) {
 			sendPartitionInfos();
 			return true;
 		}
@@ -1215,6 +1286,98 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 				},
 				executor);
 		}
+	}
+
+	/**
+	 * Sends fail RPC call.
+	 */
+	public void sendFailRpcCall(Throwable t) {
+		final LogicalSlot slot = assignedResource;
+
+		if (slot != null) {
+			final TaskManagerGateway taskManagerGateway = slot.getTaskManagerGateway();
+
+			CompletableFuture<Acknowledge> failResultFuture = FutureUtils.retry(
+				() -> taskManagerGateway.failTask(attemptId, t, rpcTimeout),
+				NUM_STOP_CALL_TRIES,
+				executor);
+
+			failResultFuture.exceptionally(
+				failure -> {
+					LOG.info("Failing task of execution {} was not successful. Task may already be dead.", this, failure);
+					return null;
+				});
+		}
+	}
+
+	/**
+	 * This method sends a dispatchStateToStandbyTask message to the instance of the assigned slot.
+	 *
+	 * <p>The sending is tried up to NUM_CANCEL_CALL_TRIES times.
+	 * @return
+	 */
+	private CompletableFuture<Acknowledge> dispatchStateToStandbyTaskRpcCall(JobManagerTaskRestore taskRestore) {
+		final LogicalSlot slot = assignedResource;
+
+		final TaskManagerGateway taskManagerGateway = slot.getTaskManagerGateway();
+
+		CompletableFuture<Acknowledge> dispatchStateResultFuture = FutureUtils.retry(
+			() -> taskManagerGateway.dispatchStateToStandbyTask(attemptId, taskRestore, rpcTimeout),
+			NUM_CANCEL_CALL_TRIES,
+			executor);
+
+		dispatchStateResultFuture.whenCompleteAsync(
+			(ack, failure) -> {
+				if (failure != null) {
+					fail(new Exception("State snapshot could not be dispatched to standby task " +
+							vertex.getTaskNameWithSubtaskIndex() + '.', failure));
+				}
+			},
+			executor);
+
+		return dispatchStateResultFuture;
+	}
+
+	/**
+	 * This method sends a switchStandbyTaskToRunning message to the instance of the assigned slot.
+	 *
+	 * <p>The sending is tried up to NUM_CANCEL_CALL_TRIES times.
+	 */
+	private CompletableFuture<Acknowledge> sendSwitchStandbyToRunningRpcCall() {
+		final LogicalSlot slot = assignedResource;
+
+		CompletableFuture<Acknowledge> toReturn = CompletableFuture.completedFuture(Acknowledge.get());
+		if (slot != null) {
+			final TaskManagerGateway taskManagerGateway = slot.getTaskManagerGateway();
+
+			CompletableFuture<Acknowledge> switchToRunningResultFuture = FutureUtils.retry(
+				() -> taskManagerGateway.switchStandbyTaskToRunning(attemptId, rpcTimeout),
+				NUM_CANCEL_CALL_TRIES,
+				executor);
+
+			toReturn = switchToRunningResultFuture.whenCompleteAsync(
+				(ack, failure) -> {
+					if (failure != null) {
+						fail(new Exception("Standby task could not be switched to running.", failure));
+					}
+				},
+				executor);
+		}
+		return toReturn;
+	}
+
+	public CompletableFuture<Acknowledge> ignoreCheckpointRpcCall(long checkpointId) {
+		final LogicalSlot slot = assignedResource;
+		if (slot != null) {
+			final TaskManagerGateway taskManagerGateway = slot.getTaskManagerGateway();
+			CompletableFuture<Acknowledge> cancelResult = FutureUtils.retry(
+				() -> taskManagerGateway.ignoreCheckpoint(attemptId, checkpointId, rpcTimeout),
+				NUM_CANCEL_CALL_TRIES,
+				executor);
+			return cancelResult;
+		}
+
+		return CompletableFuture.completedFuture(Acknowledge.get());
 	}
 
 	private void sendFailIntermediateResultPartitionsRpcCall() {
@@ -1337,9 +1500,9 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 			markTimestamp(targetState);
 
 			if (error == null) {
-				LOG.info("{} ({}) switched from {} to {}.", getVertex().getTaskNameWithSubtaskIndex(), getAttemptId(), currentState, targetState);
+				LOG.info("{} ({}) {} switched from {} to {}.", getVertex().getTaskNameWithSubtaskIndex(), getAttemptId(), (isStandby ? "[STANDBY]" : ""), currentState, targetState);
 			} else {
-				LOG.info("{} ({}) switched from {} to {}.", getVertex().getTaskNameWithSubtaskIndex(), getAttemptId(), currentState, targetState, error);
+				LOG.info("{} ({}) {} switched from {} to {}.", getVertex().getTaskNameWithSubtaskIndex(), getAttemptId(), (isStandby ? "[STANDBY]" : ""), currentState, targetState, error);
 			}
 
 			if (targetState.isTerminal()) {
@@ -1433,8 +1596,8 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	public String toString() {
 		final LogicalSlot slot = assignedResource;
 
-		return String.format("Attempt #%d (%s) @ %s - [%s]", attemptNumber, vertex.getTaskNameWithSubtaskIndex(),
-				(slot == null ? "(unassigned)" : slot), state);
+		return String.format("Attempt #%d (%s) @ %s - [%s] %s", attemptNumber, vertex.getTaskNameWithSubtaskIndex(),
+				(slot == null ? "(unassigned)" : slot), state, (isStandby ? "(STANDBY)" : ""));
 	}
 
 	@Override

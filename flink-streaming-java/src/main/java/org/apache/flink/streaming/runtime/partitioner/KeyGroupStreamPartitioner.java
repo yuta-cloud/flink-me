@@ -64,6 +64,7 @@ public class KeyGroupStreamPartitioner<T, K> extends StreamPartitioner<T> implem
 		return returnArray;
 	}
 
+
 	@Override
 	public StreamPartitioner<T> copy() {
 		return this;
@@ -79,4 +80,6 @@ public class KeyGroupStreamPartitioner<T, K> extends StreamPartitioner<T> implem
 		KeyGroupRangeAssignment.checkParallelismPreconditions(maxParallelism);
 		this.maxParallelism = maxParallelism;
 	}
+
+
 }

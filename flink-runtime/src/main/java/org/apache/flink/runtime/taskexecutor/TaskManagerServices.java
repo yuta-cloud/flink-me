@@ -26,9 +26,12 @@ import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.core.memory.MemoryType;
 import org.apache.flink.queryablestate.network.stats.DisabledKvStateRequestStats;
 import org.apache.flink.runtime.broadcast.BroadcastVariableManager;
+import org.apache.flink.runtime.causal.log.CausalLogManager;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
+import org.apache.flink.runtime.inflightlogging.InFlightLogFactory;
+import org.apache.flink.runtime.inflightlogging.InFlightLogFactoryImpl;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.disk.iomanager.IOManagerAsync;
 import org.apache.flink.runtime.io.network.ConnectionManager;
@@ -87,6 +90,7 @@ public class TaskManagerServices {
 	private final JobManagerTable jobManagerTable;
 	private final JobLeaderService jobLeaderService;
 	private final TaskExecutorLocalStateStoresManager taskManagerStateStore;
+	private final InFlightLogFactory inFlightLogFactory;
 
 	TaskManagerServices(
 		TaskManagerLocation taskManagerLocation,
@@ -97,7 +101,7 @@ public class TaskManagerServices {
 		TaskSlotTable taskSlotTable,
 		JobManagerTable jobManagerTable,
 		JobLeaderService jobLeaderService,
-		TaskExecutorLocalStateStoresManager taskManagerStateStore) {
+		TaskExecutorLocalStateStoresManager taskManagerStateStore, InFlightLogFactory inFlightLogFactory) {
 
 		this.taskManagerLocation = Preconditions.checkNotNull(taskManagerLocation);
 		this.memoryManager = Preconditions.checkNotNull(memoryManager);
@@ -108,6 +112,7 @@ public class TaskManagerServices {
 		this.jobManagerTable = Preconditions.checkNotNull(jobManagerTable);
 		this.jobLeaderService = Preconditions.checkNotNull(jobLeaderService);
 		this.taskManagerStateStore = Preconditions.checkNotNull(taskManagerStateStore);
+		this.inFlightLogFactory = inFlightLogFactory;
 	}
 
 	// --------------------------------------------------------------------------------------------
@@ -150,6 +155,9 @@ public class TaskManagerServices {
 		return taskManagerStateStore;
 	}
 
+	public InFlightLogFactory getInFlightLogFactory(){
+		return inFlightLogFactory;
+	}
 	// --------------------------------------------------------------------------------------------
 	//  Shut down method
 	// --------------------------------------------------------------------------------------------
@@ -241,6 +249,8 @@ public class TaskManagerServices {
 		// start the I/O manager, it will create some temp directories.
 		final IOManager ioManager = new IOManagerAsync(taskManagerServicesConfiguration.getTmpDirPaths());
 
+		final InFlightLogFactory inFlightLogFactory = new InFlightLogFactoryImpl(taskManagerServicesConfiguration.getInFlightLogConfig(), ioManager, network.getNetworkBufferPool());
+
 		final BroadcastVariableManager broadcastVariableManager = new BroadcastVariableManager();
 
 		final List<ResourceProfile> resourceProfiles = new ArrayList<>(taskManagerServicesConfiguration.getNumberOfSlots());
@@ -281,7 +291,8 @@ public class TaskManagerServices {
 			taskSlotTable,
 			jobManagerTable,
 			jobLeaderService,
-			taskStateManager);
+			taskStateManager,
+			inFlightLogFactory);
 	}
 
 	/**
@@ -388,25 +399,38 @@ public class TaskManagerServices {
 
 		NetworkEnvironmentConfiguration networkEnvironmentConfiguration = taskManagerServicesConfiguration.getNetworkConfig();
 
+		int determinantSegmentSize = networkEnvironmentConfiguration.nettyConfig().getDeterminantBufferSize();
+		float determinantSteal = networkEnvironmentConfiguration.nettyConfig().getDeterminantMemorySteal();
+
 		final long networkBuf = calculateNetworkBufferMemory(taskManagerServicesConfiguration, maxJvmHeapMemory);
-		int segmentSize = networkEnvironmentConfiguration.networkBufferSize();
+		int dataSegmentSize = networkEnvironmentConfiguration.networkBufferSize();
+
 
 		// tolerate offcuts between intended and allocated memory due to segmentation (will be available to the user-space memory)
-		final long numNetBuffersLong = networkBuf / segmentSize;
+		final long numNetBuffersLong = (long) (((1-determinantSteal) * networkBuf)/ dataSegmentSize);
 		if (numNetBuffersLong > Integer.MAX_VALUE) {
 			throw new IllegalArgumentException("The given number of memory bytes (" + networkBuf
 				+ ") corresponds to more than MAX_INT pages.");
 		}
 
+
 		NetworkBufferPool networkBufferPool = new NetworkBufferPool(
-			(int) numNetBuffersLong,
-			segmentSize);
+			(int) (numNetBuffersLong),
+			dataSegmentSize);
+
+		final long numNetBuffersForDeterminants = (long) (networkBuf * determinantSteal / determinantSegmentSize);
+		NetworkBufferPool determinantBufferPool = new NetworkBufferPool(
+			(int) (numNetBuffersForDeterminants),
+			determinantSegmentSize);
 
 		ConnectionManager connectionManager;
 		boolean enableCreditBased = false;
 		NettyConfig nettyConfig = networkEnvironmentConfiguration.nettyConfig();
+
+		CausalLogManager causalLogManager = new CausalLogManager(determinantBufferPool, nettyConfig.getNumDeterminantBuffersPerTask(), nettyConfig.getDeltaEncodingStrategy());
+
 		if (nettyConfig != null) {
-			connectionManager = new NettyConnectionManager(nettyConfig);
+			connectionManager = new NettyConnectionManager(nettyConfig, causalLogManager);
 			enableCreditBased = nettyConfig.isCreditBasedEnabled();
 		} else {
 			connectionManager = new LocalConnectionManager();
@@ -460,7 +484,9 @@ public class TaskManagerServices {
 			networkEnvironmentConfiguration.partitionRequestMaxBackoff(),
 			networkEnvironmentConfiguration.networkBuffersPerChannel(),
 			networkEnvironmentConfiguration.floatingNetworkBuffersPerGate(),
-			enableCreditBased);
+			networkEnvironmentConfiguration.senderExtraNetworkBuffersPerChannel(),
+			networkEnvironmentConfiguration.senderExtraFloatingNetworkBuffersPerGate(),
+			enableCreditBased, causalLogManager);
 	}
 
 	/**
@@ -565,6 +591,7 @@ public class TaskManagerServices {
 	 */
 	public static long calculateNetworkBufferMemory(TaskManagerServicesConfiguration tmConfig, long maxJvmHeapMemory) {
 		final NetworkEnvironmentConfiguration networkConfig = tmConfig.getNetworkConfig();
+		LOG.info("{}, maxJvmHeapMemory: {}.", networkConfig, maxJvmHeapMemory);
 
 		final float networkBufFraction = networkConfig.networkBufFraction();
 		final long networkBufMin = networkConfig.networkBufMin();

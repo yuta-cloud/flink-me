@@ -30,7 +30,6 @@ import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.SerializedValue;
 
 import javax.annotation.Nullable;
-
 import java.io.File;
 import java.io.IOException;
 import java.io.Serializable;
@@ -44,12 +43,16 @@ public final class TaskDeploymentDescriptor implements Serializable {
 
 	private static final long serialVersionUID = -3233562176034358530L;
 
+
+	public boolean isStandby() {
+		return isStandby;
+	}
+
 	/**
 	 * Wrapper class for serialized values which may be offloaded to the {@link
 	 * org.apache.flink.runtime.blob.BlobServer} or not.
 	 *
-	 * @param <T>
-	 * 		type of the serialized value
+	 * @param <T> type of the serialized value
 	 */
 	@SuppressWarnings("unused")
 	public static class MaybeOffloaded<T> implements Serializable {
@@ -124,6 +127,9 @@ public final class TaskDeploymentDescriptor implements Serializable {
 	/** The ID referencing the attempt to execute the task. */
 	private final ExecutionAttemptID executionId;
 
+	/** Whether the deployment concerns a standby task. */
+	private final boolean isStandby;
+
 	/** The allocation ID of the slot in which the task shall be run. */
 	private final AllocationID allocationId;
 
@@ -146,6 +152,7 @@ public final class TaskDeploymentDescriptor implements Serializable {
 	@Nullable
 	private final JobManagerTaskRestore taskRestore;
 
+
 	public TaskDeploymentDescriptor(
 		JobID jobId,
 		MaybeOffloaded<JobInformation> serializedJobInformation,
@@ -159,6 +166,26 @@ public final class TaskDeploymentDescriptor implements Serializable {
 		Collection<ResultPartitionDeploymentDescriptor> resultPartitionDeploymentDescriptors,
 		Collection<InputGateDeploymentDescriptor> inputGateDeploymentDescriptors) {
 
+		this(jobId, serializedJobInformation, serializedTaskInformation,
+			executionAttemptId, allocationId, subtaskIndex, attemptNumber,
+			targetSlotNumber, taskRestore, resultPartitionDeploymentDescriptors,
+			inputGateDeploymentDescriptors, false);
+	}
+
+
+	public TaskDeploymentDescriptor(
+		JobID jobId,
+		MaybeOffloaded<JobInformation> serializedJobInformation,
+		MaybeOffloaded<TaskInformation> serializedTaskInformation,
+		ExecutionAttemptID executionAttemptId,
+		AllocationID allocationId,
+		int subtaskIndex,
+		int attemptNumber,
+		int targetSlotNumber,
+		@Nullable JobManagerTaskRestore taskRestore,
+		Collection<ResultPartitionDeploymentDescriptor> resultPartitionDeploymentDescriptors,
+		Collection<InputGateDeploymentDescriptor> inputGateDeploymentDescriptors, boolean isStandby) {
+
 		this.jobId = Preconditions.checkNotNull(jobId);
 
 		this.serializedJobInformation = Preconditions.checkNotNull(serializedJobInformation);
@@ -166,6 +193,7 @@ public final class TaskDeploymentDescriptor implements Serializable {
 
 		this.executionId = Preconditions.checkNotNull(executionAttemptId);
 		this.allocationId = Preconditions.checkNotNull(allocationId);
+		this.isStandby = isStandby;
 
 		Preconditions.checkArgument(0 <= subtaskIndex, "The subtask index must be positive.");
 		this.subtaskIndex = subtaskIndex;
@@ -271,6 +299,10 @@ public final class TaskDeploymentDescriptor implements Serializable {
 
 	public AllocationID getAllocationId() {
 		return allocationId;
+	}
+
+	public boolean getIsStandby() {
+		return isStandby;
 	}
 
 	/**

@@ -33,13 +33,8 @@ import org.apache.flink.runtime.accumulators.StringifiedAccumulatorResult;
 import org.apache.flink.runtime.blob.BlobWriter;
 import org.apache.flink.runtime.blob.PermanentBlobKey;
 import org.apache.flink.runtime.blob.VoidBlobWriter;
-import org.apache.flink.runtime.checkpoint.CheckpointCoordinator;
-import org.apache.flink.runtime.checkpoint.CheckpointIDCounter;
-import org.apache.flink.runtime.checkpoint.CheckpointRetentionPolicy;
-import org.apache.flink.runtime.checkpoint.CheckpointStatsSnapshot;
-import org.apache.flink.runtime.checkpoint.CheckpointStatsTracker;
-import org.apache.flink.runtime.checkpoint.CompletedCheckpointStore;
-import org.apache.flink.runtime.checkpoint.MasterTriggerRestoreHook;
+import org.apache.flink.runtime.causal.VertexID;
+import org.apache.flink.runtime.checkpoint.*;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.concurrent.FutureUtils;
 import org.apache.flink.runtime.concurrent.FutureUtils.ConjunctFuture;
@@ -48,19 +43,17 @@ import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.execution.SuppressRestartsException;
 import org.apache.flink.runtime.executiongraph.failover.FailoverStrategy;
 import org.apache.flink.runtime.executiongraph.failover.RestartAllStrategy;
+import org.apache.flink.runtime.executiongraph.failover.RunStandbyTaskStrategy;
 import org.apache.flink.runtime.executiongraph.restart.ExecutionGraphRestartCallback;
 import org.apache.flink.runtime.executiongraph.restart.RestartCallback;
 import org.apache.flink.runtime.executiongraph.restart.RestartStrategy;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
-import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
-import org.apache.flink.runtime.jobgraph.JobStatus;
-import org.apache.flink.runtime.jobgraph.JobVertex;
-import org.apache.flink.runtime.jobgraph.JobVertexID;
-import org.apache.flink.runtime.jobgraph.ScheduleMode;
+import org.apache.flink.runtime.jobgraph.*;
 import org.apache.flink.runtime.jobgraph.tasks.CheckpointCoordinatorConfiguration;
 import org.apache.flink.runtime.jobmanager.scheduler.CoLocationGroup;
 import org.apache.flink.runtime.jobmanager.scheduler.LocationPreferenceConstraint;
 import org.apache.flink.runtime.jobmanager.scheduler.NoResourceAvailableException;
+import org.apache.flink.runtime.jobmaster.EstablishedResourceManagerConnection;
 import org.apache.flink.runtime.jobmaster.slotpool.SlotPool;
 import org.apache.flink.runtime.jobmaster.slotpool.SlotProvider;
 import org.apache.flink.runtime.query.KvStateLocationRegistry;
@@ -68,49 +61,21 @@ import org.apache.flink.runtime.state.SharedStateRegistry;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.taskmanager.TaskExecutionState;
 import org.apache.flink.types.Either;
-import org.apache.flink.util.ExceptionUtils;
-import org.apache.flink.util.FlinkException;
-import org.apache.flink.util.OptionalFailure;
-import org.apache.flink.util.Preconditions;
-import org.apache.flink.util.SerializedThrowable;
-import org.apache.flink.util.SerializedValue;
-import org.apache.flink.util.StringUtils;
-
+import org.apache.flink.util.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
-
 import java.io.IOException;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.NoSuchElementException;
-import java.util.Set;
-import java.util.concurrent.CancellationException;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executor;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeoutException;
+import java.util.*;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 import java.util.stream.Collectors;
 
-import static org.apache.flink.util.Preconditions.checkArgument;
-import static org.apache.flink.util.Preconditions.checkNotNull;
-import static org.apache.flink.util.Preconditions.checkState;
+import static org.apache.flink.util.Preconditions.*;
 
 /**
  * The execution graph is the central data structure that coordinates the distributed
@@ -295,6 +260,10 @@ public class ExecutionGraph implements AccessExecutionGraph {
 
 	// ------ Fields that are only relevant for archived execution graphs ------------
 	private String jsonPlan;
+
+	// ------ Connection allowing failoverstrategy to fail taskmanagers
+	EstablishedResourceManagerConnection resourceManagerConnection;
+	private SlotPool slotPool;
 
 	// --------------------------------------------------------------------------------------------
 	//   Constructors
@@ -819,7 +788,6 @@ public class ExecutionGraph implements AccessExecutionGraph {
 
 		final ArrayList<ExecutionJobVertex> newExecJobVertices = new ArrayList<>(topologiallySorted.size());
 		final long createTimestamp = System.currentTimeMillis();
-
 		for (JobVertex jobVertex : topologiallySorted) {
 
 			if (jobVertex.isInputVertex() && !jobVertex.isStoppable()) {
@@ -830,6 +798,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 			ExecutionJobVertex ejv = new ExecutionJobVertex(
 				this,
 				jobVertex,
+				(short) numVerticesTotal,
 				1,
 				rpcTimeout,
 				globalModVersion,
@@ -1256,6 +1225,11 @@ public class ExecutionGraph implements AccessExecutionGraph {
 			}
 
 			scheduleForExecution();
+
+			// Re-set standby tasks if this failover strategy is used.
+			if (failoverStrategy instanceof RunStandbyTaskStrategy) {
+				failoverStrategy.notifyNewVertices(this.verticesInCreationOrder);
+			}
 		}
 		catch (Throwable t) {
 			LOG.warn("Failed to restart the job.", t);
@@ -1576,25 +1550,49 @@ public class ExecutionGraph implements AccessExecutionGraph {
 						attempt.markFailed(state.getError(userClassLoader), accumulators, state.getIOMetrics());
 						return true;
 
+					case STANDBY:
+						return attempt.switchToStandby();
+
 					default:
 						// we mark as failed and return false, which triggers the TaskManager
 						// to remove the task
 						attempt.fail(new Exception("TaskManager sent illegal state update: " + state.getExecutionState()));
 						return false;
 				}
-			}
-			catch (Throwable t) {
+			} catch (Throwable t) {
 				ExceptionUtils.rethrowIfFatalErrorOrOOM(t);
 
 				// failures during updates leave the ExecutionGraph inconsistent
 				failGlobal(t);
 				return false;
 			}
-		}
-		else {
+		} else {
 			return false;
 		}
 	}
+
+	public Collection<VertexID> getUpstreamVertices(JobVertexID jobVertexID) {
+		LOG.info("Building upstream vertices list");
+		//Set to eliminate duplicates from results
+		Set<VertexID> result = new HashSet<>();
+
+		Deque<ExecutionJobVertex> added = new ArrayDeque<>();
+		//Initialize stack with immediately neighbours
+		List<ExecutionJobVertex> jobVertexes = tasks.get(jobVertexID).getInputs().stream().map(IntermediateResult::getProducer).collect(Collectors.toList());
+		added.addAll(jobVertexes);
+		LOG.info("Initializing queue with JobVertexes: {}", String.join(", ", jobVertexes.stream().map(Object::toString).collect(Collectors.toList())));
+		//Start DF reachability
+		while (added.size() != 0) {
+			ExecutionJobVertex jv = added.pop();
+			List<VertexID> vertexIdsOfJobVertices = Arrays.asList(jv.getTaskVertices()).stream().map(ExecutionVertex::getVertexId).collect(Collectors.toList());
+			result.addAll(vertexIdsOfJobVertices);
+			LOG.info("Vertex Ids for Job Vertex: {}", String.join(", ", vertexIdsOfJobVertices.stream().map(Object::toString).collect(Collectors.toList())));
+			added.addAll(jv.getInputs().stream().map(IntermediateResult::getProducer).collect(Collectors.toList()));
+		}
+
+		return result;
+	}
+
 
 	/**
 	 * Deserializes accumulators from a task state update.
@@ -1778,7 +1776,6 @@ public class ExecutionGraph implements AccessExecutionGraph {
 					if (checkpointCoordinator != null) {
 						checkpointCoordinator.failUnacknowledgedPendingCheckpointsFor(execution.getAttemptId(), ex);
 					}
-
 					failoverStrategy.onTaskFailure(execution, ex);
 				}
 				catch (Throwable t) {
@@ -1788,5 +1785,21 @@ public class ExecutionGraph implements AccessExecutionGraph {
 				}
 			}
 		}
+	}
+
+	public void setSlotPool(SlotPool slotPool){
+		this.slotPool = slotPool;
+	}
+
+	public SlotPool getSlotPool(){
+		return slotPool;
+	}
+
+	public void setResourceManagerConnection(EstablishedResourceManagerConnection resourceManagerConnection){
+		this.resourceManagerConnection = resourceManagerConnection;
+	}
+
+	public EstablishedResourceManagerConnection getResourceManagerConnection(){
+		return resourceManagerConnection;
 	}
 }

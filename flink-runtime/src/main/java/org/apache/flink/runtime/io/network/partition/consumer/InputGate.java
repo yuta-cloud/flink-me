@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.io.network.partition.consumer;
 
+import org.apache.flink.api.common.JobID;
 import org.apache.flink.runtime.event.TaskEvent;
 
 import java.io.IOException;
@@ -89,9 +90,17 @@ public interface InputGate {
 	 */
 	Optional<BufferOrEvent> pollNextBufferOrEvent() throws IOException, InterruptedException;
 
-	void sendTaskEvent(TaskEvent event) throws IOException;
+	void sendTaskEvent(TaskEvent event) throws IOException, InterruptedException;
 
 	void registerListener(InputGateListener listener);
 
 	int getPageSize();
+
+	InputChannel getInputChannel(int i);
+
+    int getAbsoluteChannelIndex(InputGate gate, int channelIndex);
+
+	SingleInputGate[] getInputGates();
+
+    JobID getJobID();
 }

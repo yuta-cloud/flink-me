@@ -93,6 +93,7 @@ class PartitionRequestServerHandler extends SimpleChannelInboundHandler<NettyMes
 							request.receiverId,
 							request.credit,
 							outboundQueue);
+						LOG.info("New reader {}.", reader);
 					} else {
 						reader = new SequenceNumberingViewReader(
 							request.receiverId,
@@ -104,7 +105,7 @@ class PartitionRequestServerHandler extends SimpleChannelInboundHandler<NettyMes
 						request.partitionId,
 						request.queueIndex);
 
-					outboundQueue.notifyReaderCreated(reader);
+					outboundQueue.notifyReaderCreated(reader, request.partitionId, request.queueIndex);
 				} catch (PartitionNotFoundException notFound) {
 					respondWithError(ctx, notFound, request.receiverId);
 				}

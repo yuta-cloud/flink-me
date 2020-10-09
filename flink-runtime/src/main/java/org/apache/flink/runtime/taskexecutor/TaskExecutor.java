@@ -51,6 +51,7 @@ import org.apache.flink.runtime.instance.InstanceID;
 import org.apache.flink.runtime.io.network.NetworkEnvironment;
 import org.apache.flink.runtime.io.network.netty.PartitionProducerStateChecker;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionConsumableNotifier;
+import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGate;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.tasks.InputSplitProvider;
@@ -103,6 +104,10 @@ import org.apache.flink.runtime.taskmanager.TaskExecutionState;
 import org.apache.flink.runtime.taskmanager.TaskManagerActions;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 import org.apache.flink.types.SerializableOptional;
+import org.apache.flink.runtime.taskexecutor.exceptions.*;
+import org.apache.flink.runtime.taskexecutor.rpc.*;
+import org.apache.flink.runtime.taskexecutor.slot.*;
+import org.apache.flink.runtime.taskmanager.*;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.FlinkException;
 
@@ -113,18 +118,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeoutException;
 
@@ -532,6 +526,7 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 				taskExecutorServices.getIOManager(),
 				taskExecutorServices.getNetworkEnvironment(),
 				taskExecutorServices.getBroadcastVariableManager(),
+				taskExecutorServices.getInFlightLogFactory(),
 				taskStateManager,
 				taskManagerActions,
 				inputSplitProvider,
@@ -543,7 +538,8 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 				taskMetricGroup,
 				resultPartitionConsumableNotifier,
 				partitionStateChecker,
-				getRpcService().getExecutor());
+				getRpcService().getExecutor(),
+				tdd.getIsStandby(), jobInformation.getTopologicallySortedJobVertexes());
 
 			log.info("Received task {}.", task.getTaskInfo().getTaskNameWithSubtasks());
 
@@ -592,6 +588,25 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 	}
 
 	@Override
+	public CompletableFuture<Acknowledge> failTask(ExecutionAttemptID executionAttemptID, Throwable cause, Time timeout) {
+		final Task task = taskSlotTable.getTask(executionAttemptID);
+
+		if (task != null) {
+			try {
+				task.failExternally(cause);
+				return CompletableFuture.completedFuture(Acknowledge.get());
+			} catch (Throwable t) {
+				return FutureUtils.completedExceptionally(new TaskException("Cannot fail task for execution " + executionAttemptID + '.', t));
+			}
+		} else {
+			final String message = "Cannot find task to fail for execution " + executionAttemptID + '.';
+
+			log.debug(message);
+			return FutureUtils.completedExceptionally(new TaskException(message));
+		}
+	}
+
+	@Override
 	public CompletableFuture<Acknowledge> stopTask(ExecutionAttemptID executionAttemptID, Time timeout) {
 		final Task task = taskSlotTable.getTask(executionAttemptID);
 
@@ -609,6 +624,45 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 			return FutureUtils.completedExceptionally(new TaskException(message));
 		}
 	}
+
+	@Override
+	public CompletableFuture<Acknowledge> dispatchStateToStandbyTask(ExecutionAttemptID executionAttemptID, JobManagerTaskRestore taskRestore, Time timeout) {
+		final Task task = taskSlotTable.getTask(executionAttemptID);
+
+		if (task != null) {
+			try {
+				task.dispatchStateToStandbyTask(taskRestore);
+				return CompletableFuture.completedFuture(Acknowledge.get());
+			} catch (Throwable t) {
+				return FutureUtils.completedExceptionally(new TaskException("Cannot dispatch state snapshot to standby task " + executionAttemptID + '.', t));
+			}
+		} else {
+			final String message = "Cannot find standby task " + executionAttemptID + " to dispatch state to it.";
+
+			log.debug(message);
+			return FutureUtils.completedExceptionally(new TaskException(message));
+		}
+	}
+
+	@Override
+	public CompletableFuture<Acknowledge> switchStandbyTaskToRunning(ExecutionAttemptID executionAttemptID, Time timeout) {
+		final Task task = taskSlotTable.getTask(executionAttemptID);
+
+		if (task != null) {
+			try {
+				task.switchStandbyToRunning();
+				return CompletableFuture.completedFuture(Acknowledge.get());
+			} catch (Throwable t) {
+				return FutureUtils.completedExceptionally(new TaskException("Cannot switch standby task to running " + executionAttemptID + '.', t));
+			}
+		} else {
+			final String message = "Cannot find standby task to switch to running " + executionAttemptID + '.';
+
+			log.debug(message);
+			return FutureUtils.completedExceptionally(new TaskException(message));
+		}
+	}
+
 
 	// ----------------------------------------------------------------------
 	// Partition lifecycle RPCs
@@ -632,7 +686,8 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 					getRpcService().execute(
 						() -> {
 							try {
-								singleInputGate.updateInputChannel(partitionInfo.getInputChannelDeploymentDescriptor());
+								log.debug("Update input channel of task " + task);
+								singleInputGate.updateInputChannel(partitionInfo.getInputChannelDeploymentDescriptor(), networkEnvironment, task.getMetricGroup().getIOMetricGroup());
 							} catch (IOException | InterruptedException e) {
 								log.error("Could not update input data location for task {}. Trying to fail task.", task.getTaskInfo().getTaskName(), e);
 
@@ -731,6 +786,19 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 			log.debug(message);
 			return FutureUtils.completedExceptionally(new CheckpointException(message));
 		}
+	}
+
+	@Override
+	public CompletableFuture<Acknowledge> ignoreCheckpoint(ExecutionAttemptID attemptId, long checkpointId,
+														   Time rpcTimeout) {
+		log.info("Ignore checkpoint {} for {}.", checkpointId, attemptId);
+		final Task task = taskSlotTable.getTask(attemptId);
+		if (task != null)
+			task.ignoreCheckpoint(checkpointId);
+		else
+			log.debug("TaskManager received a ignore checkpoint request for unknown task " + attemptId + '.');
+
+		return CompletableFuture.completedFuture(Acknowledge.get());
 	}
 
 	// ----------------------------------------------------------------------

@@ -23,7 +23,7 @@ import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.SimpleCounter;
-import org.apache.flink.runtime.causal.RecordCountProvider;
+import org.apache.flink.runtime.causal.RecordCounter;
 import org.apache.flink.runtime.causal.RecordCountTargetForceable;
 import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
 import org.apache.flink.runtime.event.AbstractEvent;
@@ -119,7 +119,7 @@ public class StreamInputProcessor<IN> implements RecordCountTargetForceable {
 	private boolean isFinished;
 
 	private final IRecoveryManager recoveryManager;
-	private final RecordCountProvider recordCountProvider;
+	private final RecordCounter recordCounter;
 
 
 	private int asyncEventRecordCountTarget;
@@ -143,7 +143,7 @@ public class StreamInputProcessor<IN> implements RecordCountTargetForceable {
 
 		asyncEventRecordCountTarget = -1;
 
-		this.recordCountProvider = checkpointedTask.getRecordCountProvider();
+		this.recordCounter = checkpointedTask.getRecordCounter();
 		inputGate = InputGateUtil.createInputGate(inputGates);
 		checkpointedTask.getRecoveryManager().setInputGate(inputGate);
 
@@ -204,21 +204,21 @@ public class StreamInputProcessor<IN> implements RecordCountTargetForceable {
 
 				if (recordOrMark.isWatermark()) {
 					synchronized (lock) {
-						recordCountProvider.incRecordCount();
+						recordCounter.incRecordCount();
 						// handle watermark
 						statusWatermarkValve.inputWatermark(recordOrMark.asWatermark(), currentChannel);
 					}
 					return true;
 				} else if (recordOrMark.isStreamStatus()) {
 					synchronized (lock) {
-						recordCountProvider.incRecordCount();
+						recordCounter.incRecordCount();
 						// handle stream status
 						statusWatermarkValve.inputStreamStatus(recordOrMark.asStreamStatus(), currentChannel);
 					}
 					return true;
 				} else if (recordOrMark.isLatencyMarker()) {
 					synchronized (lock) {
-						recordCountProvider.incRecordCount();
+						recordCounter.incRecordCount();
 						// handle latency marker
 						streamOperator.processLatencyMarker(recordOrMark.asLatencyMarker());
 					}
@@ -227,7 +227,7 @@ public class StreamInputProcessor<IN> implements RecordCountTargetForceable {
 					// now we can do the actual processing
 					StreamRecord<IN> record = recordOrMark.asRecord();
 					synchronized (lock) {
-						recordCountProvider.incRecordCount();
+						recordCounter.incRecordCount();
 						numRecordsIn.inc();
 						streamOperator.setKeyContextElement1(record);
 						streamOperator.processElement(record);
@@ -268,7 +268,7 @@ public class StreamInputProcessor<IN> implements RecordCountTargetForceable {
 			//Process a few thousand records before querying if still recovering. This is just to go around some
 			// design limitations
 			for (int i = 0; i < 10000; i++) {
-				while (asyncEventRecordCountTarget != -1 && recordCountProvider.getRecordCount() == asyncEventRecordCountTarget)
+				while (asyncEventRecordCountTarget != -1 && recordCounter.getRecordCount() == asyncEventRecordCountTarget)
 					recoveryManager.triggerAsyncEvent();
 				if (!processInput())
 					return false;

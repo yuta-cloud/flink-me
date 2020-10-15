@@ -256,6 +256,11 @@ public class InputFormatSourceFunctionTest {
 		public int getSplitsSeen() {
 			return this.splitIdx;
 		}
+
+		@Override
+		public void setRecordCountTarget(int target) {
+
+		}
 	}
 
 	@SuppressWarnings("deprecation")

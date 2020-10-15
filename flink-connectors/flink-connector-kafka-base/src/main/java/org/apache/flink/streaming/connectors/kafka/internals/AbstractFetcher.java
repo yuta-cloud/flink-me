@@ -21,10 +21,8 @@ package org.apache.flink.streaming.connectors.kafka.internals;
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.metrics.Gauge;
 import org.apache.flink.metrics.MetricGroup;
-import org.apache.flink.runtime.causal.RecordCountProvider;
 import org.apache.flink.runtime.causal.determinant.ProcessingTimeCallbackID;
 import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
-import org.apache.flink.runtime.causal.recovery.RecoveryManager;
 import org.apache.flink.streaming.api.functions.AssignerWithPeriodicWatermarks;
 import org.apache.flink.streaming.api.functions.AssignerWithPunctuatedWatermarks;
 import org.apache.flink.streaming.api.functions.source.SourceFunction.SourceContext;
@@ -139,9 +137,6 @@ public abstract class AbstractFetcher<T, KPH> {
 	@Deprecated
 	private final MetricGroup legacyCommittedOffsetsMetricGroup;
 
-	protected final IRecoveryManager recoveryManager;
-	protected boolean isRecovering;
-
 	protected AbstractFetcher(
 		SourceContext<T> sourceContext,
 		Map<KafkaTopicPartition, Long> seedPartitionsWithInitialOffsets,
@@ -152,19 +147,6 @@ public abstract class AbstractFetcher<T, KPH> {
 		ClassLoader userCodeClassLoader,
 		MetricGroup consumerMetricGroup,
 		boolean useMetrics) throws Exception {
-		this(sourceContext, seedPartitionsWithInitialOffsets, watermarksPeriodic, watermarksPunctuated,
-			processingTimeProvider, autoWatermarkInterval, userCodeClassLoader, consumerMetricGroup,useMetrics,  null);
-	}
-	protected AbstractFetcher(
-		SourceContext<T> sourceContext,
-		Map<KafkaTopicPartition, Long> seedPartitionsWithInitialOffsets,
-		SerializedValue<AssignerWithPeriodicWatermarks<T>> watermarksPeriodic,
-		SerializedValue<AssignerWithPunctuatedWatermarks<T>> watermarksPunctuated,
-		ProcessingTimeService processingTimeProvider,
-		long autoWatermarkInterval,
-		ClassLoader userCodeClassLoader,
-		MetricGroup consumerMetricGroup,
-		boolean useMetrics, IRecoveryManager recoveryManager) throws Exception {
 
 		this.sourceContext = checkNotNull(sourceContext);
 		this.checkpointLock = sourceContext.getCheckpointLock();
@@ -174,11 +156,6 @@ public abstract class AbstractFetcher<T, KPH> {
 		this.consumerMetricGroup = checkNotNull(consumerMetricGroup);
 		this.legacyCurrentOffsetsMetricGroup = consumerMetricGroup.addGroup(LEGACY_CURRENT_OFFSETS_METRICS_GROUP);
 		this.legacyCommittedOffsetsMetricGroup = consumerMetricGroup.addGroup(LEGACY_COMMITTED_OFFSETS_METRICS_GROUP);
-
-		this.recoveryManager = recoveryManager;
-		isRecovering = false;
-		if(recoveryManager != null)
-			isRecovering = recoveryManager.isRecovering();
 
 		// figure out what we watermark mode we will be using
 		this.watermarksPeriodic = watermarksPeriodic;

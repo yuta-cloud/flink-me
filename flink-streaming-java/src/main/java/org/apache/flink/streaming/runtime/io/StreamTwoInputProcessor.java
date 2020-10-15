@@ -23,7 +23,7 @@ import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.SimpleCounter;
-import org.apache.flink.runtime.causal.RecordCountProvider;
+import org.apache.flink.runtime.causal.RecordCounter;
 import org.apache.flink.runtime.causal.RecordCountTargetForceable;
 import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
 import org.apache.flink.runtime.event.AbstractEvent;
@@ -36,7 +36,6 @@ import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.partition.consumer.BufferOrEvent;
 import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
 import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGate;
-import org.apache.flink.runtime.io.network.partition.consumer.UnionInputGate;
 import org.apache.flink.runtime.metrics.groups.OperatorMetricGroup;
 import org.apache.flink.runtime.metrics.groups.TaskIOMetricGroup;
 import org.apache.flink.runtime.plugable.DeserializationDelegate;
@@ -95,7 +94,7 @@ public class StreamTwoInputProcessor<IN1, IN2> implements RecordCountTargetForce
 	private final Object lock;
 
 	private IRecoveryManager recoveryManager;
-	private final RecordCountProvider recordCountProvider;
+	private final RecordCounter recordCounter;
 	private int asyncEventRecordCountTarget;
 
 	// ---------------- Status and Watermark Valves ------------------
@@ -172,7 +171,7 @@ public class StreamTwoInputProcessor<IN1, IN2> implements RecordCountTargetForce
 		this.lock = checkNotNull(lock);
 
 		this.recoveryManager = checkpointedTask.getRecoveryManager();
-		this.recordCountProvider = checkpointedTask.getRecordCountProvider();
+		this.recordCounter = checkpointedTask.getRecordCounter();
 		asyncEventRecordCountTarget = -1;
 
 		StreamElementSerializer<IN1> ser1 = new StreamElementSerializer<>(inputSerializer1);
@@ -248,27 +247,27 @@ public class StreamTwoInputProcessor<IN1, IN2> implements RecordCountTargetForce
 					StreamElement recordOrWatermark = deserializationDelegate1.getInstance();
 					if (recordOrWatermark.isWatermark()) {
 						synchronized (lock) {
-							recordCountProvider.incRecordCount();
+							recordCounter.incRecordCount();
 							statusWatermarkValve1.inputWatermark(recordOrWatermark.asWatermark(), currentChannel);
 						}
 						return true;
 					} else if (recordOrWatermark.isStreamStatus()) {
 						synchronized (lock) {
-							recordCountProvider.incRecordCount();
+							recordCounter.incRecordCount();
 							statusWatermarkValve1.inputStreamStatus(recordOrWatermark.asStreamStatus(),
 								currentChannel);
 						}
 						return true;
 					} else if (recordOrWatermark.isLatencyMarker()) {
 						synchronized (lock) {
-							recordCountProvider.incRecordCount();
+							recordCounter.incRecordCount();
 							streamOperator.processLatencyMarker1(recordOrWatermark.asLatencyMarker());
 						}
 						return true;
 					} else {
 						StreamRecord<IN1> record = recordOrWatermark.asRecord();
 						synchronized (lock) {
-							recordCountProvider.incRecordCount();
+							recordCounter.incRecordCount();
 							numRecordsIn.inc();
 							streamOperator.setKeyContextElement1(record);
 							LOG.debug("{}: Process element no {}: {}.", taskName, numRecordsIn.getCount(), record);
@@ -281,28 +280,28 @@ public class StreamTwoInputProcessor<IN1, IN2> implements RecordCountTargetForce
 					StreamElement recordOrWatermark = deserializationDelegate2.getInstance();
 					if (recordOrWatermark.isWatermark()) {
 						synchronized (lock) {
-							recordCountProvider.incRecordCount();
+							recordCounter.incRecordCount();
 							statusWatermarkValve2.inputWatermark(recordOrWatermark.asWatermark(),
 								currentChannel - numInputChannels1);
 						}
 						return true;
 					} else if (recordOrWatermark.isStreamStatus()) {
 						synchronized (lock) {
-							recordCountProvider.incRecordCount();
+							recordCounter.incRecordCount();
 							statusWatermarkValve2.inputStreamStatus(recordOrWatermark.asStreamStatus(),
 								currentChannel - numInputChannels1);
 						}
 						return true;
 					} else if (recordOrWatermark.isLatencyMarker()) {
 						synchronized (lock) {
-							recordCountProvider.incRecordCount();
+							recordCounter.incRecordCount();
 							streamOperator.processLatencyMarker2(recordOrWatermark.asLatencyMarker());
 						}
 						return true;
 					} else {
 						StreamRecord<IN2> record = recordOrWatermark.asRecord();
 						synchronized (lock) {
-							recordCountProvider.incRecordCount();
+							recordCounter.incRecordCount();
 							numRecordsIn.inc();
 							streamOperator.setKeyContextElement2(record);
 							LOG.debug("{}: Process element no {}: {}.", taskName, numRecordsIn.getCount(), record);
@@ -351,7 +350,7 @@ public class StreamTwoInputProcessor<IN1, IN2> implements RecordCountTargetForce
 			//Process a few thousand records before querying if still recovering. This is just to go around some
 			// design limitations
 			for (int i = 0; i < 10000; i++) {
-				while (asyncEventRecordCountTarget != -1 && recordCountProvider.getRecordCount() == asyncEventRecordCountTarget)
+				while (asyncEventRecordCountTarget != -1 && recordCounter.getRecordCount() == asyncEventRecordCountTarget)
 					recoveryManager.triggerAsyncEvent();
 				if (!processInput())
 					return false;

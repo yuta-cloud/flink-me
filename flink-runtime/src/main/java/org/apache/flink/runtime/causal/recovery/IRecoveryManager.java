@@ -28,15 +28,9 @@ package org.apache.flink.runtime.causal.recovery;
 import org.apache.flink.runtime.causal.*;
 import org.apache.flink.runtime.event.InFlightLogRequestEvent;
 import org.apache.flink.runtime.io.network.api.DeterminantRequestEvent;
-import org.apache.flink.runtime.io.network.api.writer.RecordWriter;
-import org.apache.flink.runtime.io.network.partition.ResultPartition;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannel;
 import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
-import org.apache.flink.runtime.io.network.partition.consumer.RemoteInputChannel;
-import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
-
-import java.util.List;
 
 public interface IRecoveryManager {
 
@@ -70,7 +64,7 @@ public interface IRecoveryManager {
 
 	// ==========================================
 
-	RecordCountProvider getRecordCountProvider();
+	RecordCounter getRecordCounter();
 
 	ProcessingTimeForceable getProcessingTimeForceable();
 

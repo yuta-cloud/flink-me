@@ -137,7 +137,7 @@ public class ContinuousFileReaderOperator<OUT> extends AbstractStreamOperator<OU
 			getContainingTask().getStreamStatusMaintainer(),
 			output,
 			watermarkInterval,
-			-1, getContainingTask().getRecordCountProvider());
+			-1, getContainingTask().getRecoveryManager());
 
 		// and initialize the split reading thread
 		this.reader = new SplitReader<>(format, serializer, readerContext, checkpointLock, restoredReaderState);

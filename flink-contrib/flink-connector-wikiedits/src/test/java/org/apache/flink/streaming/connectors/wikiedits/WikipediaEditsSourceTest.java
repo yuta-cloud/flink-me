@@ -159,6 +159,10 @@ public class WikipediaEditsSourceTest {
 		public void close() {
 		}
 
+		@Override
+		public void setRecordCountTarget(int target) {
+
+		}
 	}
 
 	private static boolean canConnect(int timeout, TimeUnit unit) {

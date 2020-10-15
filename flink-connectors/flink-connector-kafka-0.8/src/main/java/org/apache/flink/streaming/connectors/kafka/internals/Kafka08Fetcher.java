@@ -90,20 +90,6 @@ public class Kafka08Fetcher<T> extends AbstractFetcher<T, TopicAndPartition> {
 	private volatile boolean running = true;
 
 	public Kafka08Fetcher(
-			SourceContext<T> sourceContext,
-			Map<KafkaTopicPartition, Long> seedPartitionsWithInitialOffsets,
-			SerializedValue<AssignerWithPeriodicWatermarks<T>> watermarksPeriodic,
-			SerializedValue<AssignerWithPunctuatedWatermarks<T>> watermarksPunctuated,
-			StreamingRuntimeContext runtimeContext,
-			KeyedDeserializationSchema<T> deserializer,
-			Properties kafkaProperties,
-			long autoCommitInterval,
-			MetricGroup consumerMetricGroup,
-			boolean useMetrics) throws Exception {
-		this(sourceContext, seedPartitionsWithInitialOffsets, watermarksPeriodic, watermarksPunctuated, runtimeContext,
-			deserializer, kafkaProperties, autoCommitInterval, consumerMetricGroup, useMetrics, null );
-	}
-	public Kafka08Fetcher(
 		SourceContext<T> sourceContext,
 		Map<KafkaTopicPartition, Long> seedPartitionsWithInitialOffsets,
 		SerializedValue<AssignerWithPeriodicWatermarks<T>> watermarksPeriodic,
@@ -113,7 +99,7 @@ public class Kafka08Fetcher<T> extends AbstractFetcher<T, TopicAndPartition> {
 		Properties kafkaProperties,
 		long autoCommitInterval,
 		MetricGroup consumerMetricGroup,
-		boolean useMetrics, IRecoveryManager recoveryManager) throws Exception {
+		boolean useMetrics) throws Exception {
 		super(
 				sourceContext,
 				seedPartitionsWithInitialOffsets,
@@ -123,7 +109,7 @@ public class Kafka08Fetcher<T> extends AbstractFetcher<T, TopicAndPartition> {
 				runtimeContext.getExecutionConfig().getAutoWatermarkInterval(),
 				runtimeContext.getUserCodeClassLoader(),
 				consumerMetricGroup,
-				useMetrics,  recoveryManager);
+				useMetrics);
 
 		this.deserializer = checkNotNull(deserializer);
 		this.kafkaConfig = checkNotNull(kafkaProperties);

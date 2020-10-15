@@ -262,7 +262,7 @@ public class FlinkKafkaConsumer09<T> extends FlinkKafkaConsumerBase<T> {
 				pollTimeout,
 				runtimeContext.getMetricGroup(),
 				consumerMetricGroup,
-				useMetrics, recoveryManager);
+				useMetrics);
 	}
 
 	@Override

@@ -158,6 +158,11 @@ public class FlinkKafkaConsumerBaseMigrationTest {
 				try {
 					consumerFunction.run(new DummySourceContext() {
 						@Override
+						public void setRecordCountTarget(int target) {
+
+						}
+
+						@Override
 						public void collect(String element) {
 
 						}

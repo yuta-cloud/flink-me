@@ -19,6 +19,8 @@ package org.apache.flink.streaming.connectors.kafka.internal;
 
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.metrics.MetricGroup;
+import org.apache.flink.runtime.causal.RecordCounter;
+import org.apache.flink.runtime.causal.RecordCountTargetForceable;
 import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
 import org.apache.flink.streaming.api.functions.AssignerWithPeriodicWatermarks;
 import org.apache.flink.streaming.api.functions.AssignerWithPunctuatedWatermarks;
@@ -87,7 +89,7 @@ public class KafkaFetcher<T> extends AbstractFetcher<T, TopicPartition> {
 		long pollTimeout,
 		MetricGroup subtaskMetricGroup,
 		MetricGroup consumerMetricGroup,
-		boolean useMetrics, IRecoveryManager recoveryManager) throws Exception {
+		boolean useMetrics) throws Exception {
 		super(
 			sourceContext,
 			assignedPartitionsWithInitialOffsets,
@@ -97,7 +99,7 @@ public class KafkaFetcher<T> extends AbstractFetcher<T, TopicPartition> {
 			autoWatermarkInterval,
 			userCodeClassLoader,
 			consumerMetricGroup,
-			useMetrics, recoveryManager);
+			useMetrics);
 
 		this.deserializer = deserializer;
 		this.handover = new Handover();
@@ -118,13 +120,15 @@ public class KafkaFetcher<T> extends AbstractFetcher<T, TopicPartition> {
 	//  Fetcher work methods
 	// ------------------------------------------------------------------------
 
+
 	@Override
 	public void runFetchLoop() throws Exception {
 		try {
 			final Handover handover = this.handover;
 
 			// kick off the actual Kafka consumer
-			consumerThread.start();
+			if (!consumerThread.isAlive())
+				consumerThread.start();
 
 			while (running) {
 				// this blocks until we get the next records
@@ -147,15 +151,13 @@ public class KafkaFetcher<T> extends AbstractFetcher<T, TopicPartition> {
 							running = false;
 							break;
 						}
-
 						// emit the actual record. this also updates offset state atomically
 						// and deals with timestamps and watermark generation
 						emitRecord(value, partition, record.offset(), record);
 					}
 				}
 			}
-		}
-		finally {
+		} finally {
 			// this signals the consumer thread that no more work is to be done
 			consumerThread.shutdown();
 		}
@@ -163,15 +165,14 @@ public class KafkaFetcher<T> extends AbstractFetcher<T, TopicPartition> {
 		// on a clean exit, wait for the runner thread
 		try {
 			consumerThread.join();
-		}
-		catch (InterruptedException e) {
+		} catch (InterruptedException e) {
 			// may be the result of a wake-up interruption after an exception.
 			// we ignore this here and only restore the interruption state
 			Thread.currentThread().interrupt();
 		}
 	}
 
-	@Override
+		@Override
 	public void cancel() {
 		// flag the main thread to exit. A thread interrupt will come anyways.
 		running = false;
@@ -231,4 +232,5 @@ public class KafkaFetcher<T> extends AbstractFetcher<T, TopicPartition> {
 		// record the work to be committed by the main consumer thread and make sure the consumer notices that
 		consumerThread.setOffsetsToCommit(offsetsToCommit, commitCallback);
 	}
+
 }

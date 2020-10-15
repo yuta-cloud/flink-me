@@ -55,7 +55,7 @@ public class RunningState extends AbstractState {
 
 		for(AsyncDeterminant delayedRPCRequest : context.rpcRequestsDuringRecovery){
 			logDebug("Executing delayed RPC request: {}", delayedRPCRequest);
-			delayedRPCRequest.setRecordCount(context.recordCountProvider.getRecordCount());
+			delayedRPCRequest.setRecordCount(context.recordCounter.getRecordCount());
 			delayedRPCRequest.process(context);
 		}
 		context.rpcRequestsDuringRecovery.clear();

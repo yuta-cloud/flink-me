@@ -21,6 +21,8 @@ package org.apache.flink.streaming.api.functions.source;
 import org.apache.flink.annotation.Public;
 import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.api.common.functions.Function;
+import org.apache.flink.runtime.causal.ProcessingTimeForceable;
+import org.apache.flink.runtime.causal.RecordCountTargetForceable;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.functions.TimestampAssigner;
 import org.apache.flink.streaming.api.watermark.Watermark;
@@ -162,8 +164,6 @@ public interface SourceFunction<T> extends Function, Serializable {
 	 */
 	void run(SourceContext<T> ctx) throws Exception;
 
-
-
 	/**
 	 * Cancels the source. Most sources will have a while loop inside the
 	 * {@link #run(SourceContext)} method. The implementation needs to ensure that the
@@ -181,6 +181,7 @@ public interface SourceFunction<T> extends Function, Serializable {
 	 */
 	void cancel();
 
+
 	// ------------------------------------------------------------------------
 	//  source context
 	// ------------------------------------------------------------------------
@@ -191,7 +192,7 @@ public interface SourceFunction<T> extends Function, Serializable {
 	 * @param <T> The type of the elements produced by the source.
 	 */
 	@Public // Interface might be extended in the future with additional methods.
-	interface SourceContext<T> {
+	interface SourceContext<T> extends RecordCountTargetForceable {
 
 		/**
 		 * Emits one element from the source, without attaching a timestamp. In most cases,

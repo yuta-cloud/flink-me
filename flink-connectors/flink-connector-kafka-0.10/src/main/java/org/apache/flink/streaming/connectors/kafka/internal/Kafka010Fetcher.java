@@ -47,24 +47,6 @@ import java.util.Properties;
 @Internal
 public class Kafka010Fetcher<T> extends Kafka09Fetcher<T> {
 
-	public Kafka010Fetcher(
-			SourceContext<T> sourceContext,
-			Map<KafkaTopicPartition, Long> assignedPartitionsWithInitialOffsets,
-			SerializedValue<AssignerWithPeriodicWatermarks<T>> watermarksPeriodic,
-			SerializedValue<AssignerWithPunctuatedWatermarks<T>> watermarksPunctuated,
-			ProcessingTimeService processingTimeProvider,
-			long autoWatermarkInterval,
-			ClassLoader userCodeClassLoader,
-			String taskNameWithSubtasks,
-			KeyedDeserializationSchema<T> deserializer,
-			Properties kafkaProperties,
-			long pollTimeout,
-			MetricGroup subtaskMetricGroup,
-			MetricGroup consumerMetricGroup,
-			boolean useMetrics) throws Exception {
-		this(sourceContext, assignedPartitionsWithInitialOffsets, watermarksPeriodic, watermarksPunctuated, processingTimeProvider,autoWatermarkInterval, userCodeClassLoader, taskNameWithSubtasks,deserializer, kafkaProperties, pollTimeout, subtaskMetricGroup, consumerMetricGroup, useMetrics, null);
-	}
-
 		public Kafka010Fetcher(
 			SourceContext<T> sourceContext,
 			Map<KafkaTopicPartition, Long> assignedPartitionsWithInitialOffsets,
@@ -79,7 +61,7 @@ public class Kafka010Fetcher<T> extends Kafka09Fetcher<T> {
 			long pollTimeout,
 			MetricGroup subtaskMetricGroup,
 			MetricGroup consumerMetricGroup,
-			boolean useMetrics, IRecoveryManager recoveryManager) throws Exception {
+			boolean useMetrics) throws Exception {
 
 		super(
 				sourceContext,
@@ -95,7 +77,7 @@ public class Kafka010Fetcher<T> extends Kafka09Fetcher<T> {
 				pollTimeout,
 				subtaskMetricGroup,
 				consumerMetricGroup,
-				useMetrics, recoveryManager);
+				useMetrics);
 	}
 
 	@Override

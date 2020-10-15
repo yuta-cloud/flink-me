@@ -83,4 +83,9 @@ public class ListSourceContext<T> implements SourceFunction.SourceContext<T> {
 	public void close() {
 
 	}
+
+	@Override
+	public void setRecordCountTarget(int target) {
+
+	}
 }

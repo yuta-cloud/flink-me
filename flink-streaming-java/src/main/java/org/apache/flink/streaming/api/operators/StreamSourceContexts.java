@@ -17,9 +17,10 @@
 
 package org.apache.flink.streaming.api.operators;
 
-import org.apache.flink.runtime.causal.RecordCountProvider;
+import org.apache.flink.runtime.causal.RecordCounter;
 import org.apache.flink.runtime.causal.determinant.ProcessingTimeCallbackID;
 import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
+import org.apache.flink.runtime.causal.recovery.RecoveryManager;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.functions.source.SourceFunction;
 import org.apache.flink.streaming.api.watermark.Watermark;
@@ -54,7 +55,7 @@ public class StreamSourceContexts {
 		Output<StreamRecord<OUT>> output,
 		long watermarkInterval,
 		long idleTimeout,
-		RecordCountProvider recordCountProvider) {
+		IRecoveryManager recoveryManager) {
 
 		final SourceFunction.SourceContext<OUT> ctx;
 		switch (timeCharacteristic) {
@@ -65,7 +66,7 @@ public class StreamSourceContexts {
 					checkpointLock,
 					streamStatusMaintainer,
 					idleTimeout,
-					recordCountProvider);
+					recoveryManager);
 
 				break;
 			case IngestionTime:
@@ -75,11 +76,11 @@ public class StreamSourceContexts {
 					processingTimeService,
 					checkpointLock,
 					streamStatusMaintainer,
-					idleTimeout, recordCountProvider);
+					idleTimeout, recoveryManager);
 
 				break;
 			case ProcessingTime:
-				ctx = new NonTimestampContext<>(checkpointLock, output, recordCountProvider);
+				ctx = new NonTimestampContext<>(checkpointLock, output, recoveryManager);
 				break;
 			default:
 				throw new IllegalArgumentException(String.valueOf(timeCharacteristic));
@@ -96,19 +97,32 @@ public class StreamSourceContexts {
 		private final Object lock;
 		private final Output<StreamRecord<T>> output;
 		private final StreamRecord<T> reuse;
-		private final RecordCountProvider recordCountProvider;
 
-		private NonTimestampContext(Object checkpointLock, Output<StreamRecord<T>> output, RecordCountProvider recordCountProvider) {
+		private final IRecoveryManager recoveryManager;
+		private final RecordCounter recordCounter;
+		private int asyncEventRecordCountTarget;
+		private boolean recovering;
+
+		private NonTimestampContext(Object checkpointLock, Output<StreamRecord<T>> output, IRecoveryManager recoveryManager) {
 			this.lock = Preconditions.checkNotNull(checkpointLock, "The checkpoint lock cannot be null.");
 			this.output = Preconditions.checkNotNull(output, "The output cannot be null.");
 			this.reuse = new StreamRecord<>(null);
-			this.recordCountProvider = recordCountProvider;
+
+			this.recordCounter = recoveryManager.getRecordCounter();
+			this.recovering = !recoveryManager.isRunning();
+			this.asyncEventRecordCountTarget = -1;
+			this.recoveryManager = recoveryManager;
+			this.recoveryManager.setRecordCountTargetForceable(this);
 		}
 
 		@Override
 		public void collect(T element) {
+			if(recovering && (recovering = !recoveryManager.isRunning()))
+				while(asyncEventRecordCountTarget != -1 && recordCounter.getRecordCount() == asyncEventRecordCountTarget)
+					recoveryManager.triggerAsyncEvent();
+
 			synchronized (lock) {
-				recordCountProvider.incRecordCount();
+				recordCounter.incRecordCount();
 				output.collect(reuse.replace(element));
 			}
 		}
@@ -136,6 +150,11 @@ public class StreamSourceContexts {
 
 		@Override
 		public void close() {}
+
+		@Override
+		public void setRecordCountTarget(int target) {
+			this.asyncEventRecordCountTarget = target;
+		}
 	}
 
 	/**
@@ -160,9 +179,9 @@ public class StreamSourceContexts {
 			final ProcessingTimeService timeService,
 			final Object checkpointLock,
 			final StreamStatusMaintainer streamStatusMaintainer,
-			final long idleTimeout, RecordCountProvider recordCountProvider) {
+			final long idleTimeout, IRecoveryManager recoveryManager) {
 
-			super(timeService, checkpointLock, streamStatusMaintainer, idleTimeout, recordCountProvider);
+			super(timeService, checkpointLock, streamStatusMaintainer, idleTimeout, recoveryManager);
 
 			this.output = Preconditions.checkNotNull(output, "The output cannot be null.");
 
@@ -310,9 +329,9 @@ public class StreamSourceContexts {
 			final ProcessingTimeService timeService,
 			final Object checkpointLock,
 			final StreamStatusMaintainer streamStatusMaintainer,
-			final long idleTimeout, RecordCountProvider recordCountProvider) {
+			final long idleTimeout, IRecoveryManager recoveryManager) {
 
-			super(timeService, checkpointLock, streamStatusMaintainer, idleTimeout, recordCountProvider);
+			super(timeService, checkpointLock, streamStatusMaintainer, idleTimeout, recoveryManager);
 
 			this.output = Preconditions.checkNotNull(output, "The output cannot be null.");
 			this.reuse = new StreamRecord<>(null);
@@ -372,7 +391,10 @@ public class StreamSourceContexts {
 		 */
 		private volatile boolean failOnNextCheck;
 
-		private final RecordCountProvider recordCountProvider;
+		private final RecordCounter recordCounter;
+		private final IRecoveryManager recoveryManager;
+		private int asyncEventRecordCountTarget;
+		private boolean recovering;
 
 		/**
 		 * Create a watermark context.
@@ -385,13 +407,17 @@ public class StreamSourceContexts {
 			final ProcessingTimeService timeService,
 			final Object checkpointLock,
 			final StreamStatusMaintainer streamStatusMaintainer,
-			final long idleTimeout, RecordCountProvider recordCountProvider) {
+			final long idleTimeout, IRecoveryManager recoveryManager) {
 
 			this.timeService = Preconditions.checkNotNull(timeService, "Time Service cannot be null.");
 			this.checkpointLock = Preconditions.checkNotNull(checkpointLock, "Checkpoint Lock cannot be null.");
 			this.streamStatusMaintainer = Preconditions.checkNotNull(streamStatusMaintainer, "Stream Status Maintainer cannot be null.");
 
-			this.recordCountProvider = recordCountProvider;
+			this.recordCounter = recoveryManager.getRecordCounter();
+			this.recovering = !recoveryManager.isRunning();
+			this.asyncEventRecordCountTarget = -1;
+			this.recoveryManager = recoveryManager;
+			this.recoveryManager.setRecordCountTargetForceable(this);
 
 			if (idleTimeout != -1) {
 				Preconditions.checkArgument(idleTimeout >= 1, "The idle timeout cannot be smaller than 1 ms.");
@@ -403,6 +429,9 @@ public class StreamSourceContexts {
 
 		@Override
 		public void collect(T element) {
+			if(recovering && (recovering = !recoveryManager.isRunning()))
+				while(asyncEventRecordCountTarget != -1 && recordCounter.getRecordCount() == asyncEventRecordCountTarget)
+					recoveryManager.triggerAsyncEvent();
 			synchronized (checkpointLock) {
 				streamStatusMaintainer.toggleStreamStatus(StreamStatus.ACTIVE);
 
@@ -412,13 +441,16 @@ public class StreamSourceContexts {
 					scheduleNextIdleDetectionTask();
 				}
 
-				recordCountProvider.incRecordCount();
+				recordCounter.incRecordCount();
 				processAndCollect(element);
 			}
 		}
 
 		@Override
 		public void collectWithTimestamp(T element, long timestamp) {
+			if(recovering && (recovering = !recoveryManager.isRunning()))
+				while(asyncEventRecordCountTarget != -1 && recordCounter.getRecordCount() == asyncEventRecordCountTarget)
+					recoveryManager.triggerAsyncEvent();
 			synchronized (checkpointLock) {
 				streamStatusMaintainer.toggleStreamStatus(StreamStatus.ACTIVE);
 
@@ -428,7 +460,7 @@ public class StreamSourceContexts {
 					scheduleNextIdleDetectionTask();
 				}
 
-				recordCountProvider.incRecordCount();
+				recordCounter.incRecordCount();
 				processAndCollectWithTimestamp(element, timestamp);
 			}
 		}
@@ -436,6 +468,9 @@ public class StreamSourceContexts {
 		@Override
 		public void emitWatermark(Watermark mark) {
 			if (allowWatermark(mark)) {
+				if(recovering && (recovering = !recoveryManager.isRunning()))
+					while(asyncEventRecordCountTarget != -1 && recordCounter.getRecordCount() == asyncEventRecordCountTarget)
+						recoveryManager.triggerAsyncEvent();
 				synchronized (checkpointLock) {
 					streamStatusMaintainer.toggleStreamStatus(StreamStatus.ACTIVE);
 
@@ -445,7 +480,7 @@ public class StreamSourceContexts {
 						scheduleNextIdleDetectionTask();
 					}
 
-					recordCountProvider.incRecordCount();
+					recordCounter.incRecordCount();
 					processAndEmitWatermark(mark);
 				}
 			}
@@ -532,5 +567,9 @@ public class StreamSourceContexts {
 		 */
 		protected abstract void processAndEmitWatermark(Watermark mark);
 
+		@Override
+		public void setRecordCountTarget(int target) {
+			this.asyncEventRecordCountTarget = target;
+		}
 	}
 }

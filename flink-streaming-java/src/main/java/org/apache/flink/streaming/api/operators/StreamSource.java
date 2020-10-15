@@ -20,7 +20,7 @@ package org.apache.flink.streaming.api.operators;
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.MetricOptions;
-import org.apache.flink.runtime.causal.RecordCountProvider;
+import org.apache.flink.runtime.causal.RecordCounter;
 import org.apache.flink.runtime.causal.determinant.ProcessingTimeCallbackID;
 import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.streaming.api.TimeCharacteristic;
@@ -66,7 +66,7 @@ public class StreamSource<OUT, SRC extends SourceFunction<OUT>>
 
 		final TimeCharacteristic timeCharacteristic = getOperatorConfig().getTimeCharacteristic();
 
-		final RecordCountProvider recordCountProvider = getContainingTask().getRecordCountProvider();
+		final RecordCounter recordCounter = getContainingTask().getRecordCounter();
 
 		final Configuration configuration = this.getContainingTask().getEnvironment().getTaskManagerInfo().getConfiguration();
 		final long latencyTrackingInterval = getExecutionConfig().isLatencyTrackingConfigured()
@@ -82,7 +82,7 @@ public class StreamSource<OUT, SRC extends SourceFunction<OUT>>
 				this.getOperatorID(),
 				getRuntimeContext().getIndexOfThisSubtask(),
 				lockingObject,
-				recordCountProvider
+				recordCounter
 				);
 		}
 
@@ -96,7 +96,7 @@ public class StreamSource<OUT, SRC extends SourceFunction<OUT>>
 			streamStatusMaintainer,
 			collector,
 			watermarkInterval,
-			-1, recordCountProvider);
+			-1, getContainingTask().getRecoveryManager());
 
 		try {
 			userFunction.run(ctx);
@@ -147,6 +147,7 @@ public class StreamSource<OUT, SRC extends SourceFunction<OUT>>
 		return canceledOrStopped;
 	}
 
+
 	private static class LatencyMarksEmitter<OUT> {
 		private final ScheduledFuture<?> latencyMarkTimer;
 
@@ -156,7 +157,7 @@ public class StreamSource<OUT, SRC extends SourceFunction<OUT>>
 			long latencyTrackingInterval,
 			final OperatorID operatorId,
 			final int subtaskIndex,
-			Object lockingObject, RecordCountProvider recordCountProvider) {
+			Object lockingObject, RecordCounter recordCounter) {
 
 			latencyMarkTimer = processingTimeService.scheduleAtFixedRate(
 				new ProcessingTimeCallback() {
@@ -168,7 +169,7 @@ public class StreamSource<OUT, SRC extends SourceFunction<OUT>>
 						synchronized (lockingObject) {
 							try {
 								// ProcessingTimeService callbacks are executed under the checkpointing lock
-								recordCountProvider.incRecordCount();
+								recordCounter.incRecordCount();
 								output.emitLatencyMarker(new LatencyMarker(timestamp, operatorId, subtaskIndex));
 							} catch (Throwable t) {
 								// we catch the Throwables here so that we don't trigger the processing

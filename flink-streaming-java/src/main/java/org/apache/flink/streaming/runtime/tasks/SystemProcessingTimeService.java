@@ -21,7 +21,7 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.time.Deadline;
 import org.apache.flink.runtime.causal.EpochProvider;
 import org.apache.flink.runtime.causal.ProcessingTimeForceable;
-import org.apache.flink.runtime.causal.RecordCountProvider;
+import org.apache.flink.runtime.causal.RecordCounter;
 import org.apache.flink.runtime.causal.determinant.ProcessingTimeCallbackID;
 import org.apache.flink.runtime.causal.determinant.TimerTriggerDeterminant;
 import org.apache.flink.runtime.causal.log.job.CausalLogID;
@@ -77,7 +77,7 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 
 	private final TimeService timeService;
 	private final EpochProvider epochProvider;
-	private final RecordCountProvider recordCountProvider;
+	private final RecordCounter recordCounter;
 	private final ThreadCausalLog mainThreadCausalLog;
 	private final RecoveryManager recoveryManager;
 	private TimerTriggerDeterminant reuseTimerTriggerDeterminant;
@@ -96,13 +96,13 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 		this(task, checkpointLock, threadFactory, null, null, null, null, null);
 	}
 
-	public <OUT> SystemProcessingTimeService(AsyncExceptionHandler task, Object checkpointLock, ThreadFactory threadFactory, TimeService timeService, EpochProvider epochProvider, RecordCountProvider recordCountProvider, JobCausalLog causalLog, RecoveryManager recoveryManager) {
+	public <OUT> SystemProcessingTimeService(AsyncExceptionHandler task, Object checkpointLock, ThreadFactory threadFactory, TimeService timeService, EpochProvider epochProvider, RecordCounter recordCounter, JobCausalLog causalLog, RecoveryManager recoveryManager) {
 		this.task = checkNotNull(task);
 		this.checkpointLock = checkNotNull(checkpointLock);
 		this.timeService = timeService;
 
 		this.epochProvider = epochProvider;
-		this.recordCountProvider = recordCountProvider;
+		this.recordCounter = recordCounter;
 		this.mainThreadCausalLog = causalLog.getThreadCausalLog(new CausalLogID(recoveryManager.getTaskVertexID().getVertexID()));
 		this.recoveryManager = recoveryManager;
 
@@ -153,7 +153,7 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 		long delay = Math.max(timestamp - getCurrentProcessingTime(), 0) + 1;
 		ScheduledFuture<?> future;
 		TriggerTask toRegister = new TriggerTask(status, task, checkpointLock, target, timestamp, mainThreadCausalLog,
-			epochProvider, recordCountProvider, reuseTimerTriggerDeterminant);
+			epochProvider, recordCounter, reuseTimerTriggerDeterminant);
 		if (recoveryManager.isRunning())
 			future = registerTimerRunning(toRegister, delay);
 		else
@@ -195,7 +195,7 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 		long nextTimestamp = getCurrentProcessingTime() + initialDelay;
 
 		RepeatedTriggerTask toRegister = new RepeatedTriggerTask(status, task, checkpointLock, callback, nextTimestamp,
-			period, mainThreadCausalLog, epochProvider, recordCountProvider, reuseTimerTriggerDeterminant);
+			period, mainThreadCausalLog, epochProvider, recordCounter, reuseTimerTriggerDeterminant);
 		ScheduledFuture<?> future;
 		if (recoveryManager.isRunning())
 			future = registerAtFixedRateRunning(initialDelay, period, toRegister);
@@ -369,7 +369,7 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 		private final long timestamp;
 		private final AsyncExceptionHandler exceptionHandler;
 
-		private final RecordCountProvider recordCountProvider;
+		private final RecordCounter recordCounter;
 		private final EpochProvider epochProvider;
 		private final ThreadCausalLog causalLog;
 		private final TimerTriggerDeterminant timerTriggerDeterminantToUse;
@@ -383,7 +383,7 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 			final long timestamp,
 			final ThreadCausalLog causalLog,
 			final EpochProvider epochProvider,
-			final RecordCountProvider recordCountProvider,
+			final RecordCounter recordCounter,
 			final TimerTriggerDeterminant toUse) {
 
 			this.serviceStatus = Preconditions.checkNotNull(serviceStatus);
@@ -393,7 +393,7 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 			this.timestamp = timestamp;
 			this.causalLog = causalLog;
 			this.epochProvider = epochProvider;
-			this.recordCountProvider = recordCountProvider;
+			this.recordCounter = recordCounter;
 			this.timerTriggerDeterminantToUse = toUse;
 		}
 
@@ -409,7 +409,7 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 					if (serviceStatus.get() == STATUS_ALIVE) {
 						causalLog.appendDeterminant(
 							timerTriggerDeterminantToUse.replace(
-								recordCountProvider.getRecordCount(),
+								recordCounter.getRecordCount(),
 								target.getID(),
 								timestamp),
 							epochProvider.getCurrentEpochID());
@@ -445,7 +445,7 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 
 		private long nextTimestamp;
 
-		private final RecordCountProvider recordCountProvider;
+		private final RecordCounter recordCounter;
 		private final EpochProvider epochProvider;
 		private final ThreadCausalLog causalLog;
 
@@ -458,7 +458,7 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 			final long period,
 			final ThreadCausalLog causalLog,
 			final EpochProvider epochProvider,
-			final RecordCountProvider recordCountProvider,
+			final RecordCounter recordCounter,
 			final TimerTriggerDeterminant toUse) {
 
 			this.serviceStatus = Preconditions.checkNotNull(serviceStatus);
@@ -470,7 +470,7 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 			this.nextTimestamp = nextTimestamp;
 			this.causalLog = causalLog;
 			this.epochProvider = epochProvider;
-			this.recordCountProvider = recordCountProvider;
+			this.recordCounter = recordCounter;
 			this.timerTriggerDeterminantToUse = toUse;
 		}
 
@@ -485,7 +485,7 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 					if (serviceStatus.get() == STATUS_ALIVE) {
 						causalLog.appendDeterminant(
 							timerTriggerDeterminantToUse.replace(
-								recordCountProvider.getRecordCount(),
+								recordCounter.getRecordCount(),
 								target.getID(),
 								timestamp),
 							epochProvider.getCurrentEpochID());

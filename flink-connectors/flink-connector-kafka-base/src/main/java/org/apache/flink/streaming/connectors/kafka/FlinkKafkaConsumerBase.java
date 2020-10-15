@@ -221,6 +221,8 @@ public abstract class FlinkKafkaConsumerBase<T> extends RichParallelSourceFuncti
 	 */
 	private transient KafkaCommitCallback offsetCommitCallback;
 
+	private boolean initializedRunState;
+
 	// ------------------------------------------------------------------------
 
 
@@ -248,6 +250,7 @@ public abstract class FlinkKafkaConsumerBase<T> extends RichParallelSourceFuncti
 		this.discoveryIntervalMillis = discoveryIntervalMillis;
 
 		this.useMetrics = useMetrics;
+		this.initializedRunState = false;
 	}
 
 	// ------------------------------------------------------------------------
@@ -610,8 +613,10 @@ public abstract class FlinkKafkaConsumerBase<T> extends RichParallelSourceFuncti
 		}
 	}
 
-	@Override
-	public void run(SourceContext<T> sourceContext) throws Exception {
+	private void initializeRunState(SourceContext<T> sourceContext) throws Exception{
+		if(initializedRunState)
+			return;
+		initializedRunState = true;
 		if (subscribedPartitionsToStartOffsets == null) {
 			throw new Exception("The partitions were not set for the consumer");
 		}
@@ -647,14 +652,19 @@ public abstract class FlinkKafkaConsumerBase<T> extends RichParallelSourceFuncti
 		//   - 'notifyCheckpointComplete' will start to do work (i.e. commit offsets to
 		//     Kafka through the fetcher, if configured to do so)
 		this.kafkaFetcher = createFetcher(
-				sourceContext,
-				subscribedPartitionsToStartOffsets,
-				periodicWatermarkAssigner,
-				punctuatedWatermarkAssigner,
-				(StreamingRuntimeContext) getRuntimeContext(),
-				offsetCommitMode,
-				getRuntimeContext().getMetricGroup().addGroup(KAFKA_CONSUMER_METRICS_GROUP),
-				useMetrics, ((StreamingRuntimeContext)getRuntimeContext()).getRecoveryManager());
+			sourceContext,
+			subscribedPartitionsToStartOffsets,
+			periodicWatermarkAssigner,
+			punctuatedWatermarkAssigner,
+			(StreamingRuntimeContext) getRuntimeContext(),
+			offsetCommitMode,
+			getRuntimeContext().getMetricGroup().addGroup(KAFKA_CONSUMER_METRICS_GROUP),
+			useMetrics, ((StreamingRuntimeContext)getRuntimeContext()).getRecoveryManager());
+	}
+
+	@Override
+	public void run(SourceContext<T> sourceContext) throws Exception {
+		initializeRunState(sourceContext);
 
 		if (!running) {
 			return;

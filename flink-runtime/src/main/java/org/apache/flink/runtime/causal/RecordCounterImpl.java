@@ -25,15 +25,29 @@
 
 package org.apache.flink.runtime.causal;
 
-public interface RecordCountProvider {
 
-	int getRecordCount();
+public final class RecordCounterImpl implements RecordCounter {
 
-	/**
-	 * For correctness, it is important that all calls to this method are done under the checkpoint lock
-	 */
-	void incRecordCount();
+	private int recordCount;
 
-	void resetRecordCount();
+	public RecordCounterImpl() {
+		recordCount = 0;
+	}
+
+	@Override
+	public final int getRecordCount() {
+		return recordCount;
+	}
+
+	@Override
+	public final void incRecordCount() {
+		//increments to record count are protected by the checkpoint lock, so this is ok
+		recordCount++;
+	}
+
+	@Override
+	public final void resetRecordCount() {
+		recordCount = 0;
+	}
 
 }

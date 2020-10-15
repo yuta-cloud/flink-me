@@ -20,9 +20,6 @@ package org.apache.flink.streaming.connectors.kafka.internal;
 
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.metrics.MetricGroup;
-import org.apache.flink.runtime.causal.RecordCountProvider;
-import org.apache.flink.runtime.causal.RecordCountTargetForceable;
-import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
 import org.apache.flink.streaming.api.functions.AssignerWithPeriodicWatermarks;
 import org.apache.flink.streaming.api.functions.AssignerWithPunctuatedWatermarks;
 import org.apache.flink.streaming.api.functions.source.SourceFunction.SourceContext;
@@ -56,7 +53,7 @@ import static org.apache.flink.util.Preconditions.checkState;
  * @param <T> The type of elements produced by the fetcher.
  */
 @Internal
-public class Kafka09Fetcher<T> extends AbstractFetcher<T, TopicPartition> implements RecordCountTargetForceable {
+public class Kafka09Fetcher<T> extends AbstractFetcher<T, TopicPartition>{
 
 	private static final Logger LOG = LoggerFactory.getLogger(Kafka09Fetcher.class);
 
@@ -82,32 +79,8 @@ public class Kafka09Fetcher<T> extends AbstractFetcher<T, TopicPartition> implem
 	 */
 	private volatile boolean running = true;
 
-	private int asyncEventRecordCountTarget;
-	private final RecordCountProvider recordCountProvider;
-
 
 	// ------------------------------------------------------------------------
-
-	public Kafka09Fetcher(
-		SourceContext<T> sourceContext,
-		Map<KafkaTopicPartition, Long> assignedPartitionsWithInitialOffsets,
-		SerializedValue<AssignerWithPeriodicWatermarks<T>> watermarksPeriodic,
-		SerializedValue<AssignerWithPunctuatedWatermarks<T>> watermarksPunctuated,
-		ProcessingTimeService processingTimeProvider,
-		long autoWatermarkInterval,
-		ClassLoader userCodeClassLoader,
-		String taskNameWithSubtasks,
-		KeyedDeserializationSchema<T> deserializer,
-		Properties kafkaProperties,
-		long pollTimeout,
-		MetricGroup subtaskMetricGroup,
-		MetricGroup consumerMetricGroup,
-		boolean useMetrics) throws Exception {
-		this(sourceContext, assignedPartitionsWithInitialOffsets, watermarksPeriodic, watermarksPunctuated,
-			processingTimeProvider, autoWatermarkInterval, userCodeClassLoader, taskNameWithSubtasks, deserializer,
-			kafkaProperties, pollTimeout, subtaskMetricGroup, consumerMetricGroup, useMetrics, null);
-	}
-
 
 	public Kafka09Fetcher(SourceContext<T> sourceContext,
 						  Map<KafkaTopicPartition, Long> assignedPartitionsWithInitialOffsets,
@@ -122,8 +95,7 @@ public class Kafka09Fetcher<T> extends AbstractFetcher<T, TopicPartition> implem
 						  long pollTimeout,
 						  MetricGroup subtaskMetricGroup,
 						  MetricGroup consumerMetricGroup,
-						  boolean useMetrics,
-						  IRecoveryManager recoveryManager) throws Exception {
+						  boolean useMetrics) throws Exception {
 		super(
 			sourceContext,
 			assignedPartitionsWithInitialOffsets,
@@ -133,7 +105,7 @@ public class Kafka09Fetcher<T> extends AbstractFetcher<T, TopicPartition> implem
 			autoWatermarkInterval,
 			userCodeClassLoader,
 			consumerMetricGroup,
-			useMetrics, recoveryManager);
+			useMetrics);
 
 		this.deserializer = deserializer;
 		this.handover = new Handover();
@@ -148,9 +120,6 @@ public class Kafka09Fetcher<T> extends AbstractFetcher<T, TopicPartition> implem
 			useMetrics,
 			consumerMetricGroup,
 			subtaskMetricGroup);
-		this.recordCountProvider = recoveryManager.getRecordCountProvider();
-		this.asyncEventRecordCountTarget = -1;
-		this.recoveryManager.setRecordCountTargetForceable(this);
 	}
 
 	// ------------------------------------------------------------------------
@@ -163,7 +132,8 @@ public class Kafka09Fetcher<T> extends AbstractFetcher<T, TopicPartition> implem
 			final Handover handover = this.handover;
 
 			// kick off the actual Kafka consumer
-			consumerThread.start();
+			if(!consumerThread.isAlive())
+				consumerThread.start();
 
 			while (running) {
 				// this blocks until we get the next records
@@ -186,8 +156,6 @@ public class Kafka09Fetcher<T> extends AbstractFetcher<T, TopicPartition> implem
 							running = false;
 							break;
 						}
-						while(asyncEventRecordCountTarget != -1 && recordCountProvider.getRecordCount() == asyncEventRecordCountTarget)
-							recoveryManager.triggerAsyncEvent();
 						// emit the actual record. this also updates offset state atomically
 						// and deals with timestamps and watermark generation
 						emitRecord(value, partition, record.offset(), record);
@@ -280,8 +248,4 @@ public class Kafka09Fetcher<T> extends AbstractFetcher<T, TopicPartition> implem
 		consumerThread.setOffsetsToCommit(offsetsToCommit, commitCallback);
 	}
 
-	@Override
-	public void setRecordCountTarget(int target) {
-		this.asyncEventRecordCountTarget = target;
-	}
 }

@@ -480,5 +480,10 @@ public class Kafka010FetcherTest {
 				lock.unlock();
 			}
 		}
+
+		@Override
+		public void setRecordCountTarget(int target) {
+
+		}
 	}
 }

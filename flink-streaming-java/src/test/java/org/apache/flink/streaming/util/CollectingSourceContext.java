@@ -70,4 +70,9 @@ public class CollectingSourceContext<T extends Serializable> implements SourceFu
 
 	@Override
 	public void close() {}
+
+	@Override
+	public void setRecordCountTarget(int target) {
+
+	}
 }

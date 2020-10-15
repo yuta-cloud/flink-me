@@ -212,7 +212,7 @@ public class ReplayingState extends AbstractState {
 	@Override
 	public void triggerAsyncEvent() {
 		AsyncDeterminant asyncDeterminant = (AsyncDeterminant) nextDeterminant;
-		int currentRecordCount = context.recordCountProvider.getRecordCount();
+		int currentRecordCount = context.recordCounter.getRecordCount();
 
 		LOG.info("Trigger async event, record count: {}, determinant record count: {}", currentRecordCount, asyncDeterminant.getRecordCount());
 		if (currentRecordCount != asyncDeterminant.getRecordCount())

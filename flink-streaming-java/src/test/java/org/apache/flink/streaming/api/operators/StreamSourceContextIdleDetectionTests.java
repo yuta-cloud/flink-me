@@ -18,7 +18,14 @@
 
 package org.apache.flink.streaming.api.operators;
 
-import org.apache.flink.runtime.causal.RecordCountProviderImpl;
+import org.apache.flink.runtime.causal.*;
+import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
+import org.apache.flink.runtime.causal.recovery.State;
+import org.apache.flink.runtime.event.InFlightLogRequestEvent;
+import org.apache.flink.runtime.io.network.api.DeterminantRequestEvent;
+import org.apache.flink.runtime.io.network.partition.consumer.InputChannel;
+import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
+import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.functions.source.SourceFunction;
 import org.apache.flink.streaming.api.watermark.Watermark;
@@ -99,7 +106,133 @@ public class StreamSourceContextIdleDetectionTests {
 			mockStreamStatusMaintainer,
 			new CollectorOutput<String>(output),
 			0,
-			idleTimeout, new RecordCountProviderImpl());
+			idleTimeout, new IRecoveryManager() {
+				@Override
+				public void notifyNewInputChannel(InputChannel inputChannel, int consumedSupartitionIndex,
+												  int numberBuffersRemoved) {
+
+				}
+
+				@Override
+				public void notifyNewOutputChannel(IntermediateResultPartitionID partitionId, int index) {
+
+				}
+
+				@Override
+				public void notifyInFlightLogRequestEvent(InFlightLogRequestEvent e) {
+
+				}
+
+				@Override
+				public void notifyDeterminantResponseEvent(DeterminantResponseEvent e) {
+
+				}
+
+				@Override
+				public void notifyDeterminantRequestEvent(DeterminantRequestEvent e, int channelRequestArrivedFrom) {
+
+				}
+
+				@Override
+				public void notifyStateRestorationStart(long checkpointId) {
+
+				}
+
+				@Override
+				public void notifyStateRestorationComplete(long checkpointId) {
+
+				}
+
+				@Override
+				public void notifyStartRecovery() {
+
+				}
+
+				@Override
+				public void triggerAsyncEvent() {
+
+				}
+
+				@Override
+				public void setState(State state) {
+
+				}
+
+				@Override
+				public void setInputGate(InputGate inputGate) {
+
+				}
+
+				@Override
+				public void setProcessingTimeService(ProcessingTimeForceable processingTimeForceable) {
+
+				}
+
+				@Override
+				public void setRecordCountTargetForceable(RecordCountTargetForceable recordCountTargetForceable) {
+
+				}
+
+				@Override
+				public RecordCounter getRecordCounter() {
+					return null;
+				}
+
+				@Override
+				public ProcessingTimeForceable getProcessingTimeForceable() {
+					return null;
+				}
+
+				@Override
+				public CheckpointForceable getCheckpointForceable() {
+					return null;
+				}
+
+				@Override
+				public VertexID getTaskVertexID() {
+					return null;
+				}
+
+				@Override
+				public boolean isRunning() {
+					return false;
+				}
+
+				@Override
+				public boolean isReplaying() {
+					return false;
+				}
+
+				@Override
+				public boolean isRestoringState() {
+					return false;
+				}
+
+				@Override
+				public boolean isWaitingConnections() {
+					return false;
+				}
+
+				@Override
+				public boolean isRecovering() {
+					return false;
+				}
+
+				@Override
+				public int replayRandomInt() {
+					return 0;
+				}
+
+				@Override
+				public byte replayNextChannel() {
+					return 0;
+				}
+
+				@Override
+				public long replayNextTimestamp() {
+					return 0;
+				}
+			});
 
 		// -------------------------- begin test scenario --------------------------
 
@@ -187,7 +320,133 @@ public class StreamSourceContextIdleDetectionTests {
 			mockStreamStatusMaintainer,
 			new CollectorOutput<String>(output),
 			watermarkInterval,
-			idleTimeout, new RecordCountProviderImpl());
+			idleTimeout, new IRecoveryManager() {
+				@Override
+				public void notifyNewInputChannel(InputChannel inputChannel, int consumedSupartitionIndex,
+												  int numberBuffersRemoved) {
+
+				}
+
+				@Override
+				public void notifyNewOutputChannel(IntermediateResultPartitionID partitionId, int index) {
+
+				}
+
+				@Override
+				public void notifyInFlightLogRequestEvent(InFlightLogRequestEvent e) {
+
+				}
+
+				@Override
+				public void notifyDeterminantResponseEvent(DeterminantResponseEvent e) {
+
+				}
+
+				@Override
+				public void notifyDeterminantRequestEvent(DeterminantRequestEvent e, int channelRequestArrivedFrom) {
+
+				}
+
+				@Override
+				public void notifyStateRestorationStart(long checkpointId) {
+
+				}
+
+				@Override
+				public void notifyStateRestorationComplete(long checkpointId) {
+
+				}
+
+				@Override
+				public void notifyStartRecovery() {
+
+				}
+
+				@Override
+				public void triggerAsyncEvent() {
+
+				}
+
+				@Override
+				public void setState(State state) {
+
+				}
+
+				@Override
+				public void setInputGate(InputGate inputGate) {
+
+				}
+
+				@Override
+				public void setProcessingTimeService(ProcessingTimeForceable processingTimeForceable) {
+
+				}
+
+				@Override
+				public void setRecordCountTargetForceable(RecordCountTargetForceable recordCountTargetForceable) {
+
+				}
+
+				@Override
+				public RecordCounter getRecordCounter() {
+					return null;
+				}
+
+				@Override
+				public ProcessingTimeForceable getProcessingTimeForceable() {
+					return null;
+				}
+
+				@Override
+				public CheckpointForceable getCheckpointForceable() {
+					return null;
+				}
+
+				@Override
+				public VertexID getTaskVertexID() {
+					return null;
+				}
+
+				@Override
+				public boolean isRunning() {
+					return false;
+				}
+
+				@Override
+				public boolean isReplaying() {
+					return false;
+				}
+
+				@Override
+				public boolean isRestoringState() {
+					return false;
+				}
+
+				@Override
+				public boolean isWaitingConnections() {
+					return false;
+				}
+
+				@Override
+				public boolean isRecovering() {
+					return false;
+				}
+
+				@Override
+				public int replayRandomInt() {
+					return 0;
+				}
+
+				@Override
+				public byte replayNextChannel() {
+					return 0;
+				}
+
+				@Override
+				public long replayNextTimestamp() {
+					return 0;
+				}
+			});
 
 		// -------------------------- begin test scenario --------------------------
 

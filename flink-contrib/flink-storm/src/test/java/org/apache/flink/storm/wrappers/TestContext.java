@@ -58,4 +58,9 @@ class TestContext implements SourceContext<Tuple1<Integer>> {
 	public void close() {
 
 	}
+
+	@Override
+	public void setRecordCountTarget(int target) {
+
+	}
 }

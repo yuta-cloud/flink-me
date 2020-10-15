@@ -44,8 +44,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class RecoveryManager implements IRecoveryManager {
@@ -73,7 +71,7 @@ public class RecoveryManager implements IRecoveryManager {
 
 	EpochProvider epochProvider;
 
-	RecordCountProvider recordCountProvider;
+	RecordCounter recordCounter;
 
 	static final SinkRecoveryStrategy sinkRecoveryStrategy = SinkRecoveryStrategy.TRANSACTIONAL;
 
@@ -92,7 +90,7 @@ public class RecoveryManager implements IRecoveryManager {
 
 	public RecoveryManager(AbstractInvokable invokable, EpochProvider epochProvider, JobCausalLog causalLog,
 						   CompletableFuture<Void> readyToReplayFuture, VertexGraphInformation vertexGraphInformation,
-						   RecordCountProvider recordCountProvider, CheckpointForceable checkpointForceable,
+						   RecordCounter recordCounter, CheckpointForceable checkpointForceable,
 						   ResultPartition[] partitions, int determinantSharingDepth) {
 		this.invokable = invokable;
 		this.causalLog = causalLog;
@@ -110,7 +108,7 @@ public class RecoveryManager implements IRecoveryManager {
 		LOG.info("Starting recovery manager in state {}", currentState);
 
 		this.epochProvider = epochProvider;
-		this.recordCountProvider = recordCountProvider;
+		this.recordCounter = recordCounter;
 		this.numberOfRecoveringSubpartitions = new AtomicInteger(0);
 		this.checkpointForceable = checkpointForceable;
 
@@ -161,8 +159,8 @@ public class RecoveryManager implements IRecoveryManager {
 	}
 
 	@Override
-	public RecordCountProvider getRecordCountProvider(){
-		return this.recordCountProvider;
+	public RecordCounter getRecordCounter(){
+		return this.recordCounter;
 	}
 
 	public void setInputGate(InputGate inputGate) {

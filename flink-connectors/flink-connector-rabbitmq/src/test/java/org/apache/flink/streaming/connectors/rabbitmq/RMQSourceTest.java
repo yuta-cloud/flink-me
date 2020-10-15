@@ -460,5 +460,10 @@ public class RMQSourceTest {
 		@Override
 		public void close() {
 		}
+
+		@Override
+		public void setRecordCountTarget(int target) {
+
+		}
 	}
 }

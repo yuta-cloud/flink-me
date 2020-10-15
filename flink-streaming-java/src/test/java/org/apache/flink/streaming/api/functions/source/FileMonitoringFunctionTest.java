@@ -49,6 +49,11 @@ public class FileMonitoringFunctionTest {
 				new SourceFunction.SourceContext<Tuple3<String, Long, Long>>() {
 
 					@Override
+					public void setRecordCountTarget(int target) {
+
+					}
+
+					@Override
 					public void collect(Tuple3<String, Long, Long> element) {}
 
 					@Override

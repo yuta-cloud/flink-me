@@ -232,7 +232,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 	private final TimeService timeService;
 	private final CausalRandomService randomService;
 	private AtomicLong currentEpochID;
-	private final RecordCountProvider recordCountProvider;
+	private final RecordCounter recordCounter;
 
 	private SourceCheckpointDeterminant reuseSourceCheckpointDeterminant;
 	private IgnoreCheckpointDeterminant ignoreCheckpointReuseDeterminant;
@@ -284,7 +284,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 		VertexGraphInformation vertexGraphInformation = new VertexGraphInformation(sortedJobVertexes, jobVertexID,
 			subtaskIndex);
 
-		recordCountProvider = new RecordCountProviderImpl();
+		recordCounter = new RecordCounterImpl();
 
 		SingleInputGate[] inputGates = environment.getContainingTask().getAllInputGates();
 
@@ -297,7 +297,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 		this.recoveryManager = new RecoveryManager(this, this, causalLog, readyToReplayFuture,
 			vertexGraphInformation,
-			recordCountProvider, this, environment.getContainingTask().getProducedPartitions(),
+			recordCounter, this, environment.getContainingTask().getProducedPartitions(),
 			getExecutionConfig().getDeterminantSharingDepth());
 
 		this.timeService = new CausalTimeService(causalLog, recoveryManager, this);
@@ -382,7 +382,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 					"Time Trigger for " + getName(), getUserCodeClassLoader());
 
 				timerService = new SystemProcessingTimeService(this, getCheckpointLock(), timerThreadFactory,
-					timeService, this, recordCountProvider, causalLog, recoveryManager);
+					timeService, this, recordCounter, causalLog, recoveryManager);
 			}
 			recoveryManager.setProcessingTimeService((ProcessingTimeForceable) timerService);
 
@@ -709,7 +709,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 		if (this.recoveryManager.isRecovering() && !this.recoveryManager.vertexGraphInformation.hasUpstream()) {
 			LOG.info("Store trigger checkpoint determinant for later processing because recovering!");
 			recoveryManager.appendRPCRequestDuringRecovery(reuseSourceCheckpointDeterminant.replace(
-				recordCountProvider.getRecordCount(),
+				recordCounter.getRecordCount(),
 				checkpointMetaData.getCheckpointId(),
 				checkpointMetaData.getTimestamp(),
 				checkpointOptions.getCheckpointType(),
@@ -782,8 +782,8 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 		return recoveryManager;
 	}
 
-	public RecordCountProvider getRecordCountProvider() {
-		return recordCountProvider;
+	public RecordCounter getRecordCounter() {
+		return recordCounter;
 	}
 
 	public EpochProvider getEpochProvider() {
@@ -811,7 +811,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 				if (!this.recoveryManager.vertexGraphInformation.hasUpstream()) {
 					this.mainThreadCausalLog.appendDeterminant(reuseSourceCheckpointDeterminant.replace(
-						recordCountProvider.getRecordCount(),
+						recordCounter.getRecordCount(),
 						checkpointMetaData.getCheckpointId(),
 						checkpointMetaData.getTimestamp(),
 						checkpointOptions.getCheckpointType(),
@@ -834,7 +834,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 					checkpointMetaData.getTimestamp(),
 					checkpointOptions);
 
-				recordCountProvider.resetRecordCount();
+				recordCounter.resetRecordCount();
 
 				// Step (3): Take the state snapshot. This should be largely asynchronous, to not
 				//           impact progress of the streaming topology
@@ -875,7 +875,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 	public void ignoreCheckpoint(long checkpointId) {
 
 		synchronized (lock) {
-			ignoreCheckpointReuseDeterminant.replace(recordCountProvider.getRecordCount(), checkpointId);
+			ignoreCheckpointReuseDeterminant.replace(recordCounter.getRecordCount(), checkpointId);
 			if (isRunning && recoveryManager.isRunning()) {
 				LOG.info("Ignoring checkpoint, appending determinant and ignoring.");
 				this.mainThreadCausalLog.appendDeterminant(ignoreCheckpointReuseDeterminant, currentEpochID.get());

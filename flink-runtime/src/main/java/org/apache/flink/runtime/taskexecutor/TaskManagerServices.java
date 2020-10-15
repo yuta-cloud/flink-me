@@ -27,6 +27,7 @@ import org.apache.flink.core.memory.MemoryType;
 import org.apache.flink.queryablestate.network.stats.DisabledKvStateRequestStats;
 import org.apache.flink.runtime.broadcast.BroadcastVariableManager;
 import org.apache.flink.runtime.causal.log.CausalLogManager;
+import org.apache.flink.runtime.causal.log.job.serde.DeltaEncodingStrategy;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
@@ -427,7 +428,12 @@ public class TaskManagerServices {
 		boolean enableCreditBased = false;
 		NettyConfig nettyConfig = networkEnvironmentConfiguration.nettyConfig();
 
-		CausalLogManager causalLogManager = new CausalLogManager(determinantBufferPool, nettyConfig.getNumDeterminantBuffersPerTask(), nettyConfig.getDeltaEncodingStrategy());
+		int numDeterminantBuffersPerJob = nettyConfig.getNumDeterminantBuffersPerJob();
+		DeltaEncodingStrategy deltaEncodingStrategy = nettyConfig.getDeltaEncodingStrategy();
+		boolean enableDeltaSharingOptimizations = nettyConfig.getEnableDeltaSharingOptimizations();
+
+
+		CausalLogManager causalLogManager = new CausalLogManager(determinantBufferPool, numDeterminantBuffersPerJob, deltaEncodingStrategy, enableDeltaSharingOptimizations);
 
 		if (nettyConfig != null) {
 			connectionManager = new NettyConnectionManager(nettyConfig, causalLogManager);

@@ -23,4 +23,7 @@ public class CorruptDeterminantArrayException extends RuntimeException {
 		super("Error while decoding determinants");
 	}
 
+    public CorruptDeterminantArrayException(byte tag) {
+		super("Found unknown tag " + tag);
+    }
 }

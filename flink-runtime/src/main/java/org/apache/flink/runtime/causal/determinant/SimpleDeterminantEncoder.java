@@ -77,7 +77,7 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 		if (tag == Determinant.TIMER_TRIGGER_DETERMINANT) return decodeTimerTriggerDeterminant(b);
 		if (tag == Determinant.SOURCE_CHECKPOINT_DETERMINANT) return decodeSourceCheckpointDeterminant(b);
 		if (tag == Determinant.IGNORE_CHECKPOINT_DETERMINANT) return decodeIgnoreCheckpointDeterminant(b);
-		throw new CorruptDeterminantArrayException();
+		throw new CorruptDeterminantArrayException(tag);
 	}
 
 	@Override

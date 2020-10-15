@@ -26,7 +26,6 @@ import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager.IOMode;
 import org.apache.flink.runtime.io.network.buffer.BufferPool;
 import org.apache.flink.runtime.io.network.buffer.NetworkBufferPool;
-import org.apache.flink.runtime.io.network.netty.NettyConnectionManager;
 import org.apache.flink.runtime.io.network.partition.ResultPartition;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionManager;
 import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGate;
@@ -353,7 +352,7 @@ public class NetworkEnvironment {
 					}
 				}
 			}
-			causalLogManager.unregisterJob(task.getJobID());
+			causalLogManager.unregisterTask(task.getJobID(), task.getJobVertexId());
 		}
 	}
 

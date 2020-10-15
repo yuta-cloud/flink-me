@@ -23,6 +23,7 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.time.Time;
 import org.apache.flink.runtime.checkpoint.decline.CheckpointDeclineException;
 import org.apache.flink.runtime.checkpoint.hooks.MasterHooks;
+import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.concurrent.FutureUtils;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.executiongraph.*;
@@ -985,8 +986,7 @@ public class CheckpointCoordinator {
 		}
 	}
 
-	public void rpcIgnoreUnacknowledgedPendingCheckpointsFor(ExecutionVertex vertex,
-															 ExecutionAttemptID executionAttemptId, Throwable cause) {
+	public void rpcIgnoreUnacknowledgedPendingCheckpointsFor(ExecutionVertex vertex, Throwable cause) {
 		synchronized (lock) {
 			Iterator<PendingCheckpoint> pendingCheckpointIterator = pendingCheckpoints.values().iterator();
 
@@ -994,14 +994,11 @@ public class CheckpointCoordinator {
 				final PendingCheckpoint pendingCheckpoint = pendingCheckpointIterator.next();
 				LOG.info("Checking pending: {}", pendingCheckpoint.getCheckpointId());
 
-				List<ExecutionVertex> downstream = vertex.getProducedPartitions().values().stream()
-					.flatMap(x -> x.getConsumers().stream().flatMap(Collection::stream))
-					.map(ExecutionEdge::getTarget).distinct().collect(Collectors.toList());
-
+				List<ExecutionVertex> downstream = vertex.getDownstreamVertexes();
 				if (!downstream.stream().map(x -> x.getCurrentExecutionAttempt().getAttemptId()).allMatch(pendingCheckpoint::isAcknowledgedBy)) {
 					LOG.info("Sending ignore checkpoint rpc for checkpoint {}", pendingCheckpoint.getCheckpointId());
 					pendingCheckpointIterator.remove();
-					rpcIgnoreCheckpoint(downstream, pendingCheckpoint, cause);
+					rpcIgnoreCheckpoint(vertex.getCurrentAssignedResourceLocation().getResourceID(),downstream, pendingCheckpoint, cause);
 					rememberRecentCheckpointId(pendingCheckpoint.getCheckpointId());
 				}
 			}
@@ -1444,7 +1441,7 @@ public class CheckpointCoordinator {
 		}
 	}
 
-	private void rpcIgnoreCheckpoint(List<ExecutionVertex> downstream, PendingCheckpoint pendingCheckpoint, Throwable cause) {
+	private void rpcIgnoreCheckpoint(ResourceID failedTM, List<ExecutionVertex> downstream, PendingCheckpoint pendingCheckpoint, Throwable cause) {
 		assert (Thread.holdsLock(lock));
 		Preconditions.checkNotNull(pendingCheckpoint);
 
@@ -1454,7 +1451,9 @@ public class CheckpointCoordinator {
 
 		LOG.info("RPC Cancelling checkpoint {} of job {} because: {}", checkpointId, job, reason);
 
-		downstream.forEach(v -> v.ignoreCheckpoint(pendingCheckpoint.getCheckpointId()));
+		downstream.stream()
+			.filter(x -> !x.getCurrentAssignedResource().getTaskManagerLocation().getResourceID().equals(failedTM))
+			.forEach(v -> v.ignoreCheckpoint(pendingCheckpoint.getCheckpointId()));
 	}
 
 	/**

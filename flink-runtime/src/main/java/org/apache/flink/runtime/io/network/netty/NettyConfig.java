@@ -87,8 +87,8 @@ public class NettyConfig {
 		.key("taskmanager.network.netty.determinantBufferSize")
 		.defaultValue(16384) // default: 0 => Netty's default
 		.withDescription("The Netty buffer size for determinants");
-	public static final ConfigOption<Integer> DETERMINANT_BUFFERS_PER_TASK = ConfigOptions
-		.key("taskmanager.network.netty.determinantBuffersPerTask")
+	public static final ConfigOption<Integer> DETERMINANT_BUFFERS_PER_JOB = ConfigOptions
+		.key("taskmanager.network.netty.determinantBuffersPerJob")
 		.defaultValue(500)
 		.withDescription("Number of buffers to give any single task.");
 
@@ -96,6 +96,11 @@ public class NettyConfig {
 		.key("taskmanager.network.netty.determinantDeltaEncodingStrategy")
 		.defaultValue("flat")
 		.withDescription("The strategy used to encode determinant deltas. \"flat\" or \"hierarchical\"");
+
+	public static final ConfigOption<Boolean> ENABLE_DELTA_SHARING_OPTIMIZATIONS = ConfigOptions
+		.key("taskmanager.network.netty.enableDeltaSharingOptimizations")
+		.defaultValue(false)
+		.withDescription("If optimizations like unique channel consumer sharing should be enabled. Disable if slot sharing is enabled.");
 
 	public static final ConfigOption<String> TRANSPORT_TYPE = ConfigOptions
 			.key("taskmanager.network.netty.transport")
@@ -109,6 +114,10 @@ public class NettyConfig {
 			return DeltaEncodingStrategy.FLAT;
 		else
 			return DeltaEncodingStrategy.HIERARCHICAL;
+	}
+
+	public boolean getEnableDeltaSharingOptimizations() {
+		return config.getBoolean(ENABLE_DELTA_SHARING_OPTIMIZATIONS);
 	}
 
 	// ------------------------------------------------------------------------
@@ -205,8 +214,8 @@ public class NettyConfig {
 		return config.getInteger(DETERMINANT_BUFFER_SIZE);
 	}
 
-	public int getNumDeterminantBuffersPerTask() {
-		return config.getInteger(DETERMINANT_BUFFERS_PER_TASK);
+	public int getNumDeterminantBuffersPerJob() {
+		return config.getInteger(DETERMINANT_BUFFERS_PER_JOB);
 	}
 
 	public int getClientConnectTimeoutSeconds() {

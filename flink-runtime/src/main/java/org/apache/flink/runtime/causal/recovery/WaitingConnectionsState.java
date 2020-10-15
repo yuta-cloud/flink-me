@@ -25,7 +25,7 @@
 
 package org.apache.flink.runtime.causal.recovery;
 
-import org.apache.flink.runtime.io.network.partition.consumer.RemoteInputChannel;
+import org.apache.flink.runtime.io.network.partition.consumer.InputChannel;
 import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGate;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.slf4j.Logger;
@@ -61,7 +61,7 @@ public class WaitingConnectionsState extends AbstractState{
 			}
 		}
 
-		LOG.info("Waiting for new connections!");
+		logDebug("Waiting for new connections!");
 	}
 
 
@@ -71,8 +71,8 @@ public class WaitingConnectionsState extends AbstractState{
 	}
 
 	@Override
-	public void notifyNewInputChannel(RemoteInputChannel inputChannel, int consumedSubpartitionIndex, int numberOfBuffersRemoved) {
-		LOG.info("Got Notified of new input channel {}, consuming index {} and having to skip {} buffers.", inputChannel, consumedSubpartitionIndex, numberOfBuffersRemoved);
+	public void notifyNewInputChannel(InputChannel inputChannel, int consumedSubpartitionIndex, int numberOfBuffersRemoved) {
+		logDebug("Got Notified of new input channel {}, consuming index {} and having to skip {} buffers.", inputChannel, consumedSubpartitionIndex, numberOfBuffersRemoved);
 		SingleInputGate singleInputGate = inputChannel.getInputGate();
 		int channelIndex = inputChannel.getChannelIndex();
 		inputChannelsReestablishmentStatus[context.inputGate.getAbsoluteChannelIndex(singleInputGate, channelIndex)] = Boolean.TRUE;
@@ -82,7 +82,7 @@ public class WaitingConnectionsState extends AbstractState{
 
 	@Override
 	public void notifyNewOutputChannel(IntermediateResultPartitionID intermediateResultPartitionID, int subpartitionIndex){
-		LOG.info("Got Notified of new output channel for intermediateResultPartition {} index {}.", intermediateResultPartitionID, subpartitionIndex);
+		logDebug("Got Notified of new output channel for intermediateResultPartition {} index {}.", intermediateResultPartitionID, subpartitionIndex);
 		outputChannelsReestablishmentStatus.get(intermediateResultPartitionID)[subpartitionIndex] = true;
 		checkConnectionsComplete();
 	}
@@ -92,7 +92,7 @@ public class WaitingConnectionsState extends AbstractState{
 		for(Boolean[] booleans : outputChannelsReestablishmentStatus.values())
 			channelStatus = Stream.concat(channelStatus, Arrays.stream(booleans));
 		if(channelStatus.allMatch(x -> x)){
-			LOG.info("Got all connections set-up. Switching to WaitingDeterminantsState.");
+			logDebug("Got all connections set-up. Switching to WaitingDeterminantsState.");
 			State newState = new WaitingDeterminantsState(context);
 			context.setState(newState);
 		}

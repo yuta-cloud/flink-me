@@ -31,9 +31,9 @@ import org.apache.flink.runtime.causal.log.job.hierarchy.VertexCausalLogs;
 import org.apache.flink.runtime.causal.log.thread.ThreadCausalLog;
 import org.apache.flink.runtime.io.network.buffer.BufferPool;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannelID;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
 import org.apache.flink.shaded.netty4.io.netty.buffer.CompositeByteBuf;
-import org.apache.flink.shaded.netty4.io.netty.util.internal.ConcurrentSet;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentMap;
@@ -54,10 +54,11 @@ public final class GroupingDeltaSerializerDeserializer extends AbstractDeltaSeri
 	public GroupingDeltaSerializerDeserializer(ConcurrentMap<CausalLogID, ThreadCausalLog> threadCausalLogs,
 											   ConcurrentMap<Short, VertexCausalLogs> hierarchicalThreadCausalLogsToBeShared,
 											   Map<Short, Integer> vertexIDToDistance,
-											   ConcurrentSet<Short> localVertices, int determinantSharingDepth,
-											   BufferPool determinantBufferPool) {
+											   ConcurrentMap<JobVertexID, Short> localVertices, int determinantSharingDepth,
+											   BufferPool determinantBufferPool,
+											   boolean enableDeltaSharingOptimizations) {
 		super(threadCausalLogs, hierarchicalThreadCausalLogsToBeShared, vertexIDToDistance, localVertices, determinantSharingDepth,
-			determinantBufferPool);
+			determinantBufferPool, enableDeltaSharingOptimizations);
 	}
 
 
@@ -92,7 +93,7 @@ public final class GroupingDeltaSerializerDeserializer extends AbstractDeltaSeri
 		CausalLogID outputChannelSpecificCausalLog = outputChannelSpecificCausalLogs.get(outputChannelID);
 		for (Map.Entry<Short, VertexCausalLogs> e : hierarchicalThreadCausalLogsToBeShared.entrySet())
 			//If this is not a local vertex or if it is the local vertex that this channel consumes directly
-			if(!localVertices.contains(e.getKey()) || outputChannelSpecificCausalLog.isForVertex(e.getKey()))
+			if(!enableDeltaSharingOptimizations || !localTasks.containsValue(e.getKey()) || outputChannelSpecificCausalLog.isForVertex(e.getKey()))
 				serializeVertex(outputChannelID, epochID, composite, deltaHeader, outputChannelSpecificCausalLog, e.getValue());
 
 
@@ -148,7 +149,7 @@ public final class GroupingDeltaSerializerDeserializer extends AbstractDeltaSeri
 		for (ThreadCausalLog s : p.subpartitionLogs.values()) {
 			if (s.hasDeltaForConsumer(outputChannelID, epochID))
 				//If this isnt the local vertex or if it is the specific channel subpartition
-				if (!outputChannelSpecificCausalLog.isForVertex(vertexID) || outputChannelSpecificCausalLog.equals(s.getCausalLogID())) {
+				if (!enableDeltaSharingOptimizations || !outputChannelSpecificCausalLog.isForVertex(vertexID) || outputChannelSpecificCausalLog.equals(s.getCausalLogID())) {
 					deltaHeader.writeByte(s.getCausalLogID().getSubpartitionIndex());
 					serializeThreadDelta(outputChannelID, epochID, composite, deltaHeader, s);
 					numSubpartitionUpdates++;

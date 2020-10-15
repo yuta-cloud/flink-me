@@ -35,8 +35,8 @@ import org.apache.flink.runtime.io.network.api.DeterminantRequestEvent;
 import org.apache.flink.runtime.io.network.partition.PipelinedSubpartition;
 import org.apache.flink.runtime.io.network.partition.ResultPartition;
 import org.apache.flink.runtime.io.network.partition.ResultSubpartition;
+import org.apache.flink.runtime.io.network.partition.consumer.InputChannel;
 import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
-import org.apache.flink.runtime.io.network.partition.consumer.RemoteInputChannel;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
 import org.slf4j.Logger;
@@ -58,7 +58,7 @@ public class RecoveryManager implements IRecoveryManager {
 	final CompletableFuture<Void> readyToReplayFuture;
 	final JobCausalLog causalLog;
 
-	final ConcurrentMap<VertexID, UnansweredDeterminantRequest> unansweredDeterminantRequests;
+	final Table<VertexID, Long, UnansweredDeterminantRequest> unansweredDeterminantRequests;
 	final int determinantSharingDepth;
 
 	Table<IntermediateResultPartitionID, Integer, InFlightLogRequestEvent> unansweredInFlighLogRequests;
@@ -99,7 +99,7 @@ public class RecoveryManager implements IRecoveryManager {
 		this.readyToReplayFuture = readyToReplayFuture;
 		this.vertexGraphInformation = vertexGraphInformation;
 
-		this.unansweredDeterminantRequests = new ConcurrentHashMap<>();
+		this.unansweredDeterminantRequests = HashBasedTable.create();
 
 		this.incompleteStateRestorations = new HashSet<>();
 
@@ -128,6 +128,7 @@ public class RecoveryManager implements IRecoveryManager {
 
 		for (ResultPartition rp : partitions) {
 			IntermediateResultPartitionID partitionID = rp.getPartitionId().getPartitionId();
+			LOG.info("Task {} Adding partition {}, with intermediateResultPartitionID {}", getTaskVertexID(), rp, partitionID);
 			ResultSubpartition[] subpartitions = rp.getResultSubpartitions();
 			for (int i = 0; i < subpartitions.length; i++)
 				this.subpartitionTable.put(partitionID, i, (PipelinedSubpartition) subpartitions[i]);
@@ -205,7 +206,7 @@ public class RecoveryManager implements IRecoveryManager {
 	}
 
 	@Override
-	public synchronized void notifyNewInputChannel(RemoteInputChannel inputChannel, int consumedSupartitionIndex,
+	public synchronized void notifyNewInputChannel(InputChannel inputChannel, int consumedSupartitionIndex,
 												   int numberBuffersRemoved) {
 		this.currentState.notifyNewInputChannel(inputChannel, consumedSupartitionIndex, numberBuffersRemoved);
 	}
@@ -288,7 +289,8 @@ public class RecoveryManager implements IRecoveryManager {
 		public UnansweredDeterminantRequest(DeterminantRequestEvent event, int requestingChannel) {
 			this.numResponsesReceived = 0;
 			this.requestingChannel = requestingChannel;
-			this.response = new DeterminantResponseEvent(event.getFailedVertex());
+			this.response = new DeterminantResponseEvent(event);
+			this.response.setCorrelationID(event.getUpstreamCorrelationID());
 		}
 
 		public int getNumResponsesReceived() {

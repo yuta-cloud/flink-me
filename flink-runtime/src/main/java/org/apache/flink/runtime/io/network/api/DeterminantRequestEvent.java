@@ -23,15 +23,20 @@ import org.apache.flink.runtime.causal.VertexID;
 import org.apache.flink.runtime.event.AbstractEvent;
 
 import java.io.IOException;
+import java.util.Random;
 
 public class DeterminantRequestEvent extends AbstractEvent {
 
+	public static final long SOURCE_CORRELATION_ID = 0;
 	private VertexID failedVertex;
 	private long startEpochID;
+	private long upstreamCorrelationID;
+	private long correlationID;
 
 	public DeterminantRequestEvent(VertexID failedVertex, long startEpochID) {
 		this.failedVertex = failedVertex;
 		this.startEpochID = startEpochID;
+		this.upstreamCorrelationID = SOURCE_CORRELATION_ID;
 	}
 
 	public DeterminantRequestEvent() {
@@ -53,16 +58,36 @@ public class DeterminantRequestEvent extends AbstractEvent {
 		this.startEpochID = startEpochID;
 	}
 
+	public long getCorrelationID() {
+		return correlationID;
+	}
+
+	public void setCorrelationID(long correlationID) {
+		this.correlationID = correlationID;
+	}
+
+	public long getUpstreamCorrelationID() {
+		return upstreamCorrelationID;
+	}
+
+	public void setUpstreamCorrelationID(long upstreamCorrelationID) {
+		this.upstreamCorrelationID = upstreamCorrelationID;
+	}
+
 	@Override
 	public void write(DataOutputView out) throws IOException {
 		out.writeShort(this.failedVertex.getVertexID());
 		out.writeLong(startEpochID);
+		out.writeLong(upstreamCorrelationID);
+		out.writeLong(correlationID);
 	}
 
 	@Override
 	public void read(DataInputView in) throws IOException {
 		this.setFailedVertex(new VertexID(in.readShort()));
 		this.setStartEpochID(in.readLong());
+		this.setUpstreamCorrelationID(in.readLong());
+		this.setCorrelationID(in.readLong());
 	}
 
 	@Override
@@ -70,6 +95,9 @@ public class DeterminantRequestEvent extends AbstractEvent {
 		return "DeterminantRequestEvent{" +
 			"failedVertex=" + failedVertex +
 			", startEpochID= " + startEpochID +
+			", upstreamCorrelationID=" + upstreamCorrelationID +
+			", correlationID=" + correlationID +
 			'}';
 	}
+
 }

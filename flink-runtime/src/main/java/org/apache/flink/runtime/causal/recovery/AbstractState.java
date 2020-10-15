@@ -31,37 +31,43 @@ import org.apache.flink.runtime.io.network.api.DeterminantRequestEvent;
 import org.apache.flink.runtime.io.network.api.serialization.EventSerializer;
 import org.apache.flink.runtime.io.network.buffer.BufferConsumer;
 import org.apache.flink.runtime.io.network.partition.PipelinedSubpartition;
-import org.apache.flink.runtime.io.network.partition.consumer.RemoteInputChannel;
+import org.apache.flink.runtime.io.network.partition.consumer.InputChannel;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Random;
 
 public abstract class AbstractState implements State {
 
 	protected static final Logger LOG = LoggerFactory.getLogger(AbstractState.class);
 	protected final RecoveryManager context;
 
+	protected final Random random;
 
 	public AbstractState(RecoveryManager context) {
 		this.context = context;
+		this.random = new Random(System.currentTimeMillis());
 	}
 
 
 	@Override
-	public void notifyNewInputChannel(RemoteInputChannel remoteInputChannel, int consumedSubpartitionIndex,
+	public void notifyNewInputChannel(InputChannel remoteInputChannel, int consumedSubpartitionIndex,
 									  int numBuffersRemoved) {
 		//we got notified of a new input channel while we were recovering.
 		//This means that  we now have to wait for the upstream to finish recovering before we do.
 		//Furthermore, if we have already sent an inflight log request for this channel, we now have to send it again.
-		LOG.info("Got notified of unexpected NewInputChannel event, while in state " + this.getClass());
+		logDebug("Got notified of unexpected NewInputChannel event, while in state " + this.getClass());
 	}
 
 	@Override
 	public void notifyNewOutputChannel(IntermediateResultPartitionID intermediateResultPartitionID,
 									   int subpartitionIndex) {
-		LOG.info("Got notified of unexpected NewOutputChannel event, while in state " + this.getClass());
+		logDebug("Got notified of unexpected NewOutputChannel event, while in state " + this.getClass());
 
 	}
 
@@ -74,7 +80,7 @@ public abstract class AbstractState implements State {
 
 	@Override
 	public void notifyStateRestorationStart(long checkpointId) {
-		LOG.info("Started restoring state of checkpoint {}", checkpointId);
+		logDebug("Started restoring state of checkpoint {}", checkpointId);
 		this.context.incompleteStateRestorations.add(checkpointId);
 		if (checkpointId > context.epochProvider.getCurrentEpochID())
 			context.epochProvider.setCurrentEpochID(checkpointId);
@@ -87,56 +93,63 @@ public abstract class AbstractState implements State {
 
 	@Override
 	public void notifyStateRestorationComplete(long checkpointId) {
-		LOG.info("Completed restoring state of checkpoint {}", checkpointId);
+		logDebug("Completed restoring state of checkpoint {}", checkpointId);
 		this.context.incompleteStateRestorations.remove(checkpointId);
 	}
 
 	@Override
 	public void notifyDeterminantResponseEvent(DeterminantResponseEvent e) {
-		LOG.info("Received a DeterminantResponseEvent: {}", e);
+		logDebug("Received {}", e);
 		RecoveryManager.UnansweredDeterminantRequest udr =
-			context.unansweredDeterminantRequests.get(e.getVertexID());
+			context.unansweredDeterminantRequests.get(e.getVertexID(), e.getCorrelationID());
 		if (udr != null) {
 			udr.incResponsesReceived();
 			udr.getCurrentResponse().merge(e);
 			if (udr.getNumResponsesReceived() == context.getNumberOfDirectDownstreamNeighbourVertexes()) {
-				context.unansweredDeterminantRequests.remove(e.getVertexID());
+				context.unansweredDeterminantRequests.remove(e.getVertexID(), e.getCorrelationID());
 				try {
-					context.inputGate.getInputChannel(udr.getRequestingChannel()).sendTaskEvent(udr.getCurrentResponse());
+					logDebug("All responses here, sending reccurred request response");
+					DeterminantResponseEvent toRespond = udr.getCurrentResponse();
+					context.inputGate.getInputChannel(udr.getRequestingChannel()).sendTaskEvent(toRespond);
 					//TODO udr.getVertexCausalLogDelta().release(); Cant release here because sendTaskEvent is async
 				} catch (IOException | InterruptedException ex) {
 					ex.printStackTrace();
 				}
 			}
 		} else
-			LOG.info("Do not know whta this determinant response event refers to...");
+			logDebug("Do not know what this determinant response event refers to...");
 
 	}
 
 	@Override
 	public void notifyDeterminantRequestEvent(DeterminantRequestEvent e, int channelRequestArrivedFrom) {
-		LOG.info("Received determinant request!");
-		//If we are a sink and doing transactional recovery, just answer with what we have
+		logDebug("Received {}", e);
+		//If we are a sink and doing transactional recovery, just answer with nothing
 		if (!context.vertexGraphInformation.hasDownstream() && RecoveryManager.sinkRecoveryStrategy == RecoveryManager.SinkRecoveryStrategy.TRANSACTIONAL) {
 			try {
-				context.inputGate.getInputChannel(channelRequestArrivedFrom).sendTaskEvent(new DeterminantResponseEvent(e.getFailedVertex()));
+				context.inputGate.getInputChannel(channelRequestArrivedFrom).sendTaskEvent(new DeterminantResponseEvent(e));
 			} catch (IOException | InterruptedException ex) {
 				ex.printStackTrace();
 			}
 		} else {
-			context.unansweredDeterminantRequests.put(e.getFailedVertex(),
+			context.unansweredDeterminantRequests.put(e.getFailedVertex(), e.getCorrelationID(),
 				new RecoveryManager.UnansweredDeterminantRequest(e, channelRequestArrivedFrom));
-			LOG.info("Recurring determinant request");
+			logDebug("Recurring determinant request");
+			e.setUpstreamCorrelationID(e.getCorrelationID());
 			broadcastDeterminantRequest(e);
 		}
 	}
 
 	protected void broadcastDeterminantRequest(DeterminantRequestEvent e) {
-		try (BufferConsumer event = EventSerializer.toBufferConsumer(e)) {
-			for (PipelinedSubpartition ps : context.subpartitionTable.values())
+		for (PipelinedSubpartition ps : context.subpartitionTable.values()) {
+			e.setCorrelationID(random.nextLong());
+			try (BufferConsumer event = EventSerializer.toBufferConsumer(e)) {
+				logDebug("Sending determinant request: {} to intermediate {} index {}", e,
+					ps.getParent().getPartitionId().getPartitionId(), ps.getIndex());
 				ps.bypassDeterminantRequest(event.copy());
-		} catch (IOException ex) {
-			ex.printStackTrace();
+			} catch (IOException ex) {
+				ex.printStackTrace();
+			}
 		}
 	}
 
@@ -166,5 +179,17 @@ public abstract class AbstractState implements State {
 	@Override
 	public long replayNextTimestamp() {
 		throw new RuntimeException("Unexpected replayNextTimestamp request in state " + this.getClass());
+	}
+
+	/**
+	 * Simple utility method for prepending vertex id to a log message
+	 */
+	protected void logDebug(String s, Object... a) {
+		if(LOG.isDebugEnabled()) {
+			List<Object> array = new ArrayList<>(a.length + 1);
+			array.add(context.getTaskVertexID().getVertexID());
+			array.addAll(Arrays.asList(a));
+			LOG.debug("Vertex {} - " + s, array.toArray());
+		}
 	}
 }

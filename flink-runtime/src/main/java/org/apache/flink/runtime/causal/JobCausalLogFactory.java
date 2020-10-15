@@ -39,15 +39,18 @@ import java.io.IOException;
 public class JobCausalLogFactory {
 	private final int numDeterminantBuffersPerTask;
 	private final DeltaEncodingStrategy deltaEncodingStrategy;
+	private final boolean enableDeltaSharingOptimizations;
+
 	NetworkBufferPool determinantNetworkBufferPool;
 
 	protected static final Logger LOG = LoggerFactory.getLogger(JobCausalLogFactory.class);
 
 	public JobCausalLogFactory(NetworkBufferPool determinantNetworkBufferPool, int numDeterminantBuffersPerTask,
-							   DeltaEncodingStrategy deltaEncodingStrategy) {
+							   DeltaEncodingStrategy deltaEncodingStrategy, boolean enableDeltaSharingOptimizations) {
 		this.determinantNetworkBufferPool = determinantNetworkBufferPool;
 		this.numDeterminantBuffersPerTask = numDeterminantBuffersPerTask;
 		this.deltaEncodingStrategy = deltaEncodingStrategy;
+		this.enableDeltaSharingOptimizations = enableDeltaSharingOptimizations;
 	}
 
 	public JobCausalLog buildJobCausalLog(int determinantSharingDepth) {
@@ -60,6 +63,6 @@ public class JobCausalLogFactory {
 		}
 
 
-		return new JobCausalLogImpl(determinantSharingDepth, taskDeterminantBufferPool, deltaEncodingStrategy);
+		return new JobCausalLogImpl(determinantSharingDepth, taskDeterminantBufferPool, deltaEncodingStrategy, enableDeltaSharingOptimizations);
 	}
 }

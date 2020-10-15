@@ -530,7 +530,8 @@ public class SingleInputGate implements InputGate {
 				try {
 					newChannel.requestSubpartition(consumedSubpartitionIndex);
 					requestedPartitionsFlag.set(true);
-					recoveryManager.notifyNewInputChannel((RemoteInputChannel) newChannel, consumedSubpartitionIndex, ((RemoteInputChannel)current).getNumberOfBuffersRemoved());
+					int numberOfBuffersRemoved = (current instanceof RemoteInputChannel ? ((RemoteInputChannel) current).getNumberOfBuffersRemoved() : 0);
+					recoveryManager.notifyNewInputChannel(newChannel, consumedSubpartitionIndex, numberOfBuffersRemoved);
 				} catch (IOException e) {
 					LOG.error("{}: Request subpartition or send task event for input channel {} failed. Ignoring failure and sending fail trigger for producer (chances are it is dead).",
 						owningTaskName, newChannel, e);

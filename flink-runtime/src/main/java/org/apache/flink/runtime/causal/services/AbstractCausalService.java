@@ -32,7 +32,7 @@ import org.apache.flink.runtime.causal.log.thread.ThreadCausalLog;
 import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
 
 /**
- * Causal services have a general structure.
+ * Causal services have a general structure. This class sets that up.
  * Whenever a request is made to one, we first have to check whether we are recovering.
  * If we are not, a new nondeterministic event occurs, which must be recorded into the causal log.
  */

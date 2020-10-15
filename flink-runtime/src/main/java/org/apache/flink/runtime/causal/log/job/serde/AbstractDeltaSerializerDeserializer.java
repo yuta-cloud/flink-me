@@ -33,6 +33,7 @@ import org.apache.flink.runtime.causal.log.thread.ThreadCausalLogImpl;
 import org.apache.flink.runtime.io.network.buffer.BufferPool;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannelID;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBufAllocator;
 import org.apache.flink.shaded.netty4.io.netty.buffer.CompositeByteBuf;
@@ -64,20 +65,24 @@ public abstract class AbstractDeltaSerializerDeserializer implements DeltaSerial
 
 	protected static final Logger LOG = LoggerFactory.getLogger(AbstractDeltaSerializerDeserializer.class);
 
-	protected final ConcurrentSet<Short> localVertices;
+	protected final ConcurrentMap<JobVertexID, Short> localTasks;
+
+	protected final boolean enableDeltaSharingOptimizations;
 
 	public AbstractDeltaSerializerDeserializer(ConcurrentMap<CausalLogID, ThreadCausalLog> threadCausalLogs,
 											   ConcurrentMap<Short, VertexCausalLogs> hierarchicalThreadCausalLogsToBeShared,
 											   Map<Short, Integer> vertexIDToDistance,
-											   ConcurrentSet<Short> localVertices, int determinantSharingDepth,
-											   BufferPool determinantBufferPool) {
+											   ConcurrentMap<JobVertexID, Short> localTasks, int determinantSharingDepth,
+											   BufferPool determinantBufferPool,
+											   boolean enableDeltaSharingOptimizations) {
 		this.threadCausalLogs = threadCausalLogs;
 		this.hierarchicalThreadCausalLogsToBeShared = hierarchicalThreadCausalLogsToBeShared;
 		this.outputChannelSpecificCausalLogs = new HashMap<>();
 		this.determinantBufferPool = determinantBufferPool;
 		this.vertexIDToDistance = vertexIDToDistance;
-		this.localVertices = localVertices;
+		this.localTasks = localTasks;
 		this.determinantSharingDepth = determinantSharingDepth;
+		this.enableDeltaSharingOptimizations = enableDeltaSharingOptimizations;
 	}
 
 

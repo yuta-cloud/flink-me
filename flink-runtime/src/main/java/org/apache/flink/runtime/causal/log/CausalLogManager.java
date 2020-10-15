@@ -29,14 +29,13 @@ package org.apache.flink.runtime.causal.log;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.runtime.causal.JobCausalLogFactory;
 import org.apache.flink.runtime.causal.VertexGraphInformation;
-import org.apache.flink.runtime.causal.VertexID;
 import org.apache.flink.runtime.causal.log.job.CausalLogID;
 import org.apache.flink.runtime.causal.log.job.JobCausalLog;
 import org.apache.flink.runtime.causal.log.job.serde.DeltaEncodingStrategy;
 import org.apache.flink.runtime.io.network.api.writer.ResultPartitionWriter;
 import org.apache.flink.runtime.io.network.buffer.NetworkBufferPool;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannelID;
-import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -67,20 +66,20 @@ public class CausalLogManager {
 	private final JobCausalLogFactory jobCausalLogFactory;
 
 	public CausalLogManager(NetworkBufferPool determinantBufferPool, int numDeterminantBuffersPerTask,
-							DeltaEncodingStrategy deltaEncodingStrategy) {
+							DeltaEncodingStrategy deltaEncodingStrategy, boolean enableDeltaSharingOptimizations) {
 		this.jobCausalLogFactory = new JobCausalLogFactory(determinantBufferPool, numDeterminantBuffersPerTask,
-			deltaEncodingStrategy);
+			deltaEncodingStrategy, enableDeltaSharingOptimizations);
 
 		this.jobIDToManagerMap = new ConcurrentHashMap<>();
 		this.outputChannelIDToCausalLog = new ConcurrentHashMap<>();
 		this.inputChannelIDToCausalLog = new ConcurrentHashMap<>();
 	}
 
-	public JobCausalLog registerNewTask(JobID jobID, VertexGraphInformation vertexGraphInformation,
+	public JobCausalLog registerNewTask(JobID jobID, JobVertexID jobVertexId, VertexGraphInformation vertexGraphInformation,
 										int determinantSharingDepth,
 										ResultPartitionWriter[] resultPartitionsOfLocalVertex) {
 		JobCausalLog causalLog;
-		LOG.info("Registering task {} for JobID {}.", vertexGraphInformation.getThisTasksVertexID(), jobID);
+		LOG.info("Registering task {} for JobID {} with determinant sharing depth {}.", vertexGraphInformation.getThisTasksVertexID(), jobID, determinantSharingDepth);
 		synchronized (jobIDToManagerMap) {
 			if(!jobIDToManagerMap.containsKey(jobID)) {
 				jobIDToManagerMap.put(jobID, jobCausalLogFactory.buildJobCausalLog(determinantSharingDepth));
@@ -90,7 +89,7 @@ public class CausalLogManager {
 		}
 
 		synchronized (causalLog) {
-			causalLog.registerSubtask(vertexGraphInformation, resultPartitionsOfLocalVertex);
+			causalLog.registerTask(vertexGraphInformation, jobVertexId, resultPartitionsOfLocalVertex);
 		}
 
 		return causalLog;
@@ -128,10 +127,12 @@ public class CausalLogManager {
 	}
 
 
-	public void unregisterJob(JobID jobID) {
+	public void unregisterTask(JobID jobID, JobVertexID jobVertexId) {
 		JobCausalLog jobCausalLog = waitForCausalLogRegistration(jobIDToManagerMap, jobID);
 
-		jobCausalLog.close();
+		if(jobCausalLog.unregisterTask(jobVertexId))
+			jobIDToManagerMap.remove(jobID);
+
 	}
 
 	public ByteBuf enrichWithCausalLogDeltas(ByteBuf serialized, InputChannelID outputChannelID, long epochID) {

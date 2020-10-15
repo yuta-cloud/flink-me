@@ -30,9 +30,9 @@ import org.apache.flink.runtime.causal.log.job.hierarchy.VertexCausalLogs;
 import org.apache.flink.runtime.causal.log.thread.ThreadCausalLog;
 import org.apache.flink.runtime.io.network.buffer.BufferPool;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannelID;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
 import org.apache.flink.shaded.netty4.io.netty.buffer.CompositeByteBuf;
-import org.apache.flink.shaded.netty4.io.netty.util.internal.ConcurrentSet;
 
 import java.util.List;
 import java.util.Map;
@@ -44,12 +44,13 @@ public final class FlatDeltaSerializerDeserializer extends AbstractDeltaSerializ
 
 	public FlatDeltaSerializerDeserializer(ConcurrentMap<CausalLogID, ThreadCausalLog> threadCausalLogs,
 										   ConcurrentMap<Short, VertexCausalLogs> hierarchicalThreadCausalLogsToBeShared,
-										   Map<Short, Integer> vertexIDToDistance, ConcurrentSet<Short> localVertices,
+										   Map<Short, Integer> vertexIDToDistance,
+										   ConcurrentMap<JobVertexID, Short> localVertices,
 										   int determinantSharingDepth,
-										   BufferPool determinantBufferPool) {
+										   BufferPool determinantBufferPool, boolean enableDeltaSharingOptimizations) {
 		super(threadCausalLogs, hierarchicalThreadCausalLogsToBeShared, vertexIDToDistance, localVertices,
 			determinantSharingDepth,
-			determinantBufferPool);
+			determinantBufferPool, enableDeltaSharingOptimizations);
 	}
 
 	@Override
@@ -72,8 +73,12 @@ public final class FlatDeltaSerializerDeserializer extends AbstractDeltaSerializ
 
 			short currentVertex = currCID.getVertexID();
 
-			//Only send if not a local vertex, or if local then it must be the correct local vertex and be main thread, otherwise it must be the specific consumed subpartition
-			if (!localVertices.contains(currentVertex) || (outputChannelSpecificCausalLog.isForVertex(currentVertex) && currCID.isMainThread()) || outputChannelSpecificCausalLog.equals(currCID)) {
+			//Only send if not a local vertex, or if local then it must be the correct local vertex and be main
+			// thread, otherwise it must be the specific consumed subpartition
+			if (!enableDeltaSharingOptimizations ||
+				!localTasks.containsValue(currentVertex) ||
+				(outputChannelSpecificCausalLog.isForVertex(currentVertex) && currCID.isMainThread()) ||
+				outputChannelSpecificCausalLog.equals(currCID)) {
 				if (log.hasDeltaForConsumer(outputChannelID, epochID)) {
 					//serializeID
 					serializeCausalLogID(deltaHeader, currCID);

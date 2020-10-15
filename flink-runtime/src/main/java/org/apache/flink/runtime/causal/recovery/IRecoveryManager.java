@@ -41,7 +41,7 @@ import java.util.List;
 public interface IRecoveryManager {
 
 
-	void notifyNewInputChannel(RemoteInputChannel channel, int consumedSupartitionIndex, int numBuffersRemoved);
+	void notifyNewInputChannel(InputChannel inputChannel, int consumedSupartitionIndex, int numberBuffersRemoved);
 
 	void notifyNewOutputChannel(IntermediateResultPartitionID partitionId, int index);
 

@@ -649,7 +649,10 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 				final ExecutionVertex producerVertex = intermediateResult
 								.getPartitionById(resultPartitionId.getPartitionId())
 								.getProducer();
-
+				// Check whether another fail signal for the same vertex was sent recently
+				if (producerVertex.concurrentFailExecutionSignal()) {
+					return CompletableFuture.completedFuture(Acknowledge.get());
+				}
 				// Try to find the producing execution
 				Execution producerExecutionCurrent = producerVertex.getCurrentExecutionAttempt();
 

@@ -18,27 +18,19 @@
 
 package org.apache.flink.runtime.executiongraph.failover;
 
-import akka.remote.Ack;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.concurrent.FutureUtils;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.executiongraph.*;
-import org.apache.flink.runtime.instance.SlotSharingGroupId;
-import org.apache.flink.runtime.jobmaster.EstablishedResourceManagerConnection;
-import org.apache.flink.runtime.jobmaster.SlotRequestId;
 import org.apache.flink.runtime.jobmaster.slotpool.SlotPool;
-import org.apache.flink.runtime.messages.Acknowledge;
+import org.apache.flink.runtime.resourcemanager.ResourceManagerGateway;
 import org.apache.flink.util.FlinkException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
@@ -66,14 +58,20 @@ public class RunStandbyTaskStrategy extends FailoverStrategy {
 	private final int checkpointCoordinatorBackoffMultiplier;
 	private final long checkpointCoordinatorBackoffBaseMs;
 
+	private final HashSet<ResourceID> failedResources = new HashSet<>();
+	private final static Object lock = new Object();
+
 
 	/**
 	 * Creates a new failover strategy that recovers from failures by restarting all tasks
 	 * of the execution graph.
-	 *  @param executionGraph            The execution graph to handle.
+	 *
+	 * @param executionGraph            The execution graph to handle.
 	 * @param numStandbyTasksToMaintain
 	 */
-	public RunStandbyTaskStrategy(ExecutionGraph executionGraph, int numStandbyTasksToMaintain, int checkpointCoordinatorBackoffMultiplier, long checkpointCoordinatorBackoffBaseMs) {
+	public RunStandbyTaskStrategy(ExecutionGraph executionGraph, int numStandbyTasksToMaintain,
+								  int checkpointCoordinatorBackoffMultiplier,
+								  long checkpointCoordinatorBackoffBaseMs) {
 		this.executionGraph = checkNotNull(executionGraph);
 		this.callbackExecutor = checkNotNull(executionGraph.getFutureExecutor());
 		this.numStandbyTasksToMaintain = numStandbyTasksToMaintain;
@@ -91,6 +89,7 @@ public class RunStandbyTaskStrategy extends FailoverStrategy {
 		//       it helps to support better testing
 		final ExecutionVertex vertexToRecover = taskExecution.getVertex();
 
+		ResourceID resourceIDOfFailedTM = taskExecution.getAssignedResourceLocation().getResourceID();
 		//The plan to recover the vertex is the following:
 		// If a standby already exists:
 		// 		Concurrently remove the failed slots and start the standby
@@ -99,21 +98,14 @@ public class RunStandbyTaskStrategy extends FailoverStrategy {
 		//		avoids scheduling the new standby to the failed TM. Following that, start it.
 		// If an error occurs anywhere in this process, we fallback to the global restart strategy
 
-		LOG.info(getStrategyName() + "failover strategy is triggered for the recovery of task " +
-			vertexToRecover.getTaskNameWithSubtaskIndex() + ".");
+		//It is also important to signal to other tasks to ignore any checkpoints unacknowledged by the failed task.
+		// Otherwise blocking would occur.
+
+		LOG.info("{} failover strategy is triggered for the recovery of task vertex {} in TM {}", getStrategyName(),
+			taskExecution.getVertex().getVertexId(), resourceIDOfFailedTM);
 
 
-		LOG.debug("Discarding pending checkpoints unacknowledged by failed task and restarting checkpoint coordinator with backoff");
-		//In order to allow the task to recover while still making progress, we reset the checkpoint coordinator timeout
-		assert this.executionGraph.getCheckpointCoordinator() != null;
-		Object checkpointLock = executionGraph.getCheckpointCoordinator().getCheckpointLock();
-		ExecutionVertex vertex = taskExecution.getVertex();
-		callbackExecutor.execute(() -> {
-			this.executionGraph.getCheckpointCoordinator().rpcIgnoreUnacknowledgedPendingCheckpointsFor(vertex, taskExecution.getAttemptId(), new Exception("Task failed and is recovering causally."));
-			this.executionGraph.getCheckpointCoordinator().restartBackoffCheckpointScheduler(checkpointCoordinatorBackoffMultiplier, checkpointCoordinatorBackoffBaseMs);
-		});
-
-		CompletableFuture<Void> removeSlotsFuture = asyncRemoveFailedSlots(taskExecution);
+		CompletableFuture<Void> removeSlotsFuture = removeFailedSlots(taskExecution);
 
 		//By default, there should already be a standby ready
 		CompletableFuture<Void> standbyReady = CompletableFuture.completedFuture(null);
@@ -127,10 +119,7 @@ public class RunStandbyTaskStrategy extends FailoverStrategy {
 		//the necessary steps first
 		standbyReady.thenAcceptAsync((Void) -> {
 			LOG.info("Running the standby execution.");
-			synchronized (checkpointLock) {
-				vertexToRecover.runStandbyExecution();
-			}
-			LOG.info("Done requesting standby execution");
+			vertexToRecover.runStandbyExecution();
 		}, callbackExecutor);
 
 		//In case of exceptions during the whole execution, trigger full recovery
@@ -142,18 +131,15 @@ public class RunStandbyTaskStrategy extends FailoverStrategy {
 	}
 
 	private CompletableFuture<Void> composePrepareNewStandby(ExecutionVertex vertexToRecover,
-															 CompletableFuture<Void> removeSlotsFuture) {
-		return removeSlotsFuture.thenComposeAsync((Void) -> {
-			//I believe the compose call should then wait for the addStandbyExecution to complete
-			LOG.info("Adding a new standby execution");
-			return vertexToRecover.addStandbyExecution();
-		}, callbackExecutor).thenComposeAsync((Void) -> {
+															 CompletableFuture<Void> releaseSlotsFuture) {
+		return releaseSlotsFuture.thenComposeAsync((Void) -> {
+			LOG.info("Waiting for upstreams to be deployed before adding standby");
+			while (vertexToRecover.getDirectUpstreamVertexes().stream().map(ExecutionVertex::getExecutionState)
+				.anyMatch(x -> x != ExecutionState.RUNNING)) ;
+			vertexToRecover.addStandbyExecution();
 			LOG.info("Waiting for standby to be ready");
 			Execution standby = vertexToRecover.getStandbyExecutions().get(0);
-			while (true) {
-				if (standby.getState() == ExecutionState.STANDBY)
-					break;
-			}
+			while (standby.getState() != ExecutionState.STANDBY) ;
 			LOG.info("Standby is ready.");
 			LOG.info("Dispatching latest state.");
 			try {
@@ -167,20 +153,31 @@ public class RunStandbyTaskStrategy extends FailoverStrategy {
 		}, callbackExecutor);
 	}
 
-	private CompletableFuture<Void> asyncRemoveFailedSlots(Execution taskExecution) {
-
-		ResourceID resourceIDOfFailedTM = taskExecution.getAssignedResourceLocation().getResourceID();
-		Exception disconnectionCause = new FlinkException("disconnecting TM preventatively");
-
+	private CompletableFuture<Void> removeFailedSlots(Execution taskExecution) {
 		return CompletableFuture.supplyAsync(() -> {
-			LOG.info("Releasing failed slots");
-			//Note: this happens synchronously, even if it returns a future.
-			executionGraph.getSlotPool().releaseTaskManager(resourceIDOfFailedTM, disconnectionCause);
+			ResourceID resourceIDOfFailedTM = taskExecution.getAssignedResourceLocation().getResourceID();
+			LOG.info("Checking if need to remove failed slots");
+			synchronized (lock) {
+				if (failedResources.contains(resourceIDOfFailedTM))
+					return null;
+				LOG.info("Failing resource {}", resourceIDOfFailedTM);
+				failedResources.add(resourceIDOfFailedTM);
+				ResourceManagerGateway rmGateway =
+					executionGraph.getResourceManagerConnection().getResourceManagerGateway();
+				SlotPool slotPool = executionGraph.getSlotPool();
+				FlinkException exception = new FlinkException("Disconnecting Task Manager");
 
-			LOG.info("Disconnect current TM to avoid rescheduling to failed TM");
-			EstablishedResourceManagerConnection resManCon = executionGraph.getResourceManagerConnection();
-			resManCon.getResourceManagerGateway().disconnectTaskManager(resourceIDOfFailedTM, disconnectionCause);
+				LOG.info("Releasing task manager slots and disconnecting");
+				slotPool.releaseTaskManager(resourceIDOfFailedTM, exception);
+				rmGateway.disconnectTaskManager(resourceIDOfFailedTM, exception);
 
+				LOG.info("Discarding pending checkpoints unacknowledged by failed task and restarting checkpoint " +
+					"coordinator" +
+					" " +
+					"with backoff");
+				this.executionGraph.getCheckpointCoordinator().rpcIgnoreUnacknowledgedPendingCheckpointsFor(taskExecution.getVertex(), new Exception("Task failed and is recovering causally."));
+				this.executionGraph.getCheckpointCoordinator().restartBackoffCheckpointScheduler(checkpointCoordinatorBackoffMultiplier, checkpointCoordinatorBackoffBaseMs);
+			}
 			return null;
 		}, callbackExecutor);
 	}
@@ -257,9 +254,11 @@ public class RunStandbyTaskStrategy extends FailoverStrategy {
 		long coordinatorBackoffBaseMs;
 
 		public Factory(int numStandbyTasksToMaintain) {
-			this(numStandbyTasksToMaintain, 3,10000L);
+			this(numStandbyTasksToMaintain, 3, 10000L);
 		}
-		public Factory(int numStandbyTasksToMaintain, int coordinatorBackoffMultiplier, long coordinatorBackoffBaseMs) {
+
+		public Factory(int numStandbyTasksToMaintain, int coordinatorBackoffMultiplier,
+					   long coordinatorBackoffBaseMs) {
 			this.numStandbyTasksToMaintain = numStandbyTasksToMaintain;
 			this.coordinatorBackoffMultiplier = coordinatorBackoffMultiplier;
 			this.coordinatorBackoffBaseMs = coordinatorBackoffBaseMs;
@@ -267,7 +266,8 @@ public class RunStandbyTaskStrategy extends FailoverStrategy {
 
 		@Override
 		public FailoverStrategy create(ExecutionGraph executionGraph) {
-			return new RunStandbyTaskStrategy(executionGraph, numStandbyTasksToMaintain, coordinatorBackoffMultiplier, coordinatorBackoffBaseMs);
+			return new RunStandbyTaskStrategy(executionGraph, numStandbyTasksToMaintain, coordinatorBackoffMultiplier,
+				coordinatorBackoffBaseMs);
 		}
 	}
 }

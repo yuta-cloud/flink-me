@@ -190,6 +190,10 @@ public abstract class ResultSubpartition implements CheckpointListener, Checkpoi
 		return null;
 	}
 
+	public int getIndex(){
+		return index;
+	}
+
     // ------------------------------------------------------------------------
 
 	/**

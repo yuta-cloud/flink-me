@@ -31,9 +31,11 @@ import org.apache.flink.runtime.causal.VertexID;
 import org.apache.flink.runtime.causal.determinant.Determinant;
 import org.apache.flink.runtime.causal.determinant.DeterminantEncoder;
 import org.apache.flink.runtime.causal.log.thread.ThreadCausalLog;
+import org.apache.flink.runtime.io.network.api.DeterminantRequestEvent;
 import org.apache.flink.runtime.io.network.api.writer.ResultPartitionWriter;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannelID;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
 
 /**
@@ -45,7 +47,7 @@ import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
  */
 public interface JobCausalLog {
 
-	void registerSubtask(VertexGraphInformation vertexGraphInformation, ResultPartitionWriter[] resultPartitionsOfLocalVertex);
+	void registerTask(VertexGraphInformation vertexGraphInformation, JobVertexID jobVertexId, ResultPartitionWriter[] resultPartitionsOfLocalVertex);
 
 	ThreadCausalLog getThreadCausalLog(CausalLogID causalLogID);
 
@@ -53,7 +55,7 @@ public interface JobCausalLog {
 
 	ByteBuf enrichWithCausalLogDelta(ByteBuf serialized, InputChannelID inputChannelID, long epochID);
 
-	DeterminantResponseEvent respondToDeterminantRequest(VertexID vertexId, long startEpochID);
+	DeterminantResponseEvent respondToDeterminantRequest(DeterminantRequestEvent e);
 
 	void registerDownstreamConsumer(InputChannelID inputChannelID, CausalLogID consumedSubpartition);
 
@@ -64,9 +66,8 @@ public interface JobCausalLog {
 
 	void notifyCheckpointComplete(long checkpointID);
 
-	void close();
-
 	//================ Safety check metrics==================================================
 	int threadLogLength(CausalLogID causalLogID);
 
+	boolean unregisterTask(JobVertexID jobVertexId);
 }

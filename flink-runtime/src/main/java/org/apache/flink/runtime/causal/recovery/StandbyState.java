@@ -26,15 +26,13 @@
 package org.apache.flink.runtime.causal.recovery;
 
 import org.apache.flink.runtime.io.network.partition.PipelinedSubpartition;
-import org.apache.flink.runtime.io.network.partition.consumer.RemoteInputChannel;
+import org.apache.flink.runtime.io.network.partition.consumer.InputChannel;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.HashSet;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 /**
  * In this state, we are waiting for recovery to begin.
@@ -67,14 +65,14 @@ public class StandbyState extends AbstractState {
 
 	@Override
 	public void notifyStartRecovery() {
-		LOG.info("Received start recovery notification!");
+		logDebug("Received start recovery notification!");
 
 		State newState = new WaitingConnectionsState(context);
 		context.setState(newState);
 
 		// Notify state of save notifications
 		for(EarlyNewInputChannelNotification i : inputChannelNotifications){
-			newState.notifyNewInputChannel(i.getRemoteInputChannel(), i.getConsumedSubpartitionIndex(), i.getNumBuffersRemoved());
+			newState.notifyNewInputChannel(i.getInputChannel(), i.getConsumedSubpartitionIndex(), i.getNumBuffersRemoved());
 		}
 		for(EarlyNewOutputChannelNotification o : outputChannelNotifications){
 			newState.notifyNewOutputChannel(o.getIntermediateResultPartitionID(), o.subpartitionIndex);
@@ -82,7 +80,7 @@ public class StandbyState extends AbstractState {
 	}
 
 	@Override
-	public void notifyNewInputChannel(RemoteInputChannel remoteInputChannel, int consumedSubpartitionIndex, int numBuffersRemoved){
+	public void notifyNewInputChannel(InputChannel remoteInputChannel, int consumedSubpartitionIndex, int numBuffersRemoved){
 		this.inputChannelNotifications.add(new EarlyNewInputChannelNotification(remoteInputChannel, consumedSubpartitionIndex, numBuffersRemoved));
 
 	}
@@ -117,18 +115,18 @@ public class StandbyState extends AbstractState {
 	}
 
 	private static class EarlyNewInputChannelNotification {
-		private final RemoteInputChannel remoteInputChannel;
+		private final InputChannel inputChannel;
 		private final int consumedSubpartitionIndex;
 		private final int numBuffersRemoved;
 
-		public EarlyNewInputChannelNotification(RemoteInputChannel remoteInputChannel, int consumedSubpartitionIndex, int numBuffersRemoved) {
-			this.remoteInputChannel = remoteInputChannel;
+		public EarlyNewInputChannelNotification(InputChannel inputChannel, int consumedSubpartitionIndex, int numBuffersRemoved) {
+			this.inputChannel = inputChannel;
 			this.consumedSubpartitionIndex = consumedSubpartitionIndex;
 			this.numBuffersRemoved = numBuffersRemoved;
 		}
 
-		public RemoteInputChannel getRemoteInputChannel() {
-			return remoteInputChannel;
+		public InputChannel getInputChannel() {
+			return inputChannel;
 		}
 
 		public int getConsumedSubpartitionIndex() {

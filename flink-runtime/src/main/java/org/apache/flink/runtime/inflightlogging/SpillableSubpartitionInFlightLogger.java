@@ -144,7 +144,8 @@ public class SpillableSubpartitionInFlightLogger implements InFlightLog {
 
 	@Override
 	public void destroyBufferPools() {
-		recoveryBufferPool.lazyDestroy();
+		if(recoveryBufferPool != null)
+			recoveryBufferPool.lazyDestroy();
 	}
 
 	@Override

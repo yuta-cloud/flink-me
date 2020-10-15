@@ -22,6 +22,7 @@ import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.DataOutputView;
 import org.apache.flink.runtime.causal.log.job.CausalLogID;
 import org.apache.flink.runtime.event.TaskEvent;
+import org.apache.flink.runtime.io.network.api.DeterminantRequestEvent;
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
 import org.apache.flink.shaded.netty4.io.netty.buffer.Unpooled;
 
@@ -38,11 +39,9 @@ public class DeterminantResponseEvent extends TaskEvent {
 
 	private Map<CausalLogID, ByteBuf> determinants;
 
-	public DeterminantResponseEvent() {
-	}
+	private long correlationID;
 
-	public DeterminantResponseEvent(VertexID failedVertex) {
-		this(false, failedVertex);
+	public DeterminantResponseEvent() {
 	}
 
 	/**
@@ -55,9 +54,16 @@ public class DeterminantResponseEvent extends TaskEvent {
 		determinants = new HashMap<>();
 	}
 
-	public DeterminantResponseEvent(VertexID vertexID, Map<CausalLogID, ByteBuf> determinants) {
-		this.found = true;
-		this.vertexID = vertexID;
+	public DeterminantResponseEvent(DeterminantRequestEvent determinantRequestEvent) {
+		this.found = false;
+		this.vertexID = determinantRequestEvent.getFailedVertex();
+		this.correlationID = determinantRequestEvent.getUpstreamCorrelationID();
+		this.determinants = new HashMap<>();
+	}
+
+	public DeterminantResponseEvent(DeterminantRequestEvent e, Map<CausalLogID, ByteBuf> determinants) {
+		this(e);
+		found = true;
 		this.determinants = determinants;
 	}
 
@@ -74,10 +80,19 @@ public class DeterminantResponseEvent extends TaskEvent {
 		return determinants;
 	}
 
+	public long getCorrelationID() {
+		return correlationID;
+	}
+
+	public void setCorrelationID(long correlationID) {
+		this.correlationID = correlationID;
+	}
+
 	@Override
 	public void write(DataOutputView out) throws IOException {
 		out.writeBoolean(found);
 		out.writeShort(vertexID.getVertexID());
+		out.writeLong(correlationID);
 		out.writeByte(determinants.size());
 		for (Map.Entry<CausalLogID, ByteBuf> entry : determinants.entrySet()) {
 			entry.getKey().write(out);
@@ -92,6 +107,7 @@ public class DeterminantResponseEvent extends TaskEvent {
 	public void read(DataInputView in) throws IOException {
 		this.found = in.readBoolean();
 		this.vertexID = new VertexID(in.readShort());
+		this.correlationID = in.readLong();
 		this.determinants = new HashMap<>();
 		byte numDeterminantDeltas = in.readByte();
 		for (int i = 0; i < numDeterminantDeltas; i++) {
@@ -135,7 +151,9 @@ public class DeterminantResponseEvent extends TaskEvent {
 		return "DeterminantResponseEvent{" +
 			"found=" + found +
 			", vertexID=" + vertexID +
+			", correlationID=" + correlationID +
 			", determinants=[" + determinants.entrySet().stream().map(e-> e.getKey() + " -> " + e.getValue().readableBytes()).collect(Collectors.joining(", ")) +
 			"]}";
 	}
+
 }

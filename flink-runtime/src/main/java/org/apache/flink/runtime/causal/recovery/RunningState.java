@@ -26,11 +26,11 @@
 package org.apache.flink.runtime.causal.recovery;
 
 import org.apache.flink.runtime.causal.DeterminantResponseEvent;
-import org.apache.flink.runtime.causal.VertexID;
 import org.apache.flink.runtime.causal.determinant.AsyncDeterminant;
 import org.apache.flink.runtime.event.InFlightLogRequestEvent;
 import org.apache.flink.runtime.io.network.api.DeterminantRequestEvent;
 import org.apache.flink.runtime.io.network.partition.PipelinedSubpartition;
+import org.apache.flink.runtime.io.network.partition.consumer.InputChannel;
 import org.apache.flink.runtime.io.network.partition.consumer.RemoteInputChannel;
 import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGate;
 import org.slf4j.Logger;
@@ -54,7 +54,7 @@ public class RunningState extends AbstractState {
 		context.processingTimeForceable.concludeReplay();
 
 		for(AsyncDeterminant delayedRPCRequest : context.rpcRequestsDuringRecovery){
-			LOG.info("Executing delayed RPC request: {}", delayedRPCRequest);
+			logDebug("Executing delayed RPC request: {}", delayedRPCRequest);
 			delayedRPCRequest.setRecordCount(context.recordCountProvider.getRecordCount());
 			delayedRPCRequest.process(context);
 		}
@@ -67,10 +67,10 @@ public class RunningState extends AbstractState {
 		if (context.isRecovering())
 			super.notifyInFlightLogRequestEvent(e);
 		else {
-			LOG.info("Received an InflightLogRequest {}", e);
+			logDebug("Received an InflightLogRequest {}", e);
 			PipelinedSubpartition subpartitionRequested =
 				context.subpartitionTable.get(e.getIntermediateResultPartitionID(), e.getSubpartitionIndex());
-			LOG.info("intermediateResultPartition to request replay from: {}", e.getIntermediateResultPartitionID());
+			logDebug("intermediateResultPartition to request replay from: {}", e.getIntermediateResultPartitionID());
 			subpartitionRequested.requestReplay(e.getCheckpointId(), e.getNumberOfBuffersToSkip());
 		}
 	}
@@ -78,14 +78,13 @@ public class RunningState extends AbstractState {
 
 	@Override
 	public void notifyDeterminantRequestEvent(DeterminantRequestEvent e, int channelRequestArrivedFrom) {
-		LOG.info("Received a determinant request {} on channel {}", e, channelRequestArrivedFrom);
+		logDebug("Received a determinant request {} on channel {}", e, channelRequestArrivedFrom);
 		//Since we are in running state, we can simply reply
-		VertexID vertex = e.getFailedVertex();
 
 		try {
 			DeterminantResponseEvent responseEvent =
-				context.causalLog.respondToDeterminantRequest(vertex, e.getStartEpochID());
-			LOG.info("Responding with: {}", responseEvent);
+				context.causalLog.respondToDeterminantRequest(e);
+			logDebug("Responding with: {}", responseEvent);
 
 			context.inputGate.getInputChannel(channelRequestArrivedFrom).sendTaskEvent(responseEvent);
 		} catch (IOException | InterruptedException ex) {
@@ -94,8 +93,11 @@ public class RunningState extends AbstractState {
 	}
 
 	@Override
-	public void notifyNewInputChannel(RemoteInputChannel inputChannel, int consumedSubpartitionIndex,
-									  int numBuffersRemoved){
+	public void notifyNewInputChannel(InputChannel inputChannel, int consumedSubpartitionIndex,
+                                      int numBuffersRemoved){
+
+		if(!(inputChannel instanceof RemoteInputChannel))
+			return;
 		if(context.determinantSharingDepth == 0) {
 			SingleInputGate singleInputGate = inputChannel.getInputGate();
 			int channelIndex = inputChannel.getChannelIndex();

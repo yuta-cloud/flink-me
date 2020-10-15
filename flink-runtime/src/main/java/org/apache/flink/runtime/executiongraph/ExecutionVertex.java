@@ -54,6 +54,7 @@ import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.runtime.execution.ExecutionState.FINISHED;
 import static org.apache.flink.runtime.execution.ExecutionState.RUNNING;
@@ -987,7 +988,31 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 		return null;
 	}
 
-	// --------------------------------------------------------------------------------------------
+	public List<ExecutionVertex> getDownstreamVertexes() {
+		List<ExecutionVertex> toReturn = new LinkedList<>();
+		Deque<ExecutionVertex> unexplored = new LinkedList<>(getDirectDownstreamVertexes());
+
+		while (!unexplored.isEmpty()){
+			ExecutionVertex toExplore = unexplored.pop();
+			toReturn.add(toExplore);
+
+			unexplored.addAll(toExplore.getDirectDownstreamVertexes());
+		}
+		return toReturn.stream().distinct().collect(Collectors.toList());
+	}
+
+	public List<ExecutionVertex> getDirectDownstreamVertexes() {
+		return getProducedPartitions().values().stream()
+			.flatMap(x -> x.getConsumers().stream().flatMap(Collection::stream))
+			.map(ExecutionEdge::getTarget).distinct().collect(Collectors.toList());
+	}
+
+	public List<ExecutionVertex> getDirectUpstreamVertexes() {
+		return Arrays.stream(inputEdges).flatMap(Arrays::stream).map(ExecutionEdge::getSource)
+			.map(IntermediateResultPartition::getProducer).distinct().collect(Collectors.toList());
+	}
+
+		// --------------------------------------------------------------------------------------------
 	//  Utilities
 	// --------------------------------------------------------------------------------------------
 
@@ -1002,7 +1027,6 @@ public class ExecutionVertex implements AccessExecutionVertex, Archiveable<Archi
 	}
 
     public void ignoreCheckpoint(long checkpointId) {
-		//TODO all of the code here messing with "current execution" feels fairly unprotected. Should probably introduce a lock.
 
 		try {
 			this.currentExecution.ignoreCheckpointRpcCall(checkpointId).get();

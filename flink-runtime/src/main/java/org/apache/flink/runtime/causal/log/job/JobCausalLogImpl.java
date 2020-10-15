@@ -38,10 +38,12 @@ import org.apache.flink.runtime.causal.log.job.serde.FlatDeltaSerializerDeserial
 import org.apache.flink.runtime.causal.log.job.serde.GroupingDeltaSerializerDeserializer;
 import org.apache.flink.runtime.causal.log.thread.ThreadCausalLog;
 import org.apache.flink.runtime.causal.log.thread.ThreadCausalLogImpl;
+import org.apache.flink.runtime.io.network.api.DeterminantRequestEvent;
 import org.apache.flink.runtime.io.network.api.writer.ResultPartitionWriter;
 import org.apache.flink.runtime.io.network.buffer.BufferPool;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannelID;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
 import org.apache.flink.shaded.netty4.io.netty.util.internal.ConcurrentSet;
 import org.slf4j.Logger;
@@ -77,13 +79,14 @@ public class JobCausalLogImpl implements JobCausalLog {
 	// Stores the logs to be shared downstream (regarding determinant sharing depth), in a hierarchical fashion
 	private final ConcurrentMap<Short, VertexCausalLogs> hierarchicalThreadCausalLogsToBeShared;
 
-	private final ConcurrentSet<Short> localVertices;
+	private final ConcurrentMap<JobVertexID, Short> localTasks;
+
 
 	private final DeltaSerializerDeserializer deltaSerdeStrategy;
 
 	private final BufferPool determinantBufferPool;
 
-	public JobCausalLogImpl(int determinantSharingDepth, BufferPool bufferPool, DeltaEncodingStrategy deltaEncodingStrategy) {
+	public JobCausalLogImpl(int determinantSharingDepth, BufferPool bufferPool, DeltaEncodingStrategy deltaEncodingStrategy, boolean enableDeltaSharingOptimizations) {
 		this.determinantSharingDepth = determinantSharingDepth;
 		this.determinantEncoder = new SimpleDeterminantEncoder();
 
@@ -93,22 +96,22 @@ public class JobCausalLogImpl implements JobCausalLog {
 		this.determinantBufferPool = bufferPool;
 
 		this.vertexIDToDistance = new HashMap<>();
-		this.localVertices = new ConcurrentSet<>();
+		this.localTasks = new ConcurrentHashMap<>();
 
 		if (deltaEncodingStrategy.equals(DeltaEncodingStrategy.FLAT))
 			this.deltaSerdeStrategy = new FlatDeltaSerializerDeserializer(flatThreadCausalLogs,
-				hierarchicalThreadCausalLogsToBeShared, vertexIDToDistance, localVertices, determinantSharingDepth, bufferPool);
+				hierarchicalThreadCausalLogsToBeShared, vertexIDToDistance, localTasks, determinantSharingDepth, bufferPool, enableDeltaSharingOptimizations);
 		else
 			this.deltaSerdeStrategy = new GroupingDeltaSerializerDeserializer(flatThreadCausalLogs,
-				hierarchicalThreadCausalLogsToBeShared, vertexIDToDistance, localVertices, determinantSharingDepth, bufferPool);
+				hierarchicalThreadCausalLogsToBeShared, vertexIDToDistance, localTasks, determinantSharingDepth, bufferPool, enableDeltaSharingOptimizations);
 	}
 
 	@Override
-	public void registerSubtask(VertexGraphInformation vertexGraphInformation,
-								ResultPartitionWriter[] resultPartitionsOfLocalVertex) {
+	public void registerTask(VertexGraphInformation vertexGraphInformation,
+							 JobVertexID jobVertexId, ResultPartitionWriter[] resultPartitionsOfLocalVertex) {
 
 		short vertexID = vertexGraphInformation.getThisTasksVertexID().getVertexID();
-		localVertices.add(vertexID);
+		localTasks.put(jobVertexId, vertexID);
 		Map<Short, Integer> vertexIDToDistance =
 			vertexGraphInformation.getDistances().entrySet().stream().collect(Collectors.toMap(e -> e.getKey().getVertexID(), Map.Entry::getValue));
 		this.vertexIDToDistance.putAll(vertexIDToDistance);
@@ -165,19 +168,21 @@ public class JobCausalLogImpl implements JobCausalLog {
 	}
 
 	@Override
-	public DeterminantResponseEvent respondToDeterminantRequest(VertexID vertexId, long startEpochID) {
+	public DeterminantResponseEvent respondToDeterminantRequest(DeterminantRequestEvent e) {
+		VertexID vertexId = e.getFailedVertex();
+		long startEpochID = e.getStartEpochID();
 		LOG.info("Got request for determinants of vertexID {}", vertexId);
 		if (determinantSharingDepth != -1 && Math.abs(this.vertexIDToDistance.get(vertexId.getVertexID())) > determinantSharingDepth)
-			return new DeterminantResponseEvent(false, vertexId);
+			return new DeterminantResponseEvent(e);
 		else {
 			short vertex = vertexId.getVertexID();
 			Map<CausalLogID, ByteBuf> determinants = new HashMap<>();
 
-			for (Map.Entry<CausalLogID, ThreadCausalLog> e : flatThreadCausalLogs.entrySet())
-				if (e.getKey().isForVertex(vertex))
-					determinants.put(e.getKey(), e.getValue().getDeterminants(startEpochID));
+			for (Map.Entry<CausalLogID, ThreadCausalLog> entry : flatThreadCausalLogs.entrySet())
+				if (entry.getKey().isForVertex(vertex))
+					determinants.put(entry.getKey(), entry.getValue().getDeterminants(startEpochID));
 
-			return new DeterminantResponseEvent(vertexId, determinants);
+			return new DeterminantResponseEvent(e, determinants);
 		}
 	}
 
@@ -204,16 +209,21 @@ public class JobCausalLogImpl implements JobCausalLog {
 	}
 
 	@Override
-	public void close() {
-		for (ThreadCausalLog threadCausalLog : flatThreadCausalLogs.values()) {
-			threadCausalLog.close();
-		}
-		determinantBufferPool.lazyDestroy();
+	public int threadLogLength(CausalLogID causalLogID) {
+		return flatThreadCausalLogs.get(causalLogID).logLength();
 	}
 
 	@Override
-	public int threadLogLength(CausalLogID causalLogID) {
-		return flatThreadCausalLogs.get(causalLogID).logLength();
+	public boolean unregisterTask(JobVertexID jobVertexId) {
+		short vertexID = localTasks.remove(jobVertexId);
+		if(localTasks.size() == 0) {
+			for (ThreadCausalLog threadCausalLog : flatThreadCausalLogs.values()) {
+				threadCausalLog.close();
+			}
+			determinantBufferPool.lazyDestroy();
+			return true;
+		}
+		return false;
 	}
 
 }

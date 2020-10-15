@@ -117,7 +117,7 @@ public class TwoInputStreamTask<IN1, IN2, OUT> extends StreamTask<OUT, TwoInputS
 		// cache processor reference on the stack, to make the code more JIT friendly
 		final StreamTwoInputProcessor<IN1, IN2> inputProcessor = this.inputProcessor;
 
-		if(getRecoveryManager().isRecovering())
+		if(!getRecoveryManager().isRunning())
 			inputProcessor.recover();
 
 		while (running && inputProcessor.processInput()) {

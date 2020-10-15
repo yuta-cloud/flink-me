@@ -113,7 +113,7 @@ public class OneInputStreamTask<IN, OUT> extends StreamTask<OUT, OneInputStreamO
 		final StreamInputProcessor<IN> inputProcessor = this.inputProcessor;
 
 
-		if(getRecoveryManager().isRecovering())
+		if(!getRecoveryManager().isRunning())
 			inputProcessor.recover();
 
 		while (running && inputProcessor.processInput()) {

@@ -229,126 +229,125 @@ public class StreamTwoInputProcessor<IN1, IN2> implements RecordCountTargetForce
 			}
 		}
 
-		while (true) {
-			if (currentRecordDeserializer != null) {
-				LOG.debug("processInput() of task: {}", taskName);
-				DeserializationResult result;
-				if (currentChannel < numInputChannels1) {
-					result = currentRecordDeserializer.getNextRecord(deserializationDelegate1);
-					//todo figure out upstream task id and generate determinant
-				} else {
-					result = currentRecordDeserializer.getNextRecord(deserializationDelegate2);
-				}
-
-				if (result.isBufferConsumed()) {
-					currentRecordDeserializer.getCurrentBuffer().recycleBuffer();
-					currentRecordDeserializer = null;
-				}
-
-				if (result.isFullRecord()) {
-					if (currentChannel < numInputChannels1) {
-						StreamElement recordOrWatermark = deserializationDelegate1.getInstance();
-						if (recordOrWatermark.isWatermark()) {
-							synchronized (lock) {
-								recordCountProvider.incRecordCount();
-								statusWatermarkValve1.inputWatermark(recordOrWatermark.asWatermark(), currentChannel);
-							}
-							return true;
-						} else if (recordOrWatermark.isStreamStatus()) {
-							synchronized (lock) {
-								recordCountProvider.incRecordCount();
-								statusWatermarkValve1.inputStreamStatus(recordOrWatermark.asStreamStatus(),
-									currentChannel);
-							}
-							return true;
-						} else if (recordOrWatermark.isLatencyMarker()) {
-							synchronized (lock) {
-								recordCountProvider.incRecordCount();
-								streamOperator.processLatencyMarker1(recordOrWatermark.asLatencyMarker());
-							}
-							return true;
-						} else {
-							StreamRecord<IN1> record = recordOrWatermark.asRecord();
-							synchronized (lock) {
-								recordCountProvider.incRecordCount();
-								numRecordsIn.inc();
-								streamOperator.setKeyContextElement1(record);
-								LOG.debug("{}: Process element no {}: {}.", taskName, numRecordsIn.getCount(), record);
-								streamOperator.processElement1(record);
-							}
-							return true;
-
-						}
-					} else {
-						StreamElement recordOrWatermark = deserializationDelegate2.getInstance();
-						if (recordOrWatermark.isWatermark()) {
-							synchronized (lock) {
-								recordCountProvider.incRecordCount();
-								statusWatermarkValve2.inputWatermark(recordOrWatermark.asWatermark(),
-									currentChannel - numInputChannels1);
-							}
-							return true;
-						} else if (recordOrWatermark.isStreamStatus()) {
-							synchronized (lock) {
-								recordCountProvider.incRecordCount();
-								statusWatermarkValve2.inputStreamStatus(recordOrWatermark.asStreamStatus(),
-									currentChannel - numInputChannels1);
-							}
-							return true;
-						} else if (recordOrWatermark.isLatencyMarker()) {
-							synchronized (lock) {
-								recordCountProvider.incRecordCount();
-								streamOperator.processLatencyMarker2(recordOrWatermark.asLatencyMarker());
-							}
-							return true;
-						} else {
-							StreamRecord<IN2> record = recordOrWatermark.asRecord();
-							synchronized (lock) {
-								recordCountProvider.incRecordCount();
-								numRecordsIn.inc();
-								streamOperator.setKeyContextElement2(record);
-								LOG.debug("{}: Process element no {}: {}.", taskName, numRecordsIn.getCount(), record);
-								streamOperator.processElement2(record);
-							}
-							return true;
-						}
-					}
-				}
-			}
-
-			LOG.debug("barrierHandler.getNextNonBlocked().");
-			final BufferOrEvent bufferOrEvent = barrierHandler.getNextNonBlocked();
-			if (bufferOrEvent != null) {
-
-				if (bufferOrEvent.isBuffer()) {
-					LOG.debug("Get buffer.");
-					currentChannel = bufferOrEvent.getChannelIndex();
-					currentRecordDeserializer = recordDeserializers[currentChannel];
-					currentRecordDeserializer.setNextBuffer(bufferOrEvent.getBuffer());
-
-				} else {
-					// Event received
-					LOG.debug("Get event.");
-					final AbstractEvent event = bufferOrEvent.getEvent();
-					if (event.getClass() != EndOfPartitionEvent.class) {
-						throw new IOException("Unexpected event: " + event);
-					}
-				}
+		if (currentRecordDeserializer != null) {
+			LOG.debug("processInput() of task: {}", taskName);
+			DeserializationResult result;
+			if (currentChannel < numInputChannels1) {
+				result = currentRecordDeserializer.getNextRecord(deserializationDelegate1);
 			} else {
-				isFinished = true;
-				if (!barrierHandler.isEmpty()) {
-					throw new IllegalStateException("Trailing data in checkpoint barrier handler.");
-				}
-				return false;
+				result = currentRecordDeserializer.getNextRecord(deserializationDelegate2);
 			}
+
+			if (result.isBufferConsumed()) {
+				currentRecordDeserializer.getCurrentBuffer().recycleBuffer();
+				currentRecordDeserializer = null;
+			}
+
+			if (result.isFullRecord()) {
+				if (currentChannel < numInputChannels1) {
+					StreamElement recordOrWatermark = deserializationDelegate1.getInstance();
+					if (recordOrWatermark.isWatermark()) {
+						synchronized (lock) {
+							recordCountProvider.incRecordCount();
+							statusWatermarkValve1.inputWatermark(recordOrWatermark.asWatermark(), currentChannel);
+						}
+						return true;
+					} else if (recordOrWatermark.isStreamStatus()) {
+						synchronized (lock) {
+							recordCountProvider.incRecordCount();
+							statusWatermarkValve1.inputStreamStatus(recordOrWatermark.asStreamStatus(),
+								currentChannel);
+						}
+						return true;
+					} else if (recordOrWatermark.isLatencyMarker()) {
+						synchronized (lock) {
+							recordCountProvider.incRecordCount();
+							streamOperator.processLatencyMarker1(recordOrWatermark.asLatencyMarker());
+						}
+						return true;
+					} else {
+						StreamRecord<IN1> record = recordOrWatermark.asRecord();
+						synchronized (lock) {
+							recordCountProvider.incRecordCount();
+							numRecordsIn.inc();
+							streamOperator.setKeyContextElement1(record);
+							LOG.debug("{}: Process element no {}: {}.", taskName, numRecordsIn.getCount(), record);
+							streamOperator.processElement1(record);
+						}
+						return true;
+
+					}
+				} else {
+					StreamElement recordOrWatermark = deserializationDelegate2.getInstance();
+					if (recordOrWatermark.isWatermark()) {
+						synchronized (lock) {
+							recordCountProvider.incRecordCount();
+							statusWatermarkValve2.inputWatermark(recordOrWatermark.asWatermark(),
+								currentChannel - numInputChannels1);
+						}
+						return true;
+					} else if (recordOrWatermark.isStreamStatus()) {
+						synchronized (lock) {
+							recordCountProvider.incRecordCount();
+							statusWatermarkValve2.inputStreamStatus(recordOrWatermark.asStreamStatus(),
+								currentChannel - numInputChannels1);
+						}
+						return true;
+					} else if (recordOrWatermark.isLatencyMarker()) {
+						synchronized (lock) {
+							recordCountProvider.incRecordCount();
+							streamOperator.processLatencyMarker2(recordOrWatermark.asLatencyMarker());
+						}
+						return true;
+					} else {
+						StreamRecord<IN2> record = recordOrWatermark.asRecord();
+						synchronized (lock) {
+							recordCountProvider.incRecordCount();
+							numRecordsIn.inc();
+							streamOperator.setKeyContextElement2(record);
+							LOG.debug("{}: Process element no {}: {}.", taskName, numRecordsIn.getCount(), record);
+							streamOperator.processElement2(record);
+						}
+						return true;
+					}
+				}
+			}
+		}
+
+		LOG.debug("barrierHandler.getNextNonBlocked().");
+		final BufferOrEvent bufferOrEvent = barrierHandler.getNextNonBlocked();
+		if (bufferOrEvent != null) {
+
+			if (bufferOrEvent.isBuffer()) {
+				LOG.debug("Get buffer.");
+				currentChannel = bufferOrEvent.getChannelIndex();
+				currentRecordDeserializer = recordDeserializers[currentChannel];
+				currentRecordDeserializer.setNextBuffer(bufferOrEvent.getBuffer());
+
+			} else {
+				// Event received
+				LOG.debug("Get event.");
+				final AbstractEvent event = bufferOrEvent.getEvent();
+				if (event.getClass() != EndOfPartitionEvent.class) {
+					throw new IOException("Unexpected event: " + event);
+				}
+			}
+			return true;
+		} else {
+			isFinished = true;
+			if (!barrierHandler.isEmpty()) {
+				throw new IllegalStateException("Trailing data in checkpoint barrier handler.");
+			}
+			return false;
 		}
 	}
 
 	public boolean recover() throws Exception {
+		LOG.info("Call to recover");
 		//While we are recovering
 		//		 	Trigger any asynchronous events that should be triggered at this point
 		//			Process a record
-		while (recoveryManager.isRecovering()) {
+		while (!recoveryManager.isRunning()) {
 			//Process a few thousand records before querying if still recovering. This is just to go around some
 			// design limitations
 			for (int i = 0; i < 10000; i++) {

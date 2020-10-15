@@ -76,10 +76,7 @@ import org.slf4j.LoggerFactory;
 import javax.annotation.Nullable;
 import java.io.Closeable;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -292,6 +289,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 		SingleInputGate[] inputGates = environment.getContainingTask().getAllInputGates();
 
 		this.causalLog = environment.getCausalLogManager().registerNewTask(this.getEnvironment().getJobID(),
+			this.getEnvironment().getJobVertexId(),
 			vertexGraphInformation, getExecutionConfig().getDeterminantSharingDepth(),
 			getEnvironment().getAllWriters());
 		this.mainThreadCausalLog =

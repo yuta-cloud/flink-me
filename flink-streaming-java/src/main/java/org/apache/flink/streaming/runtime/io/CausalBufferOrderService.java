@@ -91,7 +91,8 @@ public class CausalBufferOrderService extends AbstractCausalService implements B
 		else
 			toReturn = getNextNonBlockedNew();
 
-		threadCausalLog.appendDeterminant(reuseOrderDeterminant.replace((byte) toReturn.getChannelIndex()),
+		if(toReturn != null)
+			threadCausalLog.appendDeterminant(reuseOrderDeterminant.replace((byte) toReturn.getChannelIndex()),
 			epochProvider.getCurrentEpochID());
 
 		return toReturn;
@@ -104,6 +105,9 @@ public class CausalBufferOrderService extends AbstractCausalService implements B
 				toReturn = pickBufferedUnprocessedBuffer();
 			else
 				toReturn = bufferSource.getNextNonBlocked();
+
+			if(toReturn == null)
+				break;
 
 			if (toReturn.isEvent() && toReturn.getEvent().getClass() == DeterminantRequestEvent.class) {
 				LOG.debug("Buffer is DeterminantRequest, sending notification");
@@ -157,6 +161,12 @@ public class CausalBufferOrderService extends AbstractCausalService implements B
 		while (true) {
 			BufferOrEvent newBufferOrEvent = bufferSource.getNextNonBlocked();
 			LOG.debug("Got a new buffer from channel {}", newBufferOrEvent.getChannelIndex());
+			if (newBufferOrEvent.isEvent() && newBufferOrEvent.getEvent().getClass() == DeterminantRequestEvent.class) {
+				LOG.debug("Buffer is DeterminantRequest, sending notification");
+				recoveryManager.notifyDeterminantRequestEvent((DeterminantRequestEvent) newBufferOrEvent.getEvent(),
+					newBufferOrEvent.getChannelIndex());
+				continue;
+			}
 			//If this was a BoE for the channel we were looking for, return with it
 			if (newBufferOrEvent.getChannelIndex() == channel) {
 				LOG.debug("It is from the expected channel, returning");

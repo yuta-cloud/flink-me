@@ -18,7 +18,6 @@
 
 package org.apache.flink.runtime.io.network.partition;
 
-import org.apache.flink.runtime.causal.VertexID;
 import org.apache.flink.runtime.causal.determinant.BufferBuiltDeterminant;
 import org.apache.flink.runtime.causal.log.job.CausalLogID;
 import org.apache.flink.runtime.causal.log.job.JobCausalLog;
@@ -142,7 +141,7 @@ public class PipelinedSubpartition extends ResultSubpartition {
 	public void setCausalComponents(IRecoveryManager recoveryManager, JobCausalLog causalLog) {
 		this.recoveryManager = recoveryManager;
 		IntermediateResultPartitionID partitionID = parent.getPartitionId().getPartitionId();
-		CausalLogID causalLogID = new CausalLogID(recoveryManager.getTaskVertexID().getVertexID(),
+		CausalLogID causalLogID = new CausalLogID(recoveryManager.getContext().getTaskVertexID(),
 			partitionID.getLowerPart(),	partitionID.getUpperPart(), (byte) index);
 		this.subpartitionThreadCausalLog = causalLog.getThreadCausalLog(causalLogID);
 	}
@@ -450,7 +449,6 @@ public class PipelinedSubpartition extends ResultSubpartition {
 
 	@Override
 	public PipelinedSubpartitionView createReadView(BufferAvailabilityListener availabilityListener) throws IOException {
-		final boolean notifyDataAvailable;
 		synchronized (buffers) {
 			checkState(!isReleased);
 
@@ -468,7 +466,7 @@ public class PipelinedSubpartition extends ResultSubpartition {
 
 		}
 		//If we are recovering, when we conclude, we must notify of data availability.
-		if (recoveryManager == null || recoveryManager.isRunning()) {
+		if (recoveryManager == null || !recoveryManager.isRecovering()) {
 			notifyDataAvailable();
 		} else {
 			recoveryManager.notifyNewOutputChannel(parent.getPartitionId().getPartitionId(), index);
@@ -593,10 +591,10 @@ public class PipelinedSubpartition extends ResultSubpartition {
 
 				// Erroneous state, consumer is finished without enough data, throw exception
 				if (consumer.isFinished() && consumer.getUnreadBytes() > 0 && consumer.getUnreadBytes() < bufferSize) {
-					String msg = "Size of finished bufferConsumer ( unread: " + consumer.getUnreadBytes() +
+					String msg = "Vertex " + recoveryManager.getContext().getTaskVertexID() + " - Size of finished bufferConsumer ( unread: " + consumer.getUnreadBytes() +
 						", written: " + consumer.getWrittenBytes() +
 						") does not match size of recovery request to build buffer ( " + bufferSize + " ).";
-					LOG.debug("Exception:" + msg);
+					LOG.info("Exception:" + msg);
 					throw new RuntimeException(msg);
 				}
 				//If there is enough data in consumer for building the correct buffer
@@ -642,7 +640,11 @@ public class PipelinedSubpartition extends ResultSubpartition {
 	}
 
 	@Override
-	public VertexID getVertexID() {
-		return recoveryManager.getTaskVertexID();
+	public short getVertexID() {
+		return recoveryManager.getContext().getTaskVertexID();
+	}
+
+	public boolean isRecoveringSubpartititionInFlightState() {
+		return isRecoveringSubpartitionInFlightState.get();
 	}
 }

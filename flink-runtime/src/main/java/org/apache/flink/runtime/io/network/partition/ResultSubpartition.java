@@ -186,8 +186,8 @@ public abstract class ResultSubpartition implements CheckpointListener, Checkpoi
 		return parent;
 	}
 
-    public VertexID getVertexID(){
-		return null;
+    public short getVertexID(){
+		return -1;
 	}
 
 	public int getIndex(){

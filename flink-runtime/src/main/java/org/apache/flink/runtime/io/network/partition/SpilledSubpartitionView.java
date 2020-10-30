@@ -235,7 +235,7 @@ class SpilledSubpartitionView implements ResultSubpartitionView, NotificationLis
 	}
 
 	@Override
-	public VertexID getVertexID() {
+	public short getVertexID() {
 		return this.parent.getVertexID();
 	}
 

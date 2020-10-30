@@ -416,8 +416,8 @@ public class PartitionRequestQueueTest {
 		}
 
 		@Override
-		public VertexID getVertexID() {
-			return null;
+		public short getVertexID() {
+			return -1;
 		}
 
 		@Override

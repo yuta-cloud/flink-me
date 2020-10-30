@@ -67,5 +67,5 @@ public interface ResultSubpartitionView {
 
     JobID getJobID();
 
-    VertexID getVertexID();
+    short getVertexID();
 }

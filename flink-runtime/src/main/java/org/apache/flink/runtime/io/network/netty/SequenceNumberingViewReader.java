@@ -53,7 +53,7 @@ class SequenceNumberingViewReader implements BufferAvailabilityListener, Network
 
 	private boolean isRegisteredAvailable;
 	private JobID jobID;
-	private VertexID vertexID;
+	private short vertexID;
 
 	SequenceNumberingViewReader(InputChannelID receiverId, PartitionRequestQueue requestQueue) {
 		this.receiverId = receiverId;
@@ -119,7 +119,7 @@ class SequenceNumberingViewReader implements BufferAvailabilityListener, Network
 	}
 
 	@Override
-	public VertexID getVertexID() {
+	public short getVertexID() {
 		return vertexID;
 	}
 

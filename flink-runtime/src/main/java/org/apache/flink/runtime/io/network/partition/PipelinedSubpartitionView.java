@@ -109,7 +109,7 @@ class PipelinedSubpartitionView implements ResultSubpartitionView {
 	}
 
 	@Override
-	public VertexID getVertexID() {
+	public short getVertexID() {
 		return this.parent.getVertexID();
 	}
 

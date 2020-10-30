@@ -236,8 +236,8 @@ public class CancelPartitionRequestTest {
 		}
 
 		@Override
-		public VertexID getVertexID() {
-			return null;
+		public short getVertexID() {
+			return -1;
 		}
 
 		@Override

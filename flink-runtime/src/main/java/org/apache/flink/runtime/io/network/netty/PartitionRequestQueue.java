@@ -146,7 +146,7 @@ class PartitionRequestQueue extends ChannelInboundHandlerAdapter {
 	}
 	public void notifyReaderCreated(final NetworkSequenceViewReader reader, ResultPartitionID partitionId, int queueIndex) {
 		allReaders.put(reader.getReceiverId(), reader);
-		CausalLogID consumerSpecificCausalLog = new CausalLogID(reader.getVertexID().getVertexID(),
+		CausalLogID consumerSpecificCausalLog = new CausalLogID(reader.getVertexID(),
 			partitionId.getPartitionId().getLowerPart(), partitionId.getPartitionId().getUpperPart(), (byte) queueIndex);
 		causalLogManager.registerNewDownstreamConsumer(reader.getReceiverId(), reader.getJobID(), consumerSpecificCausalLog);
 	}

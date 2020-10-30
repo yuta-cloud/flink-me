@@ -68,7 +68,7 @@ class CreditBasedSequenceNumberingViewReader implements BufferAvailabilityListen
 
 	private int sequenceNumber = -1;
 	private JobID jobID;
-	private VertexID vertexID;
+	private short vertexID;
 
 	CreditBasedSequenceNumberingViewReader(
 			InputChannelID receiverId,
@@ -163,7 +163,7 @@ class CreditBasedSequenceNumberingViewReader implements BufferAvailabilityListen
 	}
 
 	@Override
-	public VertexID getVertexID() {
+	public short getVertexID() {
 		return vertexID;
 	}
 

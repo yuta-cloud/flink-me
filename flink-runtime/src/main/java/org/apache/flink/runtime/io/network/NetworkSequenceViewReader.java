@@ -79,5 +79,5 @@ public interface NetworkSequenceViewReader {
 
 	int getSequenceNumber();
 
-    VertexID getVertexID();
+    short getVertexID();
 }

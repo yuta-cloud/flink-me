@@ -18,6 +18,7 @@
 package org.apache.flink.runtime.causal.determinant;
 
 
+import org.apache.flink.runtime.causal.recovery.DeterminantBufferPool;
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
 
 import java.nio.ByteBuffer;
@@ -36,7 +37,7 @@ public interface DeterminantEncoder {
 
 	Determinant decodeNext(ByteBuf buffer);
 
-    Determinant decodeNext(ByteBuf b, Queue<Determinant>[] determinantCache);
+    Determinant decodeNext(ByteBuf b, DeterminantBufferPool determinantCache);
 
 	Determinant decodeOrderDeterminant(ByteBuf b);
 

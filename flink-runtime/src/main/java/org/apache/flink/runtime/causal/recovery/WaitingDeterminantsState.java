@@ -26,6 +26,7 @@
 package org.apache.flink.runtime.causal.recovery;
 
 import org.apache.flink.runtime.causal.DeterminantResponseEvent;
+import org.apache.flink.runtime.causal.VertexID;
 import org.apache.flink.runtime.event.InFlightLogRequestEvent;
 import org.apache.flink.runtime.io.network.api.DeterminantRequestEvent;
 import org.apache.flink.runtime.io.network.api.serialization.EventSerializer;
@@ -52,9 +53,9 @@ public class WaitingDeterminantsState extends AbstractState {
 	int numResponsesExpected;
 	final DeterminantResponseEvent determinantAccumulator;
 
-	public WaitingDeterminantsState(RecoveryManager context) {
-		super(context);
-		determinantAccumulator = new DeterminantResponseEvent(true, context.vertexGraphInformation.getThisTasksVertexID());
+	public WaitingDeterminantsState(RecoveryManager recoveryManager, RecoveryManagerContext context) {
+		super(recoveryManager, context);
+		determinantAccumulator = new DeterminantResponseEvent(true, new VertexID(context.getTaskVertexID()));
 	}
 
 	@Override
@@ -66,7 +67,7 @@ public class WaitingDeterminantsState extends AbstractState {
 		numResponsesExpected = context.getNumberOfDirectDownstreamNeighbourVertexes();
 
 		//If determinant sharing depth is 0, then we are not recovering causally, we can skip to the next state
-		if (context.determinantSharingDepth == 0) {
+		if (context.causalLog.getDeterminantSharingDepth() == 0) {
 			numResponsesExpected = 0;
 			maybeGoToReplayingState();
 			return;
@@ -113,8 +114,6 @@ public class WaitingDeterminantsState extends AbstractState {
 	public void notifyNewInputChannel(InputChannel inputChannel, int channelIndex, int numBuffersRemoved) {
 		//we got notified of a new input channel while we were recovering
 		//This means that  we now have to wait for the upstream to finish recovering before we do.
-		if (!(inputChannel instanceof RemoteInputChannel))
-			return;
 		IntermediateResultPartitionID requestReplayFor = inputChannel.getPartitionId().getPartitionId();
 		try {
 			inputChannel.sendTaskEvent(new InFlightLogRequestEvent(requestReplayFor, channelIndex,
@@ -151,15 +150,13 @@ public class WaitingDeterminantsState extends AbstractState {
 					int consumedIndex = singleInputGate.getConsumedSubpartitionIndex();
 					for (int i = 0; i < singleInputGate.getNumberOfInputChannels(); i++) {
 						InputChannel inputChannel = singleInputGate.getInputChannel(i);
-						if (inputChannel instanceof RemoteInputChannel) {
-							InFlightLogRequestEvent inFlightLogRequestEvent =
-								new InFlightLogRequestEvent(inputChannel.getPartitionId().getPartitionId(),
-									consumedIndex,
-									context.epochProvider.getCurrentEpochID());
-							logDebug("Sending inFlightLog request {} through input gate {}, channel {}.",
-								inFlightLogRequestEvent, singleInputGate, i);
-							inputChannel.sendTaskEvent(inFlightLogRequestEvent);
-						}
+						InFlightLogRequestEvent inFlightLogRequestEvent =
+							new InFlightLogRequestEvent(inputChannel.getPartitionId().getPartitionId(),
+								consumedIndex,
+								context.epochProvider.getCurrentEpochID());
+						logDebug("Sending inFlightLog request {} through input gate {}, channel {}.",
+							inFlightLogRequestEvent, singleInputGate, i);
+						inputChannel.sendTaskEvent(inFlightLogRequestEvent);
 					}
 				}
 			}
@@ -170,19 +167,20 @@ public class WaitingDeterminantsState extends AbstractState {
 
 	private void sendDeterminantRequests() {
 		if (context.vertexGraphInformation.hasDownstream()) {
-			logDebug("Sending determinant requests");
 			DeterminantRequestEvent determinantRequestEvent =
 				new DeterminantRequestEvent(context.vertexGraphInformation.getThisTasksVertexID(),
 					context.epochProvider.getCurrentEpochID());
+			logDebug("Sending determinant requests: {}", determinantRequestEvent);
 			broadcastDeterminantRequest(determinantRequestEvent);
 		}
 	}
 
 	private void maybeGoToReplayingState() {
-		logDebug("Go to replaying? Received {}, Expected {}, Restoring {}", numResponsesReceived, numResponsesExpected, context.isRestoringState());
-		if (numResponsesReceived == numResponsesExpected && !context.isRestoringState()) {
+		logDebug("Go to replaying? Received {}, Expected {}, Restoring {}", numResponsesReceived, numResponsesExpected
+			, recoveryManager.isRestoringState());
+		if (numResponsesReceived == numResponsesExpected && !recoveryManager.isRestoringState()) {
 			logDebug("Received all determinants, transitioning to Replaying state!");
-			context.setState(new ReplayingState(context, determinantAccumulator));
+			recoveryManager.setState(new ReplayingState(recoveryManager, context, determinantAccumulator));
 		}
 	}
 

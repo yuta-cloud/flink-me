@@ -26,6 +26,7 @@
 package org.apache.flink.runtime.causal.determinant;
 
 import org.apache.flink.runtime.causal.recovery.RecoveryManager;
+import org.apache.flink.runtime.causal.recovery.RecoveryManagerContext;
 import org.apache.flink.runtime.checkpoint.CheckpointMetaData;
 import org.apache.flink.runtime.checkpoint.CheckpointMetrics;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
@@ -45,14 +46,14 @@ public class SourceCheckpointDeterminant extends AsyncDeterminant {
 		super();
 	}
 
-	public SourceCheckpointDeterminant(int recordCount, long checkpointID, long checkpointTimestamp, CheckpointType type, byte[] storageReference) {
+	public SourceCheckpointDeterminant(int recordCount, long checkpointID, long checkpointTimestamp,
+									   CheckpointType type, byte[] storageReference) {
 		super(recordCount);
 		this.checkpointID = checkpointID;
 		this.checkpointTimestamp = checkpointTimestamp;
 		this.type = type;
 		this.storageReference = storageReference;
 	}
-
 
 
 	public byte[] getStorageReference() {
@@ -71,7 +72,8 @@ public class SourceCheckpointDeterminant extends AsyncDeterminant {
 		return type;
 	}
 
-	public SourceCheckpointDeterminant replace(int recordCount, long checkpointID, long checkpointTimestamp, CheckpointType type, byte[] storageReference){
+	public SourceCheckpointDeterminant replace(int recordCount, long checkpointID, long checkpointTimestamp,
+											   CheckpointType type, byte[] storageReference) {
 		super.replace(recordCount);
 		this.checkpointID = checkpointID;
 		this.checkpointTimestamp = checkpointTimestamp;
@@ -82,15 +84,17 @@ public class SourceCheckpointDeterminant extends AsyncDeterminant {
 
 
 	@Override
-	public void process(RecoveryManager recoveryManager) {
+	public void process(RecoveryManagerContext recoveryManagerContext) {
 		CheckpointMetrics metrics = new CheckpointMetrics()
 			.setBytesBufferedInAlignment(0L)
 			.setAlignmentDurationNanos(0L);
 
 		try {
-			recoveryManager.getCheckpointForceable().performCheckpoint(
+			recoveryManagerContext.getCheckpointForceable().performCheckpoint(
 				new CheckpointMetaData(checkpointID, checkpointTimestamp),
-				new CheckpointOptions(type, (storageReference.length > 0 ? new CheckpointStorageLocationReference(storageReference) : CheckpointStorageLocationReference.getDefault())),
+				new CheckpointOptions(type, (storageReference.length > 0 ?
+					new CheckpointStorageLocationReference(storageReference) :
+					CheckpointStorageLocationReference.getDefault())),
 				metrics);
 		} catch (Exception e) {
 			e.printStackTrace();

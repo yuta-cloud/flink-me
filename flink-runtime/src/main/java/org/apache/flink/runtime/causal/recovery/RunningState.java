@@ -45,33 +45,34 @@ public class RunningState extends AbstractState {
 
 	private static final Logger LOG = LoggerFactory.getLogger(RunningState.class);
 
-	public RunningState(RecoveryManager context) {
-		super(context);
+	public RunningState(RecoveryManager recoveryManager, RecoveryManagerContext context) {
+		super(recoveryManager, context);
 	}
 
 	@Override
 	public void executeEnter() {
 		context.processingTimeForceable.concludeReplay();
 
-		for(AsyncDeterminant delayedRPCRequest : context.rpcRequestsDuringRecovery){
+		for (AsyncDeterminant delayedRPCRequest : context.unansweredRPCRequests) {
+			//TODO I think this may block? Or at least cause problems.Should probably execute these async
 			logDebug("Executing delayed RPC request: {}", delayedRPCRequest);
-			delayedRPCRequest.setRecordCount(context.recordCounter.getRecordCount());
-			delayedRPCRequest.process(context);
+			//delayedRPCRequest.setRecordCount(context.recordCounter.getRecordCount());
+			//delayedRPCRequest.process(context);
 		}
-		context.rpcRequestsDuringRecovery.clear();
+		context.unansweredRPCRequests.clear();
 	}
 
 	@Override
 	public void notifyInFlightLogRequestEvent(InFlightLogRequestEvent e) {
 		//Subpartitions might still be recovering
-		if (context.isRecovering())
+		PipelinedSubpartition subpartition = context.subpartitionTable.get(e.getIntermediateResultPartitionID(),
+			e.getSubpartitionIndex());
+		if (subpartition.isRecoveringSubpartititionInFlightState())
 			super.notifyInFlightLogRequestEvent(e);
 		else {
 			logDebug("Received an InflightLogRequest {}", e);
-			PipelinedSubpartition subpartitionRequested =
-				context.subpartitionTable.get(e.getIntermediateResultPartitionID(), e.getSubpartitionIndex());
 			logDebug("intermediateResultPartition to request replay from: {}", e.getIntermediateResultPartitionID());
-			subpartitionRequested.requestReplay(e.getCheckpointId(), e.getNumberOfBuffersToSkip());
+			subpartition.requestReplay(e.getCheckpointId(), e.getNumberOfBuffersToSkip());
 		}
 	}
 
@@ -94,11 +95,11 @@ public class RunningState extends AbstractState {
 
 	@Override
 	public void notifyNewInputChannel(InputChannel inputChannel, int consumedSubpartitionIndex,
-                                      int numBuffersRemoved){
+									  int numBuffersRemoved) {
 
-		if(!(inputChannel instanceof RemoteInputChannel))
+		if (!(inputChannel instanceof RemoteInputChannel))
 			return;
-		if(context.determinantSharingDepth == 0) {
+		if (context.causalLog.getDeterminantSharingDepth() == 0) {
 			SingleInputGate singleInputGate = inputChannel.getInputGate();
 			int channelIndex = inputChannel.getChannelIndex();
 

@@ -897,6 +897,7 @@ public class InternalTimerServiceImplTest {
 		TimerSerializer<K, N> timerSerializer = new TimerSerializer<>(keySerializer, namespaceSerializer);
 
 		return new InternalTimerServiceImpl<>(
+			"test",
 			keyGroupsList,
 			keyContext,
 			processingTimeService,

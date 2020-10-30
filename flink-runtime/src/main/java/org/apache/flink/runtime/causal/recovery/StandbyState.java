@@ -39,7 +39,6 @@ import java.util.Set;
  * We may receive and process restoreState notifications.
  * When notified of recovery start, we switch to {@link WaitingConnectionsState}
  * where we will wait for all connections to be established.
- *
  */
 public class StandbyState extends AbstractState {
 	private static final Logger LOG = LoggerFactory.getLogger(StandbyState.class);
@@ -49,12 +48,12 @@ public class StandbyState extends AbstractState {
 	private Set<EarlyNewInputChannelNotification> inputChannelNotifications;
 	private Set<EarlyNewOutputChannelNotification> outputChannelNotifications;
 
-	public StandbyState(RecoveryManager context) {
-		super(context);
+	public StandbyState(RecoveryManager recoveryManager, RecoveryManagerContext context) {
+		super(recoveryManager, context);
 
 		this.inputChannelNotifications = new HashSet<>();
 		this.outputChannelNotifications = new HashSet<>();
-		for(PipelinedSubpartition ps : context.subpartitionTable.values())
+		for (PipelinedSubpartition ps : context.subpartitionTable.values())
 			ps.setIsRecoveringSubpartitionInFlightState(true);
 	}
 
@@ -67,27 +66,32 @@ public class StandbyState extends AbstractState {
 	public void notifyStartRecovery() {
 		logDebug("Received start recovery notification!");
 
-		State newState = new WaitingConnectionsState(context);
-		context.setState(newState);
+		State newState = new WaitingConnectionsState(recoveryManager, context);
+		recoveryManager.setState(newState);
 
 		// Notify state of save notifications
-		for(EarlyNewInputChannelNotification i : inputChannelNotifications){
-			newState.notifyNewInputChannel(i.getInputChannel(), i.getConsumedSubpartitionIndex(), i.getNumBuffersRemoved());
+		for (EarlyNewInputChannelNotification i : inputChannelNotifications) {
+			newState.notifyNewInputChannel(i.getInputChannel(), i.getConsumedSubpartitionIndex(),
+				i.getNumBuffersRemoved());
 		}
-		for(EarlyNewOutputChannelNotification o : outputChannelNotifications){
+		for (EarlyNewOutputChannelNotification o : outputChannelNotifications) {
 			newState.notifyNewOutputChannel(o.getIntermediateResultPartitionID(), o.subpartitionIndex);
 		}
 	}
 
 	@Override
-	public void notifyNewInputChannel(InputChannel remoteInputChannel, int consumedSubpartitionIndex, int numBuffersRemoved){
-		this.inputChannelNotifications.add(new EarlyNewInputChannelNotification(remoteInputChannel, consumedSubpartitionIndex, numBuffersRemoved));
+	public void notifyNewInputChannel(InputChannel remoteInputChannel, int consumedSubpartitionIndex,
+									  int numBuffersRemoved) {
+		this.inputChannelNotifications.add(new EarlyNewInputChannelNotification(remoteInputChannel,
+			consumedSubpartitionIndex, numBuffersRemoved));
 
 	}
 
 	@Override
-	public void notifyNewOutputChannel(IntermediateResultPartitionID intermediateResultPartitionID, int subpartitionIndex){
-		this.outputChannelNotifications.add(new EarlyNewOutputChannelNotification(intermediateResultPartitionID, subpartitionIndex));
+	public void notifyNewOutputChannel(IntermediateResultPartitionID intermediateResultPartitionID,
+									   int subpartitionIndex) {
+		this.outputChannelNotifications.add(new EarlyNewOutputChannelNotification(intermediateResultPartitionID,
+			subpartitionIndex));
 	}
 
 	@Override
@@ -100,7 +104,8 @@ public class StandbyState extends AbstractState {
 		private final IntermediateResultPartitionID intermediateResultPartitionID;
 		private final int subpartitionIndex;
 
-		public EarlyNewOutputChannelNotification(IntermediateResultPartitionID intermediateResultPartitionID, int subpartitionIndex) {
+		public EarlyNewOutputChannelNotification(IntermediateResultPartitionID intermediateResultPartitionID,
+												 int subpartitionIndex) {
 			this.intermediateResultPartitionID = intermediateResultPartitionID;
 			this.subpartitionIndex = subpartitionIndex;
 		}
@@ -119,7 +124,8 @@ public class StandbyState extends AbstractState {
 		private final int consumedSubpartitionIndex;
 		private final int numBuffersRemoved;
 
-		public EarlyNewInputChannelNotification(InputChannel inputChannel, int consumedSubpartitionIndex, int numBuffersRemoved) {
+		public EarlyNewInputChannelNotification(InputChannel inputChannel, int consumedSubpartitionIndex,
+												int numBuffersRemoved) {
 			this.inputChannel = inputChannel;
 			this.consumedSubpartitionIndex = consumedSubpartitionIndex;
 			this.numBuffersRemoved = numBuffersRemoved;

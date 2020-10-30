@@ -134,35 +134,45 @@ public class CausalGraphUtils {
 			target.getInputs().stream().map(je -> je.getSource().getProducer()).distinct().map(je -> Tuple2.of(-1, je)).collect(Collectors.toCollection(ArrayDeque::new));
 
 		while (!unexploredUpstream.isEmpty()) {
-			Tuple2<Integer,JobVertex> distAndToExplore = unexploredUpstream.pop();
+			Tuple2<Integer, JobVertex> distAndToExplore = unexploredUpstream.pop();
 			JobVertex toExplore = distAndToExplore.f1;
 
 
-
+			int distance = 0;
 			//TODO this dont work if not all subtasks are related to this parallel instance
 			for (int i = 0; i < toExplore.getParallelism(); i++) {
 				VertexID vertexID = computeVertexId(sortedJobVertexes, toExplore.getID(), i);
-				distances.put(vertexID, distAndToExplore.f0);
+				distance = distances.merge(vertexID, distAndToExplore.f0, Math::max);//Merge, taking the smaller
+				// distance
 			}
 
-			toExplore.getInputs().forEach(jobEdge -> unexploredUpstream.add(Tuple2.of(distAndToExplore.f0 - 1, jobEdge.getSource().getProducer())));
+			int finalDistance = distance;
+			toExplore.getInputs().forEach(jobEdge -> unexploredUpstream.add(Tuple2.of(finalDistance - 1,
+				jobEdge.getSource().getProducer())));
 		}
 
 
-		Deque<Tuple2<Integer,JobVertex>> unexploredDownstream =
-			target.getProducedDataSets().stream().flatMap(ds -> ds.getConsumers().stream().map(JobEdge::getTarget)).distinct().map(je -> Tuple2.of(1, je)).collect(Collectors.toCollection(ArrayDeque::new));
+		Deque<Tuple2<Integer, JobVertex>> unexploredDownstream =
+			target.getProducedDataSets().stream()
+				.flatMap(ds -> ds.getConsumers().stream().map(JobEdge::getTarget)).distinct()
+				.map(je -> Tuple2.of(1, je)).collect(Collectors.toCollection(ArrayDeque::new));
 
 		while (!unexploredDownstream.isEmpty()) {
-			Tuple2<Integer,JobVertex> distAndToExplore = unexploredDownstream.pop();
+			Tuple2<Integer, JobVertex> distAndToExplore = unexploredDownstream.pop();
 			JobVertex toExplore = distAndToExplore.f1;
 
 
+			int distance = 0;
 			for (int i = 0; i < toExplore.getParallelism(); i++) {
 				VertexID vertexID = computeVertexId(sortedJobVertexes, toExplore.getID(), i);
-				distances.put(vertexID, distAndToExplore.f0);
+				distance = distances.merge(vertexID, distAndToExplore.f0, Math::min); //Merge, taking the smaller
+				// distance
 			}
 
-			unexploredDownstream.addAll(toExplore.getProducedDataSets().stream().flatMap(ds -> ds.getConsumers().stream().map(JobEdge::getTarget)).distinct().map(je -> Tuple2.of(distAndToExplore.f0 + 1, je)).collect(Collectors.toList()));
+			int finalDistance = distance;
+			unexploredDownstream.addAll(toExplore.getProducedDataSets().stream()
+				.flatMap(ds -> ds.getConsumers().stream().map(JobEdge::getTarget)).distinct()
+				.map(je -> Tuple2.of(finalDistance + 1, je)).collect(Collectors.toList()));
 		}
 
 

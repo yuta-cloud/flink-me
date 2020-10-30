@@ -25,7 +25,7 @@
 
 package org.apache.flink.runtime.causal.determinant;
 
-import org.apache.flink.runtime.causal.recovery.RecoveryManager;
+import org.apache.flink.runtime.causal.recovery.RecoveryManagerContext;
 
 public abstract class AsyncDeterminant extends Determinant {
 	protected int recordCount;
@@ -38,7 +38,7 @@ public abstract class AsyncDeterminant extends Determinant {
 		this.recordCount = recordCount;
 	}
 
-	public abstract void process(RecoveryManager recoveryManager);
+	public abstract void process(RecoveryManagerContext recoveryManagerContext);
 
 	public int getRecordCount(){
 		return recordCount;

@@ -18,11 +18,10 @@
 package org.apache.flink.runtime.causal.determinant;
 
 
+import org.apache.flink.runtime.causal.recovery.DeterminantBufferPool;
 import org.apache.flink.runtime.checkpoint.CheckpointType;
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
 import org.apache.flink.shaded.netty4.io.netty.buffer.Unpooled;
-
-import java.util.Queue;
 
 public class SimpleDeterminantEncoder implements DeterminantEncoder {
 
@@ -81,20 +80,20 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 	}
 
 	@Override
-	public Determinant decodeNext(ByteBuf b, Queue<Determinant>[] determinantCache) {
+	public Determinant decodeNext(ByteBuf b, DeterminantBufferPool determinantCache) {
 		if (b == null)
 			return null;
 		if (!b.isReadable())
 			return null;
 		byte tag = b.readByte();
-		if (tag == Determinant.ORDER_DETERMINANT_TAG) return decodeOrderDeterminant(b, (OrderDeterminant) determinantCache[tag].poll());
-		if (tag == Determinant.TIMESTAMP_DETERMINANT_TAG) return decodeTimestampDeterminant(b, (TimestampDeterminant) determinantCache[tag].poll());
-		if (tag == Determinant.RNG_DETERMINANT_TAG) return decodeRNGDeterminant(b, (RNGDeterminant) determinantCache[tag].poll());
-		if (tag == Determinant.BUFFER_BUILT_TAG) return decodeBufferBuiltDeterminant(b, (BufferBuiltDeterminant) determinantCache[tag].poll());
-		if (tag == Determinant.TIMER_TRIGGER_DETERMINANT) return decodeTimerTriggerDeterminant(b, (TimerTriggerDeterminant) determinantCache[tag].poll());
-		if (tag == Determinant.SOURCE_CHECKPOINT_DETERMINANT) return decodeSourceCheckpointDeterminant(b, (SourceCheckpointDeterminant) determinantCache[tag].poll());
-		if (tag == Determinant.IGNORE_CHECKPOINT_DETERMINANT) return decodeIgnoreCheckpointDeterminant(b, (IgnoreCheckpointDeterminant) determinantCache[tag].poll());
-		throw new CorruptDeterminantArrayException();
+		if (tag == Determinant.ORDER_DETERMINANT_TAG) return decodeOrderDeterminant(b, determinantCache.getOrderDeterminant());
+		if (tag == Determinant.TIMESTAMP_DETERMINANT_TAG) return decodeTimestampDeterminant(b, determinantCache.getTimestampDeterminant());
+		if (tag == Determinant.RNG_DETERMINANT_TAG) return decodeRNGDeterminant(b, determinantCache.getRNGDeterminant());
+		if (tag == Determinant.BUFFER_BUILT_TAG) return decodeBufferBuiltDeterminant(b, determinantCache.getBufferBuiltDeterminant());
+		if (tag == Determinant.TIMER_TRIGGER_DETERMINANT) return decodeTimerTriggerDeterminant(b, determinantCache.getTimerTriggerDeterminant());
+		if (tag == Determinant.SOURCE_CHECKPOINT_DETERMINANT) return decodeSourceCheckpointDeterminant(b, determinantCache.getSourceCheckpointDeterminant());
+		if (tag == Determinant.IGNORE_CHECKPOINT_DETERMINANT) return decodeIgnoreCheckpointDeterminant(b, determinantCache.getIgnoreCheckpointDeterminant());
+		throw new CorruptDeterminantArrayException(tag);
 	}
 
 	@Override

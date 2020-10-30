@@ -25,9 +25,13 @@
 
 package org.apache.flink.runtime.causal;
 
+import org.apache.flink.runtime.causal.recovery.WaitingDeterminantsState;
 import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -47,6 +51,7 @@ public class VertexGraphInformation {
 	private final JobVertex jobVertex;
 
 
+	private static final Logger LOG = LoggerFactory.getLogger(VertexGraphInformation.class);
 	/**
 	 * Encodes the distance from this vertex to all other vertexes.
 	 * Not being present represents disconnected components.
@@ -70,6 +75,7 @@ public class VertexGraphInformation {
 		this.hasDownstream = _hasDownstream();
 		this.hasUpstream = _hasUpstream();
 
+		LOG.info("Vertex {} - distance map [\n {} \n]", thisTasksVertexID.getVertexID(), distancesToVertex.entrySet().stream().map(e->e.getKey().getVertexID() + " -> " +  e.getValue()).collect(Collectors.joining(", \n")));
 	}
 
 	public VertexID getThisTasksVertexID() {

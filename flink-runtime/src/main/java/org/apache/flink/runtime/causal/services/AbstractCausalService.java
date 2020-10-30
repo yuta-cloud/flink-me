@@ -52,11 +52,11 @@ public abstract class AbstractCausalService {
 
 	public AbstractCausalService(JobCausalLog causalLog, IRecoveryManager recoveryManager,
 								 EpochProvider epochProvider){
-		CausalLogID causalLogID = new CausalLogID(recoveryManager.getTaskVertexID().getVertexID());
+		CausalLogID causalLogID = new CausalLogID(recoveryManager.getContext().getTaskVertexID());
 		this.threadCausalLog = causalLog.getThreadCausalLog(causalLogID);
 		this.recoveryManager = recoveryManager;
 		this.epochProvider = epochProvider;
-		this.isRecovering = !recoveryManager.isRunning();
+		this.isRecovering = recoveryManager.isRecovering();
 	}
 
 	/**
@@ -68,7 +68,7 @@ public abstract class AbstractCausalService {
 	 * previous state.
 	 */
 	protected boolean isRecovering(){
-		return isRecovering && (isRecovering = !recoveryManager.isRunning());
+		return isRecovering && (isRecovering = recoveryManager.isRecovering());
 	}
 
 }

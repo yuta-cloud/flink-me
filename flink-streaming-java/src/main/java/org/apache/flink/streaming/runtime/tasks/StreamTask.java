@@ -31,6 +31,7 @@ import org.apache.flink.runtime.causal.log.job.JobCausalLog;
 import org.apache.flink.runtime.causal.log.thread.ThreadCausalLog;
 import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
 import org.apache.flink.runtime.causal.recovery.RecoveryManager;
+import org.apache.flink.runtime.causal.recovery.RecoveryManagerContext;
 import org.apache.flink.runtime.causal.services.CausalRandomService;
 import org.apache.flink.runtime.causal.services.CausalTimeService;
 import org.apache.flink.api.common.services.RandomService;
@@ -295,10 +296,12 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 		this.mainThreadCausalLog =
 			causalLog.getThreadCausalLog(new CausalLogID(vertexGraphInformation.getThisTasksVertexID().getVertexID()));
 
-		this.recoveryManager = new RecoveryManager(this, this, causalLog, readyToReplayFuture,
-			vertexGraphInformation,
-			recordCounter, this, environment.getContainingTask().getProducedPartitions(),
-			getExecutionConfig().getDeterminantSharingDepth());
+		RecoveryManagerContext rmContext = new RecoveryManagerContext(this, this, causalLog,
+			readyToReplayFuture, vertexGraphInformation, recordCounter,
+			this, environment.getContainingTask().getProducedPartitions());
+
+		this.recoveryManager = new RecoveryManager(rmContext);
+		recordCounter.setRecoveryManager(recoveryManager);
 
 		this.timeService = new CausalTimeService(causalLog, recoveryManager, this);
 		this.randomService = new CausalRandomService(causalLog, recoveryManager, this);
@@ -326,7 +329,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 			LOG.info("Set InFlightLogRequestEventListener {} for resultPartition {}.", iflrel, partition);
 		}
 
-		currentEpochID = new AtomicLong(0);
+		currentEpochID = new AtomicLong(environment.getTaskStateManager().getCurrentCheckpointRestoreID());
 
 		reuseSourceCheckpointDeterminant = new SourceCheckpointDeterminant();
 		ignoreCheckpointReuseDeterminant = new IgnoreCheckpointDeterminant();
@@ -384,7 +387,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 				timerService = new SystemProcessingTimeService(this, getCheckpointLock(), timerThreadFactory,
 					timeService, this, recordCounter, causalLog, recoveryManager);
 			}
-			recoveryManager.setProcessingTimeService((ProcessingTimeForceable) timerService);
+			recoveryManager.getContext().setProcessingTimeService((ProcessingTimeForceable) timerService);
 
 			operatorChain = new OperatorChain<>(this, streamRecordWriters);
 			headOperator = operatorChain.getHeadOperator();
@@ -415,7 +418,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 			// Block until the standby task is requested to run.
 			// In the meantime checkpointed state snapshots of the running task mirrored by the
 			// standby task are dispatched to the standby task. See Task.dispatchStateToStandbyTask().
-			// Also block until input channel connections are ready.
+			// Also block until input channel connections are ready, determinants have arrived and we are ready to replay.
 			if (isStandby()) {
 				getEnvironment().getContainingTask().transitionToStandbyState();
 				standbyFuture.get();
@@ -706,10 +709,10 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 	@Override
 	public boolean triggerCheckpoint(CheckpointMetaData checkpointMetaData, CheckpointOptions checkpointOptions) throws Exception {
 
-		if (this.recoveryManager.isRecovering() && !this.recoveryManager.vertexGraphInformation.hasUpstream()) {
+		if (this.recoveryManager.isRecovering() && !this.recoveryManager.getContext().vertexGraphInformation.hasUpstream()) {
 			LOG.info("Store trigger checkpoint determinant for later processing because recovering!");
-			recoveryManager.appendRPCRequestDuringRecovery(reuseSourceCheckpointDeterminant.replace(
-				recordCounter.getRecordCount(),
+			recoveryManager.getContext().appendRPCRequestDuringRecovery(reuseSourceCheckpointDeterminant.replace(
+				0,
 				checkpointMetaData.getCheckpointId(),
 				checkpointMetaData.getTimestamp(),
 				checkpointOptions.getCheckpointType(),
@@ -809,7 +812,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 				// We generally try to emit the checkpoint barrier as soon as possible to not affect downstream
 				// checkpoint alignments
 
-				if (!this.recoveryManager.vertexGraphInformation.hasUpstream()) {
+				if (!this.recoveryManager.getContext().vertexGraphInformation.hasUpstream()) {
 					this.mainThreadCausalLog.appendDeterminant(reuseSourceCheckpointDeterminant.replace(
 						recordCounter.getRecordCount(),
 						checkpointMetaData.getCheckpointId(),
@@ -876,7 +879,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 		synchronized (lock) {
 			ignoreCheckpointReuseDeterminant.replace(recordCounter.getRecordCount(), checkpointId);
-			if (isRunning && recoveryManager.isRunning()) {
+			if (isRunning && !recoveryManager.isRecovering()) {
 				LOG.info("Ignoring checkpoint, appending determinant and ignoring.");
 				this.mainThreadCausalLog.appendDeterminant(ignoreCheckpointReuseDeterminant, currentEpochID.get());
 				CheckpointBarrierHandler handler = getCheckpointBarrierHandler();
@@ -889,7 +892,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 				// notify the coordinator that we decline this checkpoint
 				getEnvironment().declineCheckpoint(checkpointId, new Exception("Received rpc to cancel"));
 			} else {
-				recoveryManager.appendRPCRequestDuringRecovery(ignoreCheckpointReuseDeterminant);
+				recoveryManager.getContext().appendRPCRequestDuringRecovery(ignoreCheckpointReuseDeterminant);
 			}
 		}
 

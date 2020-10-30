@@ -53,29 +53,9 @@ public interface IRecoveryManager {
 
 	void triggerAsyncEvent();
 
-	void setState(State state);
-	//=======================================
-
-	void setInputGate(InputGate inputGate);
-
-	void setProcessingTimeService(ProcessingTimeForceable processingTimeForceable);
-
-	void setRecordCountTargetForceable(RecordCountTargetForceable recordCountTargetForceable);
-
-	// ==========================================
-
-	RecordCounter getRecordCounter();
-
-	ProcessingTimeForceable getProcessingTimeForceable();
-
-	CheckpointForceable getCheckpointForceable();
-
-	VertexID getTaskVertexID();
-
-
 	// =======================================================
 
-	boolean isRunning();
+	boolean isRecovering();
 
 	boolean isReplaying();
 
@@ -83,7 +63,7 @@ public interface IRecoveryManager {
 
 	boolean isWaitingConnections();
 
-    boolean isRecovering();
+	RecoveryManagerContext getContext();
 
 	//====================================================
 	/*

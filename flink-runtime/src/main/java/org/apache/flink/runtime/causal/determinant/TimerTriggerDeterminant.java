@@ -17,6 +17,7 @@
 package org.apache.flink.runtime.causal.determinant;
 
 import org.apache.flink.runtime.causal.recovery.RecoveryManager;
+import org.apache.flink.runtime.causal.recovery.RecoveryManagerContext;
 
 
 public class TimerTriggerDeterminant extends AsyncDeterminant {
@@ -68,8 +69,8 @@ public class TimerTriggerDeterminant extends AsyncDeterminant {
 	}
 
 	@Override
-	public void process(RecoveryManager recoveryManager) {
-		recoveryManager.getProcessingTimeForceable().forceExecution(processingTimeCallbackID, timestamp);
+	public void process(RecoveryManagerContext recoveryManagerContext) {
+		recoveryManagerContext.getProcessingTimeForceable().forceExecution(processingTimeCallbackID, timestamp);
 	}
 
 	@Override

@@ -42,8 +42,8 @@ public class WaitingConnectionsState extends AbstractState{
 	Map<IntermediateResultPartitionID, Boolean[]> outputChannelsReestablishmentStatus;
 
 
-	public WaitingConnectionsState(RecoveryManager context) {
-		super(context);
+	public WaitingConnectionsState(RecoveryManager recoveryManager, RecoveryManagerContext context) {
+		super(recoveryManager,context);
 
 		inputChannelsReestablishmentStatus = new Boolean[0];
 		outputChannelsReestablishmentStatus = new HashMap<>();
@@ -93,8 +93,8 @@ public class WaitingConnectionsState extends AbstractState{
 			channelStatus = Stream.concat(channelStatus, Arrays.stream(booleans));
 		if(channelStatus.allMatch(x -> x)){
 			logDebug("Got all connections set-up. Switching to WaitingDeterminantsState.");
-			State newState = new WaitingDeterminantsState(context);
-			context.setState(newState);
+			State newState = new WaitingDeterminantsState(recoveryManager,context);
+			recoveryManager.setState(newState);
 		}
 	}
 

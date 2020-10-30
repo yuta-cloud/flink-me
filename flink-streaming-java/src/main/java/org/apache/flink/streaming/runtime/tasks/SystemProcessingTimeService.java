@@ -103,7 +103,7 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 
 		this.epochProvider = epochProvider;
 		this.recordCounter = recordCounter;
-		this.mainThreadCausalLog = causalLog.getThreadCausalLog(new CausalLogID(recoveryManager.getTaskVertexID().getVertexID()));
+		this.mainThreadCausalLog = causalLog.getThreadCausalLog(new CausalLogID(recoveryManager.getContext().getTaskVertexID()));
 		this.recoveryManager = recoveryManager;
 
 		this.preregisteredTimerTasks = new HashMap<>();
@@ -154,10 +154,10 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 		ScheduledFuture<?> future;
 		TriggerTask toRegister = new TriggerTask(status, task, checkpointLock, target, timestamp, mainThreadCausalLog,
 			epochProvider, recordCounter, reuseTimerTriggerDeterminant);
-		if (recoveryManager.isRunning())
-			future = registerTimerRunning(toRegister, delay);
-		else
+		if (recoveryManager.isRecovering())
 			future = registerTimerRecovering(toRegister, delay);
+		else
+			future = registerTimerRunning(toRegister, delay);
 
 		return future;
 	}
@@ -197,10 +197,10 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 		RepeatedTriggerTask toRegister = new RepeatedTriggerTask(status, task, checkpointLock, callback, nextTimestamp,
 			period, mainThreadCausalLog, epochProvider, recordCounter, reuseTimerTriggerDeterminant);
 		ScheduledFuture<?> future;
-		if (recoveryManager.isRunning())
-			future = registerAtFixedRateRunning(initialDelay, period, toRegister);
-		else
+		if (recoveryManager.isRecovering())
 			future = registerAtFixedRateRecovering(initialDelay, period, toRegister);
+		else
+			future = registerAtFixedRateRunning(initialDelay, period, toRegister);
 		return future;
 	}
 

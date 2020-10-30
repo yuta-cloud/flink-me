@@ -27,6 +27,7 @@ import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
 import org.apache.flink.shaded.netty4.io.netty.buffer.Unpooled;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -124,25 +125,25 @@ public class DeterminantResponseEvent extends TaskEvent {
 	}
 
 
-	public void merge(DeterminantResponseEvent other){
+	public void merge(DeterminantResponseEvent other) {
 
-		if(!this.found && !other.found)
+		if (!this.found && !other.found)
 			return;
 
-		if(!this.found) //The other one is found
+		if (!this.found) //The other one is found
 			this.found = true;
 
-		for(Map.Entry<CausalLogID, ByteBuf> entry : other.determinants.entrySet()) {
+		for (Map.Entry<CausalLogID, ByteBuf> entry : other.determinants.entrySet()) {
 			determinants.merge(entry.getKey(), entry.getValue(), (v1, v2) -> {
 				//Note, this is only ran if both are defined, in which  case the smaller one is released.
-				if(v1.readableBytes() > v2.readableBytes()) {
+				if (v1.readableBytes() > v2.readableBytes()) {
 					v2.release();
 					return v1;
-				}else {
+				} else {
 					v1.release();
 					return v2;
 				}
-			} );
+			});
 		}
 	}
 
@@ -152,8 +153,21 @@ public class DeterminantResponseEvent extends TaskEvent {
 			"found=" + found +
 			", vertexID=" + vertexID +
 			", correlationID=" + correlationID +
-			", determinants=[" + determinants.entrySet().stream().map(e-> e.getKey() + " -> " + e.getValue().readableBytes()).collect(Collectors.joining(", ")) +
+			",\n determinants=[\n" + determinants.entrySet().stream()
+			.map(this::getStringDeterminantArray)
+			.collect(Collectors.joining(",\n ")) +
 			"]}";
+	}
+
+	protected String getStringDeterminantArray(Map.Entry<CausalLogID, ByteBuf> e) {
+		StringBuilder b =
+			new StringBuilder().append(e.getKey()).append(" -> ").append(e.getValue().readableBytes()).append(", ");
+		int numBytes = Math.min(50, e.getValue().readableBytes());
+		byte[] array = new byte[numBytes];
+		e.getValue().readBytes(array);
+		e.getValue().readerIndex(e.getValue().readerIndex() - numBytes);
+		b.append(Arrays.toString(array));
+		return b.toString();
 	}
 
 }

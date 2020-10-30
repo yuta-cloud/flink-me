@@ -25,7 +25,7 @@
 
 package org.apache.flink.runtime.causal.determinant;
 
-import org.apache.flink.runtime.causal.recovery.RecoveryManager;
+import org.apache.flink.runtime.causal.recovery.RecoveryManagerContext;
 
 public class IgnoreCheckpointDeterminant extends AsyncDeterminant{
 
@@ -52,8 +52,8 @@ public class IgnoreCheckpointDeterminant extends AsyncDeterminant{
 	}
 
 	@Override
-	public void process(RecoveryManager recoveryManager) {
-		recoveryManager.getCheckpointForceable().ignoreCheckpoint(this.checkpointID);
+	public void process(RecoveryManagerContext recoveryManagerContext) {
+		recoveryManagerContext.getCheckpointForceable().ignoreCheckpoint(this.checkpointID);
 	}
 
 	@Override

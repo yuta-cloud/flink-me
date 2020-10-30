@@ -20,6 +20,7 @@ package org.apache.flink.streaming.api.operators;
 
 import org.apache.flink.runtime.causal.*;
 import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
+import org.apache.flink.runtime.causal.recovery.RecoveryManagerContext;
 import org.apache.flink.runtime.causal.recovery.State;
 import org.apache.flink.runtime.event.InFlightLogRequestEvent;
 import org.apache.flink.runtime.io.network.api.DeterminantRequestEvent;
@@ -154,47 +155,7 @@ public class StreamSourceContextIdleDetectionTests {
 				}
 
 				@Override
-				public void setState(State state) {
-
-				}
-
-				@Override
-				public void setInputGate(InputGate inputGate) {
-
-				}
-
-				@Override
-				public void setProcessingTimeService(ProcessingTimeForceable processingTimeForceable) {
-
-				}
-
-				@Override
-				public void setRecordCountTargetForceable(RecordCountTargetForceable recordCountTargetForceable) {
-
-				}
-
-				@Override
-				public RecordCounter getRecordCounter() {
-					return null;
-				}
-
-				@Override
-				public ProcessingTimeForceable getProcessingTimeForceable() {
-					return null;
-				}
-
-				@Override
-				public CheckpointForceable getCheckpointForceable() {
-					return null;
-				}
-
-				@Override
-				public VertexID getTaskVertexID() {
-					return null;
-				}
-
-				@Override
-				public boolean isRunning() {
+				public boolean isRecovering() {
 					return false;
 				}
 
@@ -214,8 +175,8 @@ public class StreamSourceContextIdleDetectionTests {
 				}
 
 				@Override
-				public boolean isRecovering() {
-					return false;
+				public RecoveryManagerContext getContext() {
+					return null;
 				}
 
 				@Override
@@ -368,47 +329,7 @@ public class StreamSourceContextIdleDetectionTests {
 				}
 
 				@Override
-				public void setState(State state) {
-
-				}
-
-				@Override
-				public void setInputGate(InputGate inputGate) {
-
-				}
-
-				@Override
-				public void setProcessingTimeService(ProcessingTimeForceable processingTimeForceable) {
-
-				}
-
-				@Override
-				public void setRecordCountTargetForceable(RecordCountTargetForceable recordCountTargetForceable) {
-
-				}
-
-				@Override
-				public RecordCounter getRecordCounter() {
-					return null;
-				}
-
-				@Override
-				public ProcessingTimeForceable getProcessingTimeForceable() {
-					return null;
-				}
-
-				@Override
-				public CheckpointForceable getCheckpointForceable() {
-					return null;
-				}
-
-				@Override
-				public VertexID getTaskVertexID() {
-					return null;
-				}
-
-				@Override
-				public boolean isRunning() {
+				public boolean isRecovering() {
 					return false;
 				}
 
@@ -428,8 +349,8 @@ public class StreamSourceContextIdleDetectionTests {
 				}
 
 				@Override
-				public boolean isRecovering() {
-					return false;
+				public RecoveryManagerContext getContext() {
+					return null;
 				}
 
 				@Override

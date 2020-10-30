@@ -45,11 +45,15 @@ import java.util.Random;
 public abstract class AbstractState implements State {
 
 	protected static final Logger LOG = LoggerFactory.getLogger(AbstractState.class);
-	protected final RecoveryManager context;
+
+
+	protected final RecoveryManager recoveryManager;
+	protected final RecoveryManagerContext context;
 
 	protected final Random random;
 
-	public AbstractState(RecoveryManager context) {
+	public AbstractState(RecoveryManager recoveryManager, RecoveryManagerContext context) {
+		this.recoveryManager = recoveryManager;
 		this.context = context;
 		this.random = new Random(System.currentTimeMillis());
 	}
@@ -73,9 +77,10 @@ public abstract class AbstractState implements State {
 
 	@Override
 	public void notifyInFlightLogRequestEvent(InFlightLogRequestEvent e) {
+		logDebug("Received request: {}", e);
 		//we got an inflight log request while still recovering. Since we must finish recovery first before
 		//answering, we store it, and when we enter the running state we immediately process it.
-		context.unansweredInFlighLogRequests.put(e.getIntermediateResultPartitionID(), e.getSubpartitionIndex(), e);
+		context.unansweredInFlightLogRequests.put(e.getIntermediateResultPartitionID(), e.getSubpartitionIndex(), e);
 	}
 
 	@Override
@@ -87,8 +92,6 @@ public abstract class AbstractState implements State {
 
 		for (PipelinedSubpartition ps : context.subpartitionTable.values())
 			ps.setStartingEpoch(context.epochProvider.getCurrentEpochID());
-
-		context.epochProvider.setCurrentEpochID(context.epochProvider.getCurrentEpochID());
 	}
 
 	@Override
@@ -108,7 +111,6 @@ public abstract class AbstractState implements State {
 			if (udr.getNumResponsesReceived() == context.getNumberOfDirectDownstreamNeighbourVertexes()) {
 				context.unansweredDeterminantRequests.remove(e.getVertexID(), e.getCorrelationID());
 				try {
-					logDebug("All responses here, sending reccurred request response");
 					DeterminantResponseEvent toRespond = udr.getCurrentResponse();
 					context.inputGate.getInputChannel(udr.getRequestingChannel()).sendTaskEvent(toRespond);
 					//TODO udr.getVertexCausalLogDelta().release(); Cant release here because sendTaskEvent is async
@@ -144,8 +146,6 @@ public abstract class AbstractState implements State {
 		for (PipelinedSubpartition ps : context.subpartitionTable.values()) {
 			e.setCorrelationID(random.nextLong());
 			try (BufferConsumer event = EventSerializer.toBufferConsumer(e)) {
-				logDebug("Sending determinant request: {} to intermediate {} index {}", e,
-					ps.getParent().getPartitionId().getPartitionId(), ps.getIndex());
 				ps.bypassDeterminantRequest(event.copy());
 			} catch (IOException ex) {
 				ex.printStackTrace();
@@ -185,11 +185,11 @@ public abstract class AbstractState implements State {
 	 * Simple utility method for prepending vertex id to a log message
 	 */
 	protected void logDebug(String s, Object... a) {
-		if(LOG.isDebugEnabled()) {
+		//if(LOG.isDebugEnabled()) {
 			List<Object> array = new ArrayList<>(a.length + 1);
-			array.add(context.getTaskVertexID().getVertexID());
+			array.add(context.getTaskVertexID());
 			array.addAll(Arrays.asList(a));
-			LOG.debug("Vertex {} - " + s, array.toArray());
-		}
+			LOG.info("Vertex {} - " + s, array.toArray());
+		//}
 	}
 }

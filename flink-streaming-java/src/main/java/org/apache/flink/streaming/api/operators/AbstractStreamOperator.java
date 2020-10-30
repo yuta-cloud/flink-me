@@ -269,7 +269,7 @@ public abstract class AbstractStreamOperator<OUT>
 		try {
 			StateInitializationContext initializationContext = new StateInitializationContextImpl(
 				context.isRestored(), // information whether we restore or start for the first time
-				!containingTask.getRecoveryManager().isRunning(),
+                    containingTask.getRecoveryManager().isRecovering(),
 				operatorStateBackend, // access to operator state backend
 				keyedStateStore, // access to keyed state backend
 				keyedStateInputs, // access to keyed state stream
@@ -769,6 +769,7 @@ public abstract class AbstractStreamOperator<OUT>
 		// the following casting is to overcome type restrictions.
 		KeyedStateBackend<K> keyedStateBackend = getKeyedStateBackend();
 		TypeSerializer<K> keySerializer = keyedStateBackend.getKeySerializer();
+		LOG.info("getInternalTimerService keySerializer is null? {}", keySerializer == null);
 		InternalTimeServiceManager<K> keyedTimeServiceHandler = (InternalTimeServiceManager<K>) timeServiceManager;
 		TimerSerializer<K, N> timerSerializer = new TimerSerializer<>(keySerializer, namespaceSerializer);
 		return keyedTimeServiceHandler.getInternalTimerService(name, timerSerializer, triggerable);

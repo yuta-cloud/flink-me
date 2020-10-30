@@ -27,6 +27,8 @@ import org.apache.flink.runtime.state.PriorityQueueSetFactory;
 import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.runtime.tasks.ProcessingTimeService;
 import org.apache.flink.util.Preconditions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -100,6 +102,7 @@ public class InternalTimeServiceManager<K> {
 		if (timerService == null) {
 
 			timerService = new InternalTimerServiceImpl<>(
+				name,
 				localKeyGroupRange,
 				keyContext,
 				processingTimeService,

@@ -36,6 +36,8 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
 
+import static org.apache.flink.util.Preconditions.checkNotNull;
+
 /**
  * A serializer for {@link TimerHeapInternalTimer} objects that produces a serialization format that is
  * lexicographically aligned the priority of the timers.
@@ -80,8 +82,8 @@ public class TimerSerializer<K, N> extends TypeSerializer<TimerHeapInternalTimer
 		int length,
 		boolean immutableType) {
 
-		this.keySerializer = keySerializer;
-		this.namespaceSerializer = namespaceSerializer;
+		this.keySerializer = checkNotNull(keySerializer);
+		this.namespaceSerializer = checkNotNull(namespaceSerializer);
 		this.length = length;
 		this.immutableType = immutableType;
 	}

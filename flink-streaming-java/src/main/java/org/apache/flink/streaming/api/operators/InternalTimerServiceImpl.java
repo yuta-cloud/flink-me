@@ -23,6 +23,7 @@ import org.apache.flink.api.common.typeutils.CompatibilityResult;
 import org.apache.flink.api.common.typeutils.CompatibilityUtil;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.runtime.causal.determinant.ProcessingTimeCallbackID;
+import org.apache.flink.runtime.causal.recovery.RecoveryManager;
 import org.apache.flink.runtime.state.InternalPriorityQueue;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyGroupedInternalPriorityQueue;
@@ -31,6 +32,8 @@ import org.apache.flink.streaming.runtime.tasks.ProcessingTimeService;
 import org.apache.flink.util.CloseableIterator;
 import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.Preconditions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -45,6 +48,7 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  * {@link InternalTimerService} that stores timers on the Java heap.
  */
 public class InternalTimerServiceImpl<K, N> implements InternalTimerService<N>, ProcessingTimeCallback {
+
 
 	private final ProcessingTimeService processingTimeService;
 
@@ -97,15 +101,6 @@ public class InternalTimerServiceImpl<K, N> implements InternalTimerService<N>, 
 	private InternalTimersSnapshot<K, N> restoredTimersSnapshot;
 
 	private final ProcessingTimeCallbackID processingTimeCallbackID;
-
-	InternalTimerServiceImpl(
-		KeyGroupRange localKeyGroupRange,
-		KeyContext keyContext,
-		ProcessingTimeService processingTimeService,
-		KeyGroupedInternalPriorityQueue<TimerHeapInternalTimer<K, N>> processingTimeTimersQueue,
-		KeyGroupedInternalPriorityQueue<TimerHeapInternalTimer<K, N>> eventTimeTimersQueue) {
-		this("", localKeyGroupRange, keyContext, processingTimeService, processingTimeTimersQueue, eventTimeTimersQueue);
-	}
 
 		InternalTimerServiceImpl(
 			String name,
@@ -277,6 +272,7 @@ public class InternalTimerServiceImpl<K, N> implements InternalTimerService<N>, 
 	 * @return a snapshot containing the timers for the given key-group, and the serializers for them
 	 */
 	public InternalTimersSnapshot<K, N> snapshotTimersForKeyGroup(int keyGroupIdx) {
+
 		return new InternalTimersSnapshot<>(
 			keySerializer,
 			keySerializer.snapshotConfiguration(),

@@ -19,6 +19,7 @@
 package org.apache.flink.runtime.checkpoint;
 
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.runtime.causal.log.job.serde.DeltaSerializerDeserializer;
 import org.apache.flink.runtime.executiongraph.Execution;
 import org.apache.flink.runtime.executiongraph.ExecutionJobVertex;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -108,7 +109,9 @@ public class StateAssignmentOperation {
 				}
 				operatorStates.add(operatorState);
 			}
-			if (statelessTask) { // skip tasks where no operator has any state
+			if (statelessTask && operation == Operation.RESTORE_STATE) {
+				// skip tasks where no operator has any state and we want to restore state.
+				//If dispatching to standbytask we use this as an epochID notification
 				continue;
 			}
 
@@ -240,8 +243,14 @@ public class StateAssignmentOperation {
 				taskState.putSubtaskStateByOperatorID(operatorID, operatorSubtaskState);
 			}
 
-			if (!statelessTask) {
-				JobManagerTaskRestore taskRestore = new JobManagerTaskRestore(restoreCheckpointId, taskState);
+			if (!statelessTask || operation == Operation.DISPATCH_STATE_TO_STANDBY_TASK) {
+
+				JobManagerTaskRestore taskRestore;
+				if(statelessTask)
+					taskRestore = new JobManagerTaskRestore(restoreCheckpointId,new TaskStateSnapshot());
+				else
+					taskRestore = new JobManagerTaskRestore(restoreCheckpointId, taskState);
+
 				try {
 					executionAttempt.setInitialState(taskRestore);
 				} catch (IllegalStateException e) {

@@ -112,6 +112,8 @@ public class PipelinedSubpartition extends ResultSubpartition {
 
 	private BufferBuiltDeterminant reuseBufferBuiltDeterminant;
 
+	private final short vertexID;
+
 
 	PipelinedSubpartition(int index, ResultPartition parent) {
 		this(index, parent, null);
@@ -127,6 +129,7 @@ public class PipelinedSubpartition extends ResultSubpartition {
 		this.isRecoveringSubpartitionInFlightState = new AtomicBoolean(false);
 		this.determinantRequests = new LinkedList<>();
 		this.reuseBufferBuiltDeterminant = new BufferBuiltDeterminant();
+		this.vertexID = recoveryManager.getContext().getTaskVertexID();
 	}
 
 	public void setIsRecoveringSubpartitionInFlightState(boolean isRecoveringSubpartitionInFlightState) {
@@ -641,7 +644,7 @@ public class PipelinedSubpartition extends ResultSubpartition {
 
 	@Override
 	public short getVertexID() {
-		return recoveryManager.getContext().getTaskVertexID();
+		return vertexID;
 	}
 
 	public boolean isRecoveringSubpartititionInFlightState() {

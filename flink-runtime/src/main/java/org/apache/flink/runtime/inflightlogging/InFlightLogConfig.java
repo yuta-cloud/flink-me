@@ -75,7 +75,7 @@ public class InFlightLogConfig implements Serializable {
 
 
 	public enum Type {
-		IN_MEMORY, SPILLABLE
+		IN_MEMORY, SPILLABLE, DISABLED
 	}
 
 	public enum Policy {
@@ -91,6 +91,8 @@ public class InFlightLogConfig implements Serializable {
 		String type = config.getString(IN_FLIGHT_LOG_TYPE);
 
 		switch (type) {
+			case "disabled":
+				return Type.DISABLED;
 			case "inmemory":
 				return Type.IN_MEMORY;
 			case "spillable":
@@ -104,12 +106,11 @@ public class InFlightLogConfig implements Serializable {
 		String policy = config.getString(IN_FLIGHT_LOG_SPILL_POLICY);
 
 		switch (policy) {
-			case "eager":
-				return Policy.EAGER;
 			case "availability":
 				return Policy.AVAILABILITY;
+			case "eager":
 			default:
-				throw new RuntimeException("Requested synchronous spill policy for asynchronous global policy");
+				return Policy.EAGER;
 		}
 	}
 

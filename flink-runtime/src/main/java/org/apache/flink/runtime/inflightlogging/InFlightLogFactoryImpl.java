@@ -45,6 +45,8 @@ public class InFlightLogFactoryImpl implements InFlightLogFactory {
 	@Override
 	public InFlightLog build() {
 		switch (config.getType()) {
+			case DISABLED:
+				return new NoOpInFlightLog();
 			case SPILLABLE:
 				BufferPool recoveryBufferPool = null;
 				try {

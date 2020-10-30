@@ -88,6 +88,9 @@ public abstract class AbstractDeltaSerializerDeserializer implements DeltaSerial
 
 	@Override
 	public ByteBuf enrichWithCausalLogDelta(ByteBuf serialized, InputChannelID outputChannelID, long epochID) {
+		if(determinantSharingDepth == 0)
+			return serialized;
+
 		ByteBufAllocator allocator = serialized.alloc();
 		CompositeByteBuf composite = allocator.compositeDirectBuffer(Integer.MAX_VALUE);
 
@@ -115,6 +118,9 @@ public abstract class AbstractDeltaSerializerDeserializer implements DeltaSerial
 
 	@Override
 	public void processCausalLogDelta(ByteBuf msg) {
+
+		if(determinantSharingDepth == 0)
+			return;
 
 		CausalLogID causalLogID = new CausalLogID();
 
@@ -163,7 +169,7 @@ public abstract class AbstractDeltaSerializerDeserializer implements DeltaSerial
 		//If that mapping is not present, we need to clone the key, so it is not mutated
 		CausalLogID idToInsert = new CausalLogID(causalLogID);
 
-		ThreadCausalLog newCausalLog = new ThreadCausalLogImpl(determinantBufferPool, idToInsert);
+		ThreadCausalLog newCausalLog = new ThreadCausalLogImpl(determinantBufferPool, idToInsert, determinantSharingDepth);
 		//Put it in the flat map
 		threadCausalLogs.put(idToInsert, newCausalLog);
 

@@ -77,21 +77,24 @@ public class ThreadCausalLogImpl implements ThreadCausalLog {
 	private final AtomicInteger visibleWriterIndex;
 	private final CausalLogID causalLogID;
 
+	private final int determinantSharingDepth;
+
 	/**
 	 * This constructor is used for upstream logs as they do not require a determinant encoder
 	 */
-	public ThreadCausalLogImpl(BufferPool determinantBufferPool, CausalLogID causalLogID) {
-		this(determinantBufferPool, causalLogID, null);
+	public ThreadCausalLogImpl(BufferPool determinantBufferPool, CausalLogID causalLogID, int determinantSharingDepth) {
+		this(determinantBufferPool, causalLogID, determinantSharingDepth,null);
 	}
 
 	/**
 	 * This constructor is used for local logs.
 	 */
-	public ThreadCausalLogImpl(BufferPool determinantBufferPool, CausalLogID causalLogID,
+	public ThreadCausalLogImpl(BufferPool determinantBufferPool, CausalLogID causalLogID, int determinantSharingDepth,
 							   DeterminantEncoder determinantEncoder) {
 		this.bufferPool = determinantBufferPool;
 		this.causalLogID = causalLogID;
 		this.determinantEncoder = determinantEncoder;
+		this.determinantSharingDepth = determinantSharingDepth;
 
 		buf = ByteBufAllocator.DEFAULT.compositeDirectBuffer(Integer.MAX_VALUE);
 		addComponent();
@@ -103,7 +106,6 @@ public class ThreadCausalLogImpl implements ThreadCausalLog {
 		ReadWriteLock epochLock = new ReentrantReadWriteLock();
 		epochReadLock = epochLock.readLock();
 		epochWriteLock = epochLock.writeLock();
-
 	}
 
 
@@ -151,6 +153,8 @@ public class ThreadCausalLogImpl implements ThreadCausalLog {
 	//========================= ONLY FOR LOCAL LOGS =========================================================
 	@Override
 	public void appendDeterminant(Determinant determinant, long epochID) {
+		if(determinantSharingDepth == 0)
+			return;
 		int determinantEncodedSize = determinant.getEncodedSizeInBytes();
 		if(LOG.isDebugEnabled())
 			LOG.debug("appendDeterminant: Determinant: {}, epochID: {}, encodedSize: {}", determinant, epochID,
@@ -185,6 +189,8 @@ public class ThreadCausalLogImpl implements ThreadCausalLog {
 	//========================= FOR ALL LOGS =========================================================
 	@Override
 	public boolean hasDeltaForConsumer(InputChannelID outputChannelID, long epochID) {
+		if(determinantSharingDepth == 0)
+			return false;
 		epochReadLock.lock();
 		try {
 			EpochStartOffset epochStartOffset = epochStartOffsets.get(epochID);
@@ -262,6 +268,9 @@ public class ThreadCausalLogImpl implements ThreadCausalLog {
 
 	@Override
 	public ByteBuf getDeterminants(long startEpochID) {
+		if(determinantSharingDepth == 0)
+			return Unpooled.EMPTY_BUFFER;
+
 		ByteBuf result;
 		int startIndex = 0;
 

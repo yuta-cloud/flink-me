@@ -61,9 +61,10 @@ import static org.apache.flink.runtime.causal.log.CausalLogManager.FULL_SHARING;
  * This implementation of the {@link JobCausalLog} maintains both a flat and a hierarchical data-structure of the
  * {@link ThreadCausalLog}s of the job.
  * The Flat data-structure is used for accesses by {@link CausalLogID}, while the hierarchical data-structure is
- * maintained for easy serialization and deserialization using the {@link GroupingDeltaSerializerDeserializer}, which saves on metadata
+ * maintained for easy serialization and deserialization using the {@link GroupingDeltaSerializerDeserializer}, which
+ * saves on metadata
  * transmitted.
- *
+ * <p>
  * To avoid auto-boxing concerns with the vertexIDToDistance map, we also only store the logs to share downstream
  * in the hierarchical structure.
  */
@@ -90,7 +91,8 @@ public class JobCausalLogImpl implements JobCausalLog {
 
 	private final AtomicLong latestCompletedCheckpoint;
 
-	public JobCausalLogImpl(int determinantSharingDepth, BufferPool bufferPool, DeltaEncodingStrategy deltaEncodingStrategy, boolean enableDeltaSharingOptimizations) {
+	public JobCausalLogImpl(int determinantSharingDepth, BufferPool bufferPool,
+							DeltaEncodingStrategy deltaEncodingStrategy, boolean enableDeltaSharingOptimizations) {
 		this.determinantSharingDepth = determinantSharingDepth;
 		this.determinantEncoder = new SimpleDeterminantEncoder();
 
@@ -104,10 +106,12 @@ public class JobCausalLogImpl implements JobCausalLog {
 
 		if (deltaEncodingStrategy.equals(DeltaEncodingStrategy.FLAT))
 			this.deltaSerdeStrategy = new FlatDeltaSerializerDeserializer(flatThreadCausalLogs,
-				hierarchicalThreadCausalLogsToBeShared, vertexIDToDistance, localTasks, determinantSharingDepth, bufferPool, enableDeltaSharingOptimizations);
+				hierarchicalThreadCausalLogsToBeShared, vertexIDToDistance, localTasks, determinantSharingDepth,
+				bufferPool, enableDeltaSharingOptimizations);
 		else
 			this.deltaSerdeStrategy = new GroupingDeltaSerializerDeserializer(flatThreadCausalLogs,
-				hierarchicalThreadCausalLogsToBeShared, vertexIDToDistance, localTasks, determinantSharingDepth, bufferPool, enableDeltaSharingOptimizations);
+				hierarchicalThreadCausalLogsToBeShared, vertexIDToDistance, localTasks, determinantSharingDepth,
+				bufferPool, enableDeltaSharingOptimizations);
 		this.latestCompletedCheckpoint = new AtomicLong(0);
 	}
 
@@ -123,7 +127,8 @@ public class JobCausalLogImpl implements JobCausalLog {
 
 		//Register the main thread log
 		CausalLogID localMainThreadCausalLogID = new CausalLogID(vertexID);
-		ThreadCausalLog mainThreadLog = new ThreadCausalLogImpl(determinantBufferPool, localMainThreadCausalLogID, determinantEncoder);
+		ThreadCausalLog mainThreadLog = new ThreadCausalLogImpl(determinantBufferPool, localMainThreadCausalLogID,
+			determinantSharingDepth, determinantEncoder);
 		flatThreadCausalLogs.put(localMainThreadCausalLogID, mainThreadLog);
 		VertexCausalLogs hierarchicalVertexCausalLogs = null;
 		if (determinantSharingDepth != 0) {
@@ -149,9 +154,9 @@ public class JobCausalLogImpl implements JobCausalLog {
 				CausalLogID subpartitionCausalLogID = new CausalLogID(vertexID, partitionIDLower,
 					partitionIDUpper, (byte) i);
 				ThreadCausalLog subpartitionThreadCausalLog = new ThreadCausalLogImpl(determinantBufferPool,
-					subpartitionCausalLogID, determinantEncoder);
+					subpartitionCausalLogID, determinantSharingDepth, determinantEncoder);
 				flatThreadCausalLogs.put(subpartitionCausalLogID, subpartitionThreadCausalLog);
-				if(determinantSharingDepth != 0)
+				if (determinantSharingDepth != 0)
 					hierarchicalPartitionCausalLogs.subpartitionLogs.put((byte) i, subpartitionThreadCausalLog);
 			}
 		}
@@ -214,10 +219,10 @@ public class JobCausalLogImpl implements JobCausalLog {
 	@Override
 	public void notifyCheckpointComplete(long checkpointID) {
 		long current = latestCompletedCheckpoint.get();
-		if(current >= checkpointID)
+		if (current >= checkpointID)
 			return;
 
-		if(latestCompletedCheckpoint.compareAndSet(current, checkpointID)) {
+		if (latestCompletedCheckpoint.compareAndSet(current, checkpointID)) {
 			for (ThreadCausalLog threadCausalLog : flatThreadCausalLogs.values()) {
 				threadCausalLog.notifyCheckpointComplete(checkpointID);
 			}
@@ -232,7 +237,7 @@ public class JobCausalLogImpl implements JobCausalLog {
 	@Override
 	public boolean unregisterTask(JobVertexID jobVertexId) {
 		localTasks.remove(jobVertexId);
-		if(localTasks.size() == 0) {
+		if (localTasks.size() == 0) {
 			for (ThreadCausalLog threadCausalLog : flatThreadCausalLogs.values()) {
 				threadCausalLog.close();
 			}

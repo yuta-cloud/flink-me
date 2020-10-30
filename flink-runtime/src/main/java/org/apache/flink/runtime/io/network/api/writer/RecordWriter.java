@@ -186,7 +186,7 @@ public class RecordWriter<T extends IOReadableWritable> implements CheckpointLis
 		return pruneTriggered;
 	}
 
-	public void broadcastEvent(AbstractEvent event) throws IOException, InterruptedException {
+	public void broadcastEvent(AbstractEvent event) throws IOException {
 		LOG.info("{}: RecordWriter broadcast event {}.", targetPartition.getTaskName(), event);
 
 		try (BufferConsumer eventBufferConsumer = EventSerializer.toBufferConsumer(event)) {
@@ -203,7 +203,7 @@ public class RecordWriter<T extends IOReadableWritable> implements CheckpointLis
 	}
 
 
-	public void emitEvent(AbstractEvent event, int targetChannel) throws IOException, InterruptedException {
+	public void emitEvent(AbstractEvent event, int targetChannel) throws IOException {
 		LOG.info("{}: RecordWriter emit event {}.", targetPartition.getTaskName(), event);
 
 		try (BufferConsumer eventBufferConsumer = EventSerializer.toBufferConsumer(event)) {
@@ -223,7 +223,7 @@ public class RecordWriter<T extends IOReadableWritable> implements CheckpointLis
 		targetPartition.flushAll();
 	}
 
-	public void clearBuffers() throws IOException, InterruptedException {
+	public void clearBuffers() {
 		LOG.debug("Clear buffers.");
 		for (int targetChannel = 0; targetChannel < numChannels; targetChannel++) {
 			closeBufferBuilder(targetChannel);
@@ -272,13 +272,10 @@ public class RecordWriter<T extends IOReadableWritable> implements CheckpointLis
 		return bufferBuilder;
 	}
 
-	private void closeBufferBuilder(int targetChannel) throws IOException, InterruptedException {
+	private void closeBufferBuilder(int targetChannel) {
 		if (bufferBuilders[targetChannel].isPresent()) {
-			BufferBuilder bufferBuilder = bufferBuilders[targetChannel].get();
+			bufferBuilders[targetChannel].get().finish();
 			bufferBuilders[targetChannel] = Optional.empty();
-
-			LOG.debug("Close bufferbuilder {}.", bufferBuilder);
-			numBytesOut.inc(bufferBuilder.finish());
 		}
 	}
 

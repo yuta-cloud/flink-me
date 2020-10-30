@@ -39,6 +39,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -239,6 +240,8 @@ public class ThreadCausalLogImpl implements ThreadCausalLog {
 			int numBytesToSend = computeNumberOfBytesToSend(epochID, physicalConsumerOffset);
 			ByteBuf update;
 
+			if(LOG.isDebugEnabled())
+				LOG.debug("getDeltaForConsumer: epoch {}, physConsOffset {}. numBytesToSend {}, consumerOffset: {}", epochID, physicalConsumerOffset, numBytesToSend, consumerOffset.getOffset());
 			if (numBytesToSend == 0)
 				update = Unpooled.EMPTY_BUFFER;
 			else
@@ -267,6 +270,11 @@ public class ThreadCausalLogImpl implements ThreadCausalLog {
 			EpochStartOffset offset = epochStartOffsets.get(startEpochID);
 			if (offset != null)
 				startIndex = offset.getOffset();
+			else {
+				long earliestEpochID = epochStartOffsets.keySet().stream().min(Long::compareTo).orElse(-1L);
+				if (earliestEpochID != -1L)
+					startIndex = epochStartOffsets.get(earliestEpochID).getOffset();
+			}
 			int writerPos = visibleWriterIndex.get();
 			int numBytesToSend = writerPos - startIndex;
 
@@ -339,24 +347,32 @@ public class ThreadCausalLogImpl implements ThreadCausalLog {
 			LOG.debug("Notify checkpoint complete for id {}", checkpointId);
 		epochWriteLock.lock();
 		try {
+			int visibleWriter = visibleWriterIndex.get();
 			EpochStartOffset followingEpoch =
 				epochStartOffsets.computeIfAbsent(checkpointId,
 					epochID -> new EpochStartOffset(epochID,
-						visibleWriterIndex.get()));
+						visibleWriter));
 			for (Long epochID : epochStartOffsets.keySet())
 				if (epochID < checkpointId)
 					epochStartOffsets.remove(epochID);
 
 			int followingEpochOffset = followingEpoch.getOffset();
+			if(LOG.isDebugEnabled())
+				LOG.debug("chkComplete visWriterIndex {}, followingEpochOffset {}", visibleWriter, followingEpochOffset);
 			buf.readerIndex(followingEpochOffset);
 			buf.discardReadComponents();
 			int move = followingEpochOffset - buf.readerIndex();
 
-			for (EpochStartOffset epochStartOffset :
-				epochStartOffsets.values())
-				epochStartOffset.setOffset(epochStartOffset.getOffset() - move);
 			if(LOG.isDebugEnabled())
-				LOG.debug("Offsets moved by {} bytes", move);
+				LOG.debug("Offsets moved by {} bytes.", move);
+			for (Map.Entry<Long,EpochStartOffset> entry:
+				epochStartOffsets.entrySet()) {
+				EpochStartOffset eso = entry.getValue();
+				int currentOffset = eso.getOffset();
+				LOG.debug("Epoch {} currently at {} moved by {} and moved to {}", entry.getKey(), currentOffset, move, currentOffset - move);
+
+				eso.setOffset(currentOffset - move);
+			}
 			visibleWriterIndex.set(visibleWriterIndex.get() - move);
 		} finally {
 			epochWriteLock.unlock();

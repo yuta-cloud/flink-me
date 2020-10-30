@@ -52,7 +52,10 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
+
+import static org.apache.flink.runtime.causal.log.CausalLogManager.FULL_SHARING;
 
 /**
  * This implementation of the {@link JobCausalLog} maintains both a flat and a hierarchical data-structure of the
@@ -66,7 +69,6 @@ import java.util.stream.Collectors;
  */
 public class JobCausalLogImpl implements JobCausalLog {
 	private static final Logger LOG = LoggerFactory.getLogger(JobCausalLogImpl.class);
-
 
 	private final DeterminantEncoder determinantEncoder;
 
@@ -86,6 +88,8 @@ public class JobCausalLogImpl implements JobCausalLog {
 
 	private final BufferPool determinantBufferPool;
 
+	private final AtomicLong latestCompletedCheckpoint;
+
 	public JobCausalLogImpl(int determinantSharingDepth, BufferPool bufferPool, DeltaEncodingStrategy deltaEncodingStrategy, boolean enableDeltaSharingOptimizations) {
 		this.determinantSharingDepth = determinantSharingDepth;
 		this.determinantEncoder = new SimpleDeterminantEncoder();
@@ -104,6 +108,7 @@ public class JobCausalLogImpl implements JobCausalLog {
 		else
 			this.deltaSerdeStrategy = new GroupingDeltaSerializerDeserializer(flatThreadCausalLogs,
 				hierarchicalThreadCausalLogsToBeShared, vertexIDToDistance, localTasks, determinantSharingDepth, bufferPool, enableDeltaSharingOptimizations);
+		this.latestCompletedCheckpoint = new AtomicLong(0);
 	}
 
 	@Override
@@ -172,7 +177,7 @@ public class JobCausalLogImpl implements JobCausalLog {
 		VertexID vertexId = e.getFailedVertex();
 		long startEpochID = e.getStartEpochID();
 		LOG.info("Got request for determinants of vertexID {}", vertexId);
-		if (determinantSharingDepth != -1 && Math.abs(this.vertexIDToDistance.get(vertexId.getVertexID())) > determinantSharingDepth)
+		if (determinantSharingDepth != FULL_SHARING && Math.abs(this.vertexIDToDistance.get(vertexId.getVertexID())) > determinantSharingDepth)
 			return new DeterminantResponseEvent(e);
 		else {
 			short vertex = vertexId.getVertexID();
@@ -202,9 +207,20 @@ public class JobCausalLogImpl implements JobCausalLog {
 	}
 
 	@Override
+	public int getDeterminantSharingDepth() {
+		return determinantSharingDepth;
+	}
+
+	@Override
 	public void notifyCheckpointComplete(long checkpointID) {
-		for (ThreadCausalLog threadCausalLog : flatThreadCausalLogs.values()) {
-			threadCausalLog.notifyCheckpointComplete(checkpointID);
+		long current = latestCompletedCheckpoint.get();
+		if(current >= checkpointID)
+			return;
+
+		if(latestCompletedCheckpoint.compareAndSet(current, checkpointID)) {
+			for (ThreadCausalLog threadCausalLog : flatThreadCausalLogs.values()) {
+				threadCausalLog.notifyCheckpointComplete(checkpointID);
+			}
 		}
 	}
 
@@ -215,7 +231,7 @@ public class JobCausalLogImpl implements JobCausalLog {
 
 	@Override
 	public boolean unregisterTask(JobVertexID jobVertexId) {
-		short vertexID = localTasks.remove(jobVertexId);
+		localTasks.remove(jobVertexId);
 		if(localTasks.size() == 0) {
 			for (ThreadCausalLog threadCausalLog : flatThreadCausalLogs.values()) {
 				threadCausalLog.close();

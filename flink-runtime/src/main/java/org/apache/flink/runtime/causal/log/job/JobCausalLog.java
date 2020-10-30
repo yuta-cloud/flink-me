@@ -62,12 +62,16 @@ public interface JobCausalLog {
 	void unregisterDownstreamConsumer(InputChannelID toCancel);
 
 
-	DeterminantEncoder getDeterminantEncoder();
-
 	void notifyCheckpointComplete(long checkpointID);
 
 	//================ Safety check metrics==================================================
 	int threadLogLength(CausalLogID causalLogID);
 
 	boolean unregisterTask(JobVertexID jobVertexId);
+
+	//============== Getters ======================================
+
+	DeterminantEncoder getDeterminantEncoder();
+
+	int getDeterminantSharingDepth();
 }

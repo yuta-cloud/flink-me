@@ -52,6 +52,8 @@ import java.util.concurrent.ConcurrentMap;
  */
 public class CausalLogManager {
 
+	public static final int FULL_SHARING = -1;
+
 	private static final Logger LOG = LoggerFactory.getLogger(CausalLogManager.class);
 
 	//Stores the causal logs of each job

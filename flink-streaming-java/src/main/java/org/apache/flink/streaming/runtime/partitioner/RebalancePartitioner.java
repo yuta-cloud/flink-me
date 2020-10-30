@@ -41,20 +41,12 @@ public class RebalancePartitioner<T> extends StreamPartitioner<T> {
 			int numChannels) {
 		int newChannel = ++returnArray[0];
 		if (newChannel >= numChannels) {
-			returnArray[0] = resetValue(numChannels, newChannel);
+			returnArray[0] = 0;
 		}
 		return returnArray;
 	}
 
-	private static int resetValue(
-			int numChannels,
-			int newChannel) {
-		if (newChannel == Integer.MAX_VALUE) {
-			// Initializes the first partition, this branch is only entered when initializing.
-			return ThreadLocalRandom.current().nextInt(numChannels);
-		}
-		return 0;
-	}
+
 
 	public StreamPartitioner<T> copy() {
 		return this;

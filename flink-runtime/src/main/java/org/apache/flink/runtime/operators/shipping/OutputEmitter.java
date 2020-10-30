@@ -279,6 +279,6 @@ public class OutputEmitter<T> implements ChannelSelector<SerializationDelegate<T
 
 	@Override
 	public void notifyCheckpointBarrier(long checkpointID) {
-
+		nextChannelToSendTo = 0;
 	}
 }

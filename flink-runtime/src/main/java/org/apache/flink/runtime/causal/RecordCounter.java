@@ -25,6 +25,8 @@
 
 package org.apache.flink.runtime.causal;
 
+import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
+
 public interface RecordCounter {
 
 	int getRecordCount();
@@ -36,4 +38,7 @@ public interface RecordCounter {
 
 	void resetRecordCount();
 
+	void setRecordCountTarget(int target);
+
+	void setRecoveryManager(IRecoveryManager recoveryManager);
 }

@@ -66,8 +66,6 @@ public class StreamSource<OUT, SRC extends SourceFunction<OUT>>
 
 		final TimeCharacteristic timeCharacteristic = getOperatorConfig().getTimeCharacteristic();
 
-		final RecordCounter recordCounter = getContainingTask().getRecordCounter();
-
 		final Configuration configuration = this.getContainingTask().getEnvironment().getTaskManagerInfo().getConfiguration();
 		final long latencyTrackingInterval = getExecutionConfig().isLatencyTrackingConfigured()
 			? getExecutionConfig().getLatencyTrackingInterval()
@@ -81,8 +79,7 @@ public class StreamSource<OUT, SRC extends SourceFunction<OUT>>
 				latencyTrackingInterval,
 				this.getOperatorID(),
 				getRuntimeContext().getIndexOfThisSubtask(),
-				lockingObject,
-				recordCounter
+				lockingObject
 				);
 		}
 
@@ -157,7 +154,7 @@ public class StreamSource<OUT, SRC extends SourceFunction<OUT>>
 			long latencyTrackingInterval,
 			final OperatorID operatorId,
 			final int subtaskIndex,
-			Object lockingObject, RecordCounter recordCounter) {
+			Object lockingObject) {
 
 			latencyMarkTimer = processingTimeService.scheduleAtFixedRate(
 				new ProcessingTimeCallback() {
@@ -169,7 +166,6 @@ public class StreamSource<OUT, SRC extends SourceFunction<OUT>>
 						synchronized (lockingObject) {
 							try {
 								// ProcessingTimeService callbacks are executed under the checkpointing lock
-								recordCounter.incRecordCount();
 								output.emitLatencyMarker(new LatencyMarker(timestamp, operatorId, subtaskIndex));
 							} catch (Throwable t) {
 								// we catch the Throwables here so that we don't trigger the processing

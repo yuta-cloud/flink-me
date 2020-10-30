@@ -76,7 +76,6 @@ public class OneInputStreamTask<IN, OUT> extends StreamTask<OUT, OneInputStreamO
 
 	@Override
 	public void init() throws Exception {
-		LOG.info("Initing");
 		StreamConfig configuration = getConfiguration();
 
 		TypeSerializer<IN> inSerializer = configuration.getTypeSerializerIn1(getUserCodeClassLoader());
@@ -85,7 +84,6 @@ public class OneInputStreamTask<IN, OUT> extends StreamTask<OUT, OneInputStreamO
 		if (numberOfInputs > 0) {
 			SingleInputGate[] inputGates = getEnvironment().getAllInputGates();
 
-			LOG.info("Create input processor");
 			inputProcessor = new StreamInputProcessor<>(
 				inputGates,
 				inSerializer,
@@ -98,9 +96,7 @@ public class OneInputStreamTask<IN, OUT> extends StreamTask<OUT, OneInputStreamO
 				this.headOperator,
 				getEnvironment().getMetricGroup().getIOMetricGroup(),
 				inputWatermarkGauge);
-			LOG.info("Done with Create input processor");
 		}
-		getRecoveryManager().setRecordCountTargetForceable(inputProcessor);
 		headOperator.getMetricGroup().gauge(MetricNames.IO_CURRENT_INPUT_WATERMARK, this.inputWatermarkGauge);
 		// wrap watermark gauge since registered metrics must be unique
 		getEnvironment().getMetricGroup().gauge(MetricNames.IO_CURRENT_INPUT_WATERMARK, this.inputWatermarkGauge::getValue);
@@ -111,10 +107,6 @@ public class OneInputStreamTask<IN, OUT> extends StreamTask<OUT, OneInputStreamO
 
 		// cache processor reference on the stack, to make the code more JIT friendly
 		final StreamInputProcessor<IN> inputProcessor = this.inputProcessor;
-
-
-		if(!getRecoveryManager().isRunning())
-			inputProcessor.recover();
 
 		while (running && inputProcessor.processInput()) {
 			// all the work happens in the "processInput" method

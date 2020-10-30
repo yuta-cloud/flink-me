@@ -21,8 +21,6 @@ package org.apache.flink.streaming.api.functions.source;
 import org.apache.flink.annotation.Public;
 import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.api.common.functions.Function;
-import org.apache.flink.runtime.causal.ProcessingTimeForceable;
-import org.apache.flink.runtime.causal.RecordCountTargetForceable;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.functions.TimestampAssigner;
 import org.apache.flink.streaming.api.watermark.Watermark;
@@ -192,7 +190,7 @@ public interface SourceFunction<T> extends Function, Serializable {
 	 * @param <T> The type of the elements produced by the source.
 	 */
 	@Public // Interface might be extended in the future with additional methods.
-	interface SourceContext<T> extends RecordCountTargetForceable {
+	interface SourceContext<T> {
 
 		/**
 		 * Emits one element from the source, without attaching a timestamp. In most cases,

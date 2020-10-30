@@ -24,7 +24,6 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.SimpleCounter;
 import org.apache.flink.runtime.causal.RecordCounter;
-import org.apache.flink.runtime.causal.RecordCountTargetForceable;
 import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
 import org.apache.flink.runtime.event.AbstractEvent;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
@@ -57,6 +56,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.Collection;
 
+import static org.apache.flink.runtime.causal.recovery.RecoveryManager.NO_RECORD_COUNT_TARGET;
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
@@ -75,7 +75,7 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  * @param <IN2> The type of the records that arrive on the second input
  */
 @Internal
-public class StreamTwoInputProcessor<IN1, IN2> implements RecordCountTargetForceable {
+public class StreamTwoInputProcessor<IN1, IN2> {
 
 	private static final Logger LOG = LoggerFactory.getLogger(StreamTwoInputProcessor.class);
 
@@ -93,9 +93,7 @@ public class StreamTwoInputProcessor<IN1, IN2> implements RecordCountTargetForce
 
 	private final Object lock;
 
-	private IRecoveryManager recoveryManager;
 	private final RecordCounter recordCounter;
-	private int asyncEventRecordCountTarget;
 
 	// ---------------- Status and Watermark Valves ------------------
 
@@ -157,7 +155,10 @@ public class StreamTwoInputProcessor<IN1, IN2> implements RecordCountTargetForce
 		WatermarkGauge input2WatermarkGauge,
 		RecordWriterOutput<?>[] recordWriterOutputs) throws IOException {
 
+		recordCounter = checkpointedTask.getRecordCounter();
+
 		inputGate = InputGateUtil.createInputGate(inputGates1, inputGates2);
+		checkpointedTask.getRecoveryManager().getContext().setInputGate(inputGate);
 
 
 		this.taskName = inputGate.getOwningTaskName();
@@ -170,9 +171,6 @@ public class StreamTwoInputProcessor<IN1, IN2> implements RecordCountTargetForce
 
 		this.lock = checkNotNull(lock);
 
-		this.recoveryManager = checkpointedTask.getRecoveryManager();
-		this.recordCounter = checkpointedTask.getRecordCounter();
-		asyncEventRecordCountTarget = -1;
 
 		StreamElementSerializer<IN1> ser1 = new StreamElementSerializer<>(inputSerializer1);
 		this.deserializationDelegate1 = new NonReusingDeserializationDelegate<>(ser1);
@@ -270,7 +268,6 @@ public class StreamTwoInputProcessor<IN1, IN2> implements RecordCountTargetForce
 							recordCounter.incRecordCount();
 							numRecordsIn.inc();
 							streamOperator.setKeyContextElement1(record);
-							LOG.debug("{}: Process element no {}: {}.", taskName, numRecordsIn.getCount(), record);
 							streamOperator.processElement1(record);
 						}
 						return true;
@@ -341,24 +338,6 @@ public class StreamTwoInputProcessor<IN1, IN2> implements RecordCountTargetForce
 		}
 	}
 
-	public boolean recover() throws Exception {
-		LOG.info("Call to recover");
-		//While we are recovering
-		//		 	Trigger any asynchronous events that should be triggered at this point
-		//			Process a record
-		while (!recoveryManager.isRunning()) {
-			//Process a few thousand records before querying if still recovering. This is just to go around some
-			// design limitations
-			for (int i = 0; i < 10000; i++) {
-				while (asyncEventRecordCountTarget != -1 && recordCounter.getRecordCount() == asyncEventRecordCountTarget)
-					recoveryManager.triggerAsyncEvent();
-				if (!processInput())
-					return false;
-			}
-		}
-		return true;
-	}
-
 	public void cleanup() throws IOException {
 		// clear the buffers first. this part should not ever fail
 		for (RecordDeserializer<?> deserializer : recordDeserializers) {
@@ -374,10 +353,6 @@ public class StreamTwoInputProcessor<IN1, IN2> implements RecordCountTargetForce
 		barrierHandler.cleanup();
 	}
 
-	@Override
-	public void setRecordCountTarget(int target) {
-		this.asyncEventRecordCountTarget = target;
-	}
 
 	public CheckpointBarrierHandler getCheckpointBarrierHandlers() {
 		return barrierHandler;

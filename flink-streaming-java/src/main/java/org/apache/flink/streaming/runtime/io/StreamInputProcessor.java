@@ -24,7 +24,6 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.SimpleCounter;
 import org.apache.flink.runtime.causal.RecordCounter;
-import org.apache.flink.runtime.causal.RecordCountTargetForceable;
 import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
 import org.apache.flink.runtime.event.AbstractEvent;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
@@ -57,6 +56,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
+import static org.apache.flink.runtime.causal.recovery.RecoveryManager.NO_RECORD_COUNT_TARGET;
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
@@ -74,7 +74,7 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  * @param <IN> The type of the record that can be read with this record reader.
  */
 @Internal
-public class StreamInputProcessor<IN> implements RecordCountTargetForceable {
+public class StreamInputProcessor<IN> {
 
 	private static final Logger LOG = LoggerFactory.getLogger(StreamInputProcessor.class);
 
@@ -118,11 +118,7 @@ public class StreamInputProcessor<IN> implements RecordCountTargetForceable {
 
 	private boolean isFinished;
 
-	private final IRecoveryManager recoveryManager;
 	private final RecordCounter recordCounter;
-
-
-	private int asyncEventRecordCountTarget;
 
 
 	@SuppressWarnings("unchecked")
@@ -139,13 +135,10 @@ public class StreamInputProcessor<IN> implements RecordCountTargetForceable {
 		TaskIOMetricGroup metrics,
 		WatermarkGauge watermarkGauge) throws IOException {
 
-		this.recoveryManager = checkpointedTask.getRecoveryManager();
-
-		asyncEventRecordCountTarget = -1;
 
 		this.recordCounter = checkpointedTask.getRecordCounter();
 		inputGate = InputGateUtil.createInputGate(inputGates);
-		checkpointedTask.getRecoveryManager().setInputGate(inputGate);
+		checkpointedTask.getRecoveryManager().getContext().setInputGate(inputGate);
 
 		this.barrierHandler = InputProcessorUtil.createCheckpointBarrierHandler(
 			checkpointedTask, checkpointMode, ioManager, inputGate, taskManagerConfig);
@@ -259,24 +252,6 @@ public class StreamInputProcessor<IN> implements RecordCountTargetForceable {
 		}
 	}
 
-	public boolean recover() throws Exception {
-		LOG.info("Call to recover");
-		//While we are recovering
-		//		 	Trigger any asynchronous events that should be triggered at this point
-		//			Process a record
-		while (!recoveryManager.isRunning()) {
-			//Process a few thousand records before querying if still recovering. This is just to go around some
-			// design limitations
-			for (int i = 0; i < 10000; i++) {
-				while (asyncEventRecordCountTarget != -1 && recordCounter.getRecordCount() == asyncEventRecordCountTarget)
-					recoveryManager.triggerAsyncEvent();
-				if (!processInput())
-					return false;
-			}
-		}
-		return true;
-	}
-
 	public void cleanup() throws IOException {
 		// clear the buffers first. this part should not ever fail
 		for (RecordDeserializer<?> deserializer : recordDeserializers) {
@@ -291,10 +266,6 @@ public class StreamInputProcessor<IN> implements RecordCountTargetForceable {
 		barrierHandler.cleanup();
 	}
 
-	@Override
-	public void setRecordCountTarget(int target) {
-		asyncEventRecordCountTarget = target;
-	}
 
 	public CheckpointBarrierHandler getCheckpointBarrierHandlers() {
 		return this.barrierHandler;

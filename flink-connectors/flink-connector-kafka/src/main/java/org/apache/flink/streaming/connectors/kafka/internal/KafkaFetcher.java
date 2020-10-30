@@ -19,9 +19,6 @@ package org.apache.flink.streaming.connectors.kafka.internal;
 
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.metrics.MetricGroup;
-import org.apache.flink.runtime.causal.RecordCounter;
-import org.apache.flink.runtime.causal.RecordCountTargetForceable;
-import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
 import org.apache.flink.streaming.api.functions.AssignerWithPeriodicWatermarks;
 import org.apache.flink.streaming.api.functions.AssignerWithPunctuatedWatermarks;
 import org.apache.flink.streaming.api.functions.source.SourceFunction;

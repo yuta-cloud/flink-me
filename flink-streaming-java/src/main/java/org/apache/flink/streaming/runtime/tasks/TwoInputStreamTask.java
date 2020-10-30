@@ -104,7 +104,6 @@ public class TwoInputStreamTask<IN1, IN2, OUT> extends StreamTask<OUT, TwoInputS
 				input1WatermarkGauge,
 				input2WatermarkGauge,
 				getStreamOutputs());
-		this.getRecoveryManager().setRecordCountTargetForceable(inputProcessor);
 		headOperator.getMetricGroup().gauge(MetricNames.IO_CURRENT_INPUT_WATERMARK, minInputWatermarkGauge);
 		headOperator.getMetricGroup().gauge(MetricNames.IO_CURRENT_INPUT_1_WATERMARK, input1WatermarkGauge);
 		headOperator.getMetricGroup().gauge(MetricNames.IO_CURRENT_INPUT_2_WATERMARK, input2WatermarkGauge);
@@ -116,9 +115,6 @@ public class TwoInputStreamTask<IN1, IN2, OUT> extends StreamTask<OUT, TwoInputS
 	protected void run() throws Exception {
 		// cache processor reference on the stack, to make the code more JIT friendly
 		final StreamTwoInputProcessor<IN1, IN2> inputProcessor = this.inputProcessor;
-
-		if(!getRecoveryManager().isRunning())
-			inputProcessor.recover();
 
 		while (running && inputProcessor.processInput()) {
 			// all the work happens in the "processInput" method

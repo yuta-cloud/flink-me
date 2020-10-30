@@ -258,7 +258,7 @@ public class FlinkKafkaConsumer08<T> extends FlinkKafkaConsumerBase<T> {
 				kafkaProperties,
 				autoCommitInterval,
 				consumerMetricGroup,
-				useMetrics, recoveryManager);
+				useMetrics);
 	}
 
 	@Override

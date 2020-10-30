@@ -20,7 +20,6 @@ package org.apache.flink.streaming.api.operators;
 import org.apache.flink.runtime.causal.RecordCounter;
 import org.apache.flink.runtime.causal.determinant.ProcessingTimeCallbackID;
 import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
-import org.apache.flink.runtime.causal.recovery.RecoveryManager;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.functions.source.SourceFunction;
 import org.apache.flink.streaming.api.watermark.Watermark;
@@ -32,6 +31,8 @@ import org.apache.flink.streaming.runtime.tasks.ProcessingTimeService;
 import org.apache.flink.util.Preconditions;
 
 import java.util.concurrent.ScheduledFuture;
+
+import static org.apache.flink.runtime.causal.recovery.RecoveryManager.NO_RECORD_COUNT_TARGET;
 
 /**
  * Source contexts for various stream time characteristics.
@@ -98,28 +99,18 @@ public class StreamSourceContexts {
 		private final Output<StreamRecord<T>> output;
 		private final StreamRecord<T> reuse;
 
-		private final IRecoveryManager recoveryManager;
 		private final RecordCounter recordCounter;
-		private int asyncEventRecordCountTarget;
-		private boolean recovering;
 
 		private NonTimestampContext(Object checkpointLock, Output<StreamRecord<T>> output, IRecoveryManager recoveryManager) {
 			this.lock = Preconditions.checkNotNull(checkpointLock, "The checkpoint lock cannot be null.");
 			this.output = Preconditions.checkNotNull(output, "The output cannot be null.");
 			this.reuse = new StreamRecord<>(null);
 
-			this.recordCounter = recoveryManager.getRecordCounter();
-			this.recovering = !recoveryManager.isRunning();
-			this.asyncEventRecordCountTarget = -1;
-			this.recoveryManager = recoveryManager;
-			this.recoveryManager.setRecordCountTargetForceable(this);
+			this.recordCounter = recoveryManager.getContext().getRecordCounter();
 		}
 
 		@Override
 		public void collect(T element) {
-			if(recovering && (recovering = !recoveryManager.isRunning()))
-				while(asyncEventRecordCountTarget != -1 && recordCounter.getRecordCount() == asyncEventRecordCountTarget)
-					recoveryManager.triggerAsyncEvent();
 
 			synchronized (lock) {
 				recordCounter.incRecordCount();
@@ -151,10 +142,6 @@ public class StreamSourceContexts {
 		@Override
 		public void close() {}
 
-		@Override
-		public void setRecordCountTarget(int target) {
-			this.asyncEventRecordCountTarget = target;
-		}
 	}
 
 	/**
@@ -392,9 +379,6 @@ public class StreamSourceContexts {
 		private volatile boolean failOnNextCheck;
 
 		private final RecordCounter recordCounter;
-		private final IRecoveryManager recoveryManager;
-		private int asyncEventRecordCountTarget;
-		private boolean recovering;
 
 		/**
 		 * Create a watermark context.
@@ -413,11 +397,7 @@ public class StreamSourceContexts {
 			this.checkpointLock = Preconditions.checkNotNull(checkpointLock, "Checkpoint Lock cannot be null.");
 			this.streamStatusMaintainer = Preconditions.checkNotNull(streamStatusMaintainer, "Stream Status Maintainer cannot be null.");
 
-			this.recordCounter = recoveryManager.getRecordCounter();
-			this.recovering = !recoveryManager.isRunning();
-			this.asyncEventRecordCountTarget = -1;
-			this.recoveryManager = recoveryManager;
-			this.recoveryManager.setRecordCountTargetForceable(this);
+			this.recordCounter = recoveryManager.getContext().getRecordCounter();
 
 			if (idleTimeout != -1) {
 				Preconditions.checkArgument(idleTimeout >= 1, "The idle timeout cannot be smaller than 1 ms.");
@@ -429,9 +409,6 @@ public class StreamSourceContexts {
 
 		@Override
 		public void collect(T element) {
-			if(recovering && (recovering = !recoveryManager.isRunning()))
-				while(asyncEventRecordCountTarget != -1 && recordCounter.getRecordCount() == asyncEventRecordCountTarget)
-					recoveryManager.triggerAsyncEvent();
 			synchronized (checkpointLock) {
 				streamStatusMaintainer.toggleStreamStatus(StreamStatus.ACTIVE);
 
@@ -448,9 +425,6 @@ public class StreamSourceContexts {
 
 		@Override
 		public void collectWithTimestamp(T element, long timestamp) {
-			if(recovering && (recovering = !recoveryManager.isRunning()))
-				while(asyncEventRecordCountTarget != -1 && recordCounter.getRecordCount() == asyncEventRecordCountTarget)
-					recoveryManager.triggerAsyncEvent();
 			synchronized (checkpointLock) {
 				streamStatusMaintainer.toggleStreamStatus(StreamStatus.ACTIVE);
 
@@ -468,9 +442,6 @@ public class StreamSourceContexts {
 		@Override
 		public void emitWatermark(Watermark mark) {
 			if (allowWatermark(mark)) {
-				if(recovering && (recovering = !recoveryManager.isRunning()))
-					while(asyncEventRecordCountTarget != -1 && recordCounter.getRecordCount() == asyncEventRecordCountTarget)
-						recoveryManager.triggerAsyncEvent();
 				synchronized (checkpointLock) {
 					streamStatusMaintainer.toggleStreamStatus(StreamStatus.ACTIVE);
 
@@ -567,9 +538,5 @@ public class StreamSourceContexts {
 		 */
 		protected abstract void processAndEmitWatermark(Watermark mark);
 
-		@Override
-		public void setRecordCountTarget(int target) {
-			this.asyncEventRecordCountTarget = target;
-		}
 	}
 }

@@ -26,12 +26,24 @@
 package org.apache.flink.runtime.causal;
 
 
+import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
+
+import static org.apache.flink.runtime.causal.recovery.RecoveryManager.NO_RECORD_COUNT_TARGET;
+
+/**
+ * All interaction with the record counter should be done inside the checkpoint lock.
+ */
 public final class RecordCounterImpl implements RecordCounter {
 
 	private int recordCount;
 
+	private int recordCountTarget;
+
+	private  IRecoveryManager recoveryManager;
+
 	public RecordCounterImpl() {
 		recordCount = 0;
+		recordCountTarget = NO_RECORD_COUNT_TARGET;
 	}
 
 	@Override
@@ -41,13 +53,29 @@ public final class RecordCounterImpl implements RecordCounter {
 
 	@Override
 	public final void incRecordCount() {
-		//increments to record count are protected by the checkpoint lock, so this is ok
+
+		//Before returning control to the caller, check if we first should execute async nondeterministic event
+		while(recordCount == recordCountTarget) {
+			recordCountTarget = NO_RECORD_COUNT_TARGET;
+			recoveryManager.triggerAsyncEvent();
+		}
+
 		recordCount++;
 	}
 
 	@Override
 	public final void resetRecordCount() {
 		recordCount = 0;
+	}
+
+	@Override
+	public void setRecordCountTarget(int target) {
+		this.recordCountTarget = target;
+	}
+
+	@Override
+	public void setRecoveryManager(IRecoveryManager recoveryManager) {
+		this.recoveryManager = recoveryManager;
 	}
 
 }

@@ -48,18 +48,18 @@ public class InFlightLogFactoryImpl implements InFlightLogFactory {
 			case DISABLED:
 				return new NoOpInFlightLog();
 			case SPILLABLE:
-				BufferPool recoveryBufferPool = null;
+				BufferPool prefetchBufferPool = null;
 				try {
-					recoveryBufferPool = networkBufferPool.createBufferPool(config.getNumberOfRecoveryBuffers(),
-						config.getNumberOfRecoveryBuffers());
+					prefetchBufferPool = networkBufferPool.createBufferPool(config.getPreFetchBufferPoolSize(),
+						config.getPreFetchBufferPoolSize());
 				} catch (IOException e) {
 					throw new RuntimeException(e);
 				}
 
 				if(config.getSpillPolicy() == InFlightLogConfig.Policy.EAGER)
-					return new SpillableSubpartitionInFlightLogger(ioManager, recoveryBufferPool, true);
+					return new SpillableSubpartitionInFlightLogger(ioManager, prefetchBufferPool, true);
 				else
-					return new SpillableSubpartitionInFlightLogger(ioManager, recoveryBufferPool, false);
+					return new SpillableSubpartitionInFlightLogger(ioManager, prefetchBufferPool, false);
 
 			case IN_MEMORY:
 			default:

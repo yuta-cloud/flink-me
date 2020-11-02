@@ -54,8 +54,8 @@ public class InFlightLogConfig implements Serializable {
 			"that" +
 			" spills on every epoch completion.");
 
-	public static final ConfigOption<Integer> IN_FLIGHT_LOG_SPILL_NUM_RECOVERY_BUFFERS = ConfigOptions
-		.key("taskmanager.inflight.spill.num-recovery-buffers")
+	public static final ConfigOption<Integer> IN_FLIGHT_LOG_SPILL_NUM_PREFETCH_BUFFERS = ConfigOptions
+		.key("taskmanager.inflight.spill.num-prefetch-buffers")
 		.defaultValue(50)
 		.withDescription("The number of buffers each pipelined subpartition reserves for reading spilled buffers and " +
 			"sending downstream");
@@ -114,8 +114,8 @@ public class InFlightLogConfig implements Serializable {
 		}
 	}
 
-	public int getNumberOfRecoveryBuffers() {
-		return config.getInteger(IN_FLIGHT_LOG_SPILL_NUM_RECOVERY_BUFFERS);
+	public int getPreFetchBufferPoolSize() {
+		return config.getInteger(IN_FLIGHT_LOG_SPILL_NUM_PREFETCH_BUFFERS);
 	}
 
 	public float getAvailabilityPolicyFillFactor() {

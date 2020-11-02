@@ -53,7 +53,7 @@ public class SpillableSubpartitionInFlightLogger implements InFlightLog {
 	private final boolean eagerlySpill;
 
 	private BufferPool inFlightBufferPool;
-	private final BufferPool recoveryBufferPool;
+	private final BufferPool prefetchBufferPool;
 
 	private final AtomicBoolean isReplaying;
 
@@ -61,10 +61,10 @@ public class SpillableSubpartitionInFlightLogger implements InFlightLog {
 
 	private boolean closed;
 
-	public SpillableSubpartitionInFlightLogger(IOManager ioManager, BufferPool recoveryBufferPool,
+	public SpillableSubpartitionInFlightLogger(IOManager ioManager, BufferPool prefetchBufferPool,
 											   boolean eagerlySpill) {
 		this.ioManager = ioManager;
-		this.recoveryBufferPool = recoveryBufferPool;
+		this.prefetchBufferPool = prefetchBufferPool;
 
 		this.slicedLog = new TreeMap<>();
 		this.isReplaying = new AtomicBoolean(false);
@@ -134,7 +134,7 @@ public class SpillableSubpartitionInFlightLogger implements InFlightLog {
 			if (logToReplay.size() == 0)
 				return null;
 
-			this.currentIterator = new SpilledReplayIterator(logToReplay, recoveryBufferPool, ioManager, flushLock,
+			this.currentIterator = new SpilledReplayIterator(logToReplay, prefetchBufferPool, ioManager, flushLock,
 				ignoreBuffers,
 				isReplaying);
 			return currentIterator;
@@ -144,8 +144,8 @@ public class SpillableSubpartitionInFlightLogger implements InFlightLog {
 
 	@Override
 	public void destroyBufferPools() {
-		if(recoveryBufferPool != null)
-			recoveryBufferPool.lazyDestroy();
+		if(prefetchBufferPool != null)
+			prefetchBufferPool.lazyDestroy();
 	}
 
 	@Override

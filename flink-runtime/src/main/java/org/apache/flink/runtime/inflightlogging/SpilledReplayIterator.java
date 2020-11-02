@@ -61,7 +61,7 @@ public class SpilledReplayIterator extends InFlightLogIterator<Buffer> {
 	private static final Logger LOG = LoggerFactory.getLogger(SpilledReplayIterator.class);
 
 	private final Object spillLock;
-	private final BufferPool recoveryBufferPool;
+	private final BufferPool prefetchBufferPool;
 	private final SortedMap<Long, SpillableSubpartitionInFlightLogger.Epoch> logToReplay;
 	private final IOManager ioManager;
 
@@ -80,7 +80,7 @@ public class SpilledReplayIterator extends InFlightLogIterator<Buffer> {
 	private Map<Long, BufferFileReader> epochReaders;
 
 	public SpilledReplayIterator(SortedMap<Long, SpillableSubpartitionInFlightLogger.Epoch> logToReplay,
-								 BufferPool recoveryBufferPool,
+								 BufferPool prefetchBufferPool,
 								 IOManager ioManager, Object spillLock, int ignoreBuffers,
 								 AtomicBoolean isReplaying) {
 		if (LOG.isDebugEnabled()) {
@@ -92,7 +92,7 @@ public class SpilledReplayIterator extends InFlightLogIterator<Buffer> {
 		this.consumerCursor = new EpochCursor(logToReplay);
 		this.prefetchCursor = new EpochCursor(logToReplay);
 		this.isReplaying = isReplaying;
-		this.recoveryBufferPool = recoveryBufferPool;
+		this.prefetchBufferPool = prefetchBufferPool;
 
 		//skip ignoreBuffers buffers
 		for (int i = 0; i < ignoreBuffers; i++) {
@@ -132,7 +132,7 @@ public class SpilledReplayIterator extends InFlightLogIterator<Buffer> {
 					if (nextBuffer.isRecycled()) {
 						BufferFileReader reader = epochReaders.get(currentEpoch);
 						//We need to read it from disk into readyBuffers
-						Buffer bufferToReadInto = recoveryBufferPool.requestBuffer();
+						Buffer bufferToReadInto = prefetchBufferPool.requestBuffer();
 						if (bufferToReadInto == null) {
 							prefetchCursor.previous();
 							break;

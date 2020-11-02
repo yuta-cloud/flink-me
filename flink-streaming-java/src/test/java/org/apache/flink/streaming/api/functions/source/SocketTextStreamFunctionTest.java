@@ -259,11 +259,6 @@ public class SocketTextStreamFunctionTest {
 			try {
 				SourceFunction.SourceContext<String> ctx = new SourceFunction.SourceContext<String>() {
 
-					@Override
-					public void setRecordCountTarget(int target) {
-
-					}
-
 					private final Object lock = new Object();
 
 					@Override

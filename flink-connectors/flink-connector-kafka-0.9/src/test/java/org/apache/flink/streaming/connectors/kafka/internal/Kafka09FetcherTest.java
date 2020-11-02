@@ -480,9 +480,5 @@ public class Kafka09FetcherTest {
 			}
 		}
 
-		@Override
-		public void setRecordCountTarget(int target) {
-
-		}
 	}
 }

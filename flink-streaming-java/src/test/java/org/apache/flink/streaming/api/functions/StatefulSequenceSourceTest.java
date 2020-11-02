@@ -248,9 +248,5 @@ public class StatefulSequenceSourceTest {
 		public void close() {
 		}
 
-		@Override
-		public void setRecordCountTarget(int target) {
-
-		}
 	}
 }

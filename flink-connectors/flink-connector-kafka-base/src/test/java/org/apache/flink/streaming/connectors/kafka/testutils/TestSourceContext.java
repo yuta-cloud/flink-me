@@ -85,8 +85,4 @@ public class TestSourceContext<T> implements SourceFunction.SourceContext<T> {
 		}
 	}
 
-	@Override
-	public void setRecordCountTarget(int target) {
-
-	}
 }

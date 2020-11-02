@@ -59,8 +59,4 @@ class TestContext implements SourceContext<Tuple1<Integer>> {
 
 	}
 
-	@Override
-	public void setRecordCountTarget(int target) {
-
-	}
 }

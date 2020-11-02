@@ -38,7 +38,6 @@ public class RecoveryManager implements IRecoveryManager {
 
 	private static final Logger LOG = LoggerFactory.getLogger(RecoveryManager.class);
 
-	public static final int NO_RECORD_COUNT_TARGET = -1;
 
 	public static final SinkRecoveryStrategy sinkRecoveryStrategy = SinkRecoveryStrategy.TRANSACTIONAL;
 

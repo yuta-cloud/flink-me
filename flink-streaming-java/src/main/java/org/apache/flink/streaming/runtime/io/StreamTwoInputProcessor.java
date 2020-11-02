@@ -24,7 +24,6 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.SimpleCounter;
 import org.apache.flink.runtime.causal.RecordCounter;
-import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
 import org.apache.flink.runtime.event.AbstractEvent;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.network.api.EndOfPartitionEvent;
@@ -56,7 +55,6 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.Collection;
 
-import static org.apache.flink.runtime.causal.recovery.RecoveryManager.NO_RECORD_COUNT_TARGET;
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
@@ -245,30 +243,30 @@ public class StreamTwoInputProcessor<IN1, IN2> {
 					StreamElement recordOrWatermark = deserializationDelegate1.getInstance();
 					if (recordOrWatermark.isWatermark()) {
 						synchronized (lock) {
-							recordCounter.incRecordCount();
 							statusWatermarkValve1.inputWatermark(recordOrWatermark.asWatermark(), currentChannel);
+							recordCounter.incRecordCount();
 						}
 						return true;
 					} else if (recordOrWatermark.isStreamStatus()) {
 						synchronized (lock) {
-							recordCounter.incRecordCount();
 							statusWatermarkValve1.inputStreamStatus(recordOrWatermark.asStreamStatus(),
 								currentChannel);
+							recordCounter.incRecordCount();
 						}
 						return true;
 					} else if (recordOrWatermark.isLatencyMarker()) {
 						synchronized (lock) {
-							recordCounter.incRecordCount();
 							streamOperator.processLatencyMarker1(recordOrWatermark.asLatencyMarker());
+							recordCounter.incRecordCount();
 						}
 						return true;
 					} else {
 						StreamRecord<IN1> record = recordOrWatermark.asRecord();
 						synchronized (lock) {
-							recordCounter.incRecordCount();
 							numRecordsIn.inc();
 							streamOperator.setKeyContextElement1(record);
 							streamOperator.processElement1(record);
+							recordCounter.incRecordCount();
 						}
 						return true;
 
@@ -277,32 +275,32 @@ public class StreamTwoInputProcessor<IN1, IN2> {
 					StreamElement recordOrWatermark = deserializationDelegate2.getInstance();
 					if (recordOrWatermark.isWatermark()) {
 						synchronized (lock) {
-							recordCounter.incRecordCount();
 							statusWatermarkValve2.inputWatermark(recordOrWatermark.asWatermark(),
 								currentChannel - numInputChannels1);
+							recordCounter.incRecordCount();
 						}
 						return true;
 					} else if (recordOrWatermark.isStreamStatus()) {
 						synchronized (lock) {
-							recordCounter.incRecordCount();
 							statusWatermarkValve2.inputStreamStatus(recordOrWatermark.asStreamStatus(),
 								currentChannel - numInputChannels1);
+							recordCounter.incRecordCount();
 						}
 						return true;
 					} else if (recordOrWatermark.isLatencyMarker()) {
 						synchronized (lock) {
-							recordCounter.incRecordCount();
 							streamOperator.processLatencyMarker2(recordOrWatermark.asLatencyMarker());
+							recordCounter.incRecordCount();
 						}
 						return true;
 					} else {
 						StreamRecord<IN2> record = recordOrWatermark.asRecord();
 						synchronized (lock) {
-							recordCounter.incRecordCount();
 							numRecordsIn.inc();
 							streamOperator.setKeyContextElement2(record);
 							LOG.debug("{}: Process element no {}: {}.", taskName, numRecordsIn.getCount(), record);
 							streamOperator.processElement2(record);
+							recordCounter.incRecordCount();
 						}
 						return true;
 					}

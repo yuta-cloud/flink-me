@@ -317,7 +317,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 				((PipelinedSubpartition) subpartition).setCausalComponents(recoveryManager, causalLog);
 			}
 			DeterminantResponseEventListener edel =
-				new DeterminantResponseEventListener(environment.getUserClassLoader(), recoveryManager);
+				new DeterminantResponseEventListener(environment.getUserClassLoader(), recoveryManager, getCheckpointLock());
 			environment.getTaskEventDispatcher().subscribeToEvent(partition.getPartitionId(), edel,
 				DeterminantResponseEvent.class);
 			LOG.info("Set DeterminantResponseEventListener {} for resultPartition {}.", edel, partition);
@@ -837,11 +837,12 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 					checkpointMetaData.getTimestamp(),
 					checkpointOptions);
 
-				recordCounter.resetRecordCount();
 
 				// Step (3): Take the state snapshot. This should be largely asynchronous, to not
 				//           impact progress of the streaming topology
 				checkpointState(checkpointMetaData, checkpointOptions, checkpointMetrics);
+
+				recordCounter.resetRecordCount();
 
 				return true;
 			} else {

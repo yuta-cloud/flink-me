@@ -28,15 +28,16 @@ package org.apache.flink.runtime.causal;
 
 import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
 
-import static org.apache.flink.runtime.causal.recovery.RecoveryManager.NO_RECORD_COUNT_TARGET;
-
 /**
  * All interaction with the record counter should be done inside the checkpoint lock.
  */
 public final class RecordCounterImpl implements RecordCounter {
 
+	public static final int NO_RECORD_COUNT_TARGET = -1;
+	//The current input record count
 	private int recordCount;
 
+	//The input record count target at which the recovery manager should be notified.
 	private int recordCountTarget;
 
 	private  IRecoveryManager recoveryManager;
@@ -53,24 +54,29 @@ public final class RecordCounterImpl implements RecordCounter {
 
 	@Override
 	public final void incRecordCount() {
+		recordCount++;
 
 		//Before returning control to the caller, check if we first should execute async nondeterministic event
-		while(recordCount == recordCountTarget) {
-			recordCountTarget = NO_RECORD_COUNT_TARGET;
-			recoveryManager.triggerAsyncEvent();
-		}
-
-		recordCount++;
+		while(recordCountTarget == recordCount)
+			fireAsyncEvent();
 	}
 
 	@Override
 	public final void resetRecordCount() {
 		recordCount = 0;
+		//check if async event is first event of the epoch
+		while(recordCountTarget == recordCount)
+			fireAsyncEvent();
 	}
 
 	@Override
 	public void setRecordCountTarget(int target) {
 		this.recordCountTarget = target;
+		//check if async event is first event of the first epoch
+		while(recordCountTarget == recordCount)
+			fireAsyncEvent();
+
+
 	}
 
 	@Override
@@ -78,4 +84,8 @@ public final class RecordCounterImpl implements RecordCounter {
 		this.recoveryManager = recoveryManager;
 	}
 
+	private void fireAsyncEvent(){
+		recordCountTarget = NO_RECORD_COUNT_TARGET;
+		recoveryManager.triggerAsyncEvent();
+	}
 }

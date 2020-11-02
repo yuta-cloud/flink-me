@@ -24,7 +24,6 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.SimpleCounter;
 import org.apache.flink.runtime.causal.RecordCounter;
-import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
 import org.apache.flink.runtime.event.AbstractEvent;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.network.api.EndOfPartitionEvent;
@@ -56,7 +55,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
-import static org.apache.flink.runtime.causal.recovery.RecoveryManager.NO_RECORD_COUNT_TARGET;
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
@@ -96,10 +94,6 @@ public class StreamInputProcessor<IN> {
 	private StatusWatermarkValve statusWatermarkValve;
 
 	private final InputGate inputGate;
-	/**
-	 * Number of input channels the valve needs to handle.
-	 */
-	private final int numInputChannels;
 
 	/**
 	 * The channel from which a buffer came, tracked so that we can appropriately map
@@ -157,7 +151,10 @@ public class StreamInputProcessor<IN> {
 				ioManager.getSpillingDirectoriesPaths());
 		}
 
-		this.numInputChannels = inputGate.getNumberOfInputChannels();
+		/**
+		 * Number of input channels the valve needs to handle.
+		 */
+		int numInputChannels = inputGate.getNumberOfInputChannels();
 
 		this.streamStatusMaintainer = checkNotNull(streamStatusMaintainer);
 		this.streamOperator = checkNotNull(streamOperator);
@@ -197,33 +194,33 @@ public class StreamInputProcessor<IN> {
 
 				if (recordOrMark.isWatermark()) {
 					synchronized (lock) {
-						recordCounter.incRecordCount();
 						// handle watermark
 						statusWatermarkValve.inputWatermark(recordOrMark.asWatermark(), currentChannel);
+						recordCounter.incRecordCount();
 					}
 					return true;
 				} else if (recordOrMark.isStreamStatus()) {
 					synchronized (lock) {
-						recordCounter.incRecordCount();
 						// handle stream status
 						statusWatermarkValve.inputStreamStatus(recordOrMark.asStreamStatus(), currentChannel);
+						recordCounter.incRecordCount();
 					}
 					return true;
 				} else if (recordOrMark.isLatencyMarker()) {
 					synchronized (lock) {
-						recordCounter.incRecordCount();
 						// handle latency marker
 						streamOperator.processLatencyMarker(recordOrMark.asLatencyMarker());
+						recordCounter.incRecordCount();
 					}
 					return true;
 				} else {
 					// now we can do the actual processing
 					StreamRecord<IN> record = recordOrMark.asRecord();
 					synchronized (lock) {
-						recordCounter.incRecordCount();
 						numRecordsIn.inc();
 						streamOperator.setKeyContextElement1(record);
 						streamOperator.processElement(record);
+						recordCounter.incRecordCount();
 					}
 					return true;
 				}

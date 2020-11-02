@@ -25,17 +25,22 @@ public class DeterminantResponseEventListener implements EventListener<TaskEvent
 
 	private final ClassLoader userCodeClassLoader;
 	private final RecoveryManager recoveryManager;
+	private final Object checkpointLock;
 
 
-	public DeterminantResponseEventListener(ClassLoader userCodeClassLoader, RecoveryManager recoveryManager) {
+	public DeterminantResponseEventListener(ClassLoader userCodeClassLoader, RecoveryManager recoveryManager,
+											Object checkpointLock) {
 		this.userCodeClassLoader = userCodeClassLoader;
 		this.recoveryManager = recoveryManager;
+		this.checkpointLock = checkpointLock;
 	}
 
 	@Override
 	public void onEvent(TaskEvent event) {
 		if (event instanceof DeterminantResponseEvent) {
-			recoveryManager.notifyDeterminantResponseEvent((DeterminantResponseEvent)event);
+			synchronized (checkpointLock) {
+				recoveryManager.notifyDeterminantResponseEvent((DeterminantResponseEvent) event);
+			}
 		}
 		else {
 			throw new IllegalArgumentException(String.format("Unknown event type: %s.", event));

@@ -32,7 +32,6 @@ import org.apache.flink.runtime.io.network.api.DeterminantRequestEvent;
 import org.apache.flink.runtime.io.network.api.serialization.EventSerializer;
 import org.apache.flink.runtime.io.network.partition.PipelinedSubpartition;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannel;
-import org.apache.flink.runtime.io.network.partition.consumer.RemoteInputChannel;
 import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGate;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.slf4j.Logger;
@@ -98,7 +97,7 @@ public class WaitingDeterminantsState extends AbstractState {
 	public void notifyDeterminantResponseEvent(DeterminantResponseEvent e) {
 		if (e.getVertexID().equals(context.vertexGraphInformation.getThisTasksVertexID())) {
 
-			logDebug("Received a DeterminantResponseEvent that is a direct response to my request: {}", e);
+			logDebugWithVertexID("Received a DeterminantResponseEvent that is a direct response to my request: {}", e);
 			numResponsesReceived++;
 			determinantAccumulator.merge(e);
 
@@ -154,7 +153,7 @@ public class WaitingDeterminantsState extends AbstractState {
 							new InFlightLogRequestEvent(inputChannel.getPartitionId().getPartitionId(),
 								consumedIndex,
 								context.epochProvider.getCurrentEpochID());
-						logDebug("Sending inFlightLog request {} through input gate {}, channel {}.",
+						logDebugWithVertexID("Sending inFlightLog request {} through input gate {}, channel {}.",
 							inFlightLogRequestEvent, singleInputGate, i);
 						inputChannel.sendTaskEvent(inFlightLogRequestEvent);
 					}
@@ -170,16 +169,16 @@ public class WaitingDeterminantsState extends AbstractState {
 			DeterminantRequestEvent determinantRequestEvent =
 				new DeterminantRequestEvent(context.vertexGraphInformation.getThisTasksVertexID(),
 					context.epochProvider.getCurrentEpochID());
-			logDebug("Sending determinant requests: {}", determinantRequestEvent);
+			logDebugWithVertexID("Sending determinant requests: {}", determinantRequestEvent);
 			broadcastDeterminantRequest(determinantRequestEvent);
 		}
 	}
 
 	private void maybeGoToReplayingState() {
-		logDebug("Go to replaying? Received {}, Expected {}, Restoring {}", numResponsesReceived, numResponsesExpected
+		logDebugWithVertexID("Go to replaying? Received {}, Expected {}, Restoring {}", numResponsesReceived, numResponsesExpected
 			, recoveryManager.isRestoringState());
 		if (numResponsesReceived == numResponsesExpected && !recoveryManager.isRestoringState()) {
-			logDebug("Received all determinants, transitioning to Replaying state!");
+			logDebugWithVertexID("Received all determinants, transitioning to Replaying state!");
 			recoveryManager.setState(new ReplayingState(recoveryManager, context, determinantAccumulator));
 		}
 	}

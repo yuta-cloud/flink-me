@@ -769,7 +769,6 @@ public abstract class AbstractStreamOperator<OUT>
 		// the following casting is to overcome type restrictions.
 		KeyedStateBackend<K> keyedStateBackend = getKeyedStateBackend();
 		TypeSerializer<K> keySerializer = keyedStateBackend.getKeySerializer();
-		LOG.info("getInternalTimerService keySerializer is null? {}", keySerializer == null);
 		InternalTimeServiceManager<K> keyedTimeServiceHandler = (InternalTimeServiceManager<K>) timeServiceManager;
 		TimerSerializer<K, N> timerSerializer = new TimerSerializer<>(keySerializer, namespaceSerializer);
 		return keyedTimeServiceHandler.getInternalTimerService(name, timerSerializer, triggerable);

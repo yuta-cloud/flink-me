@@ -156,13 +156,13 @@ public class DeterminantResponseEvent extends TaskEvent {
 			",\n determinants=[\n" + determinants.entrySet().stream()
 			.map(this::getStringDeterminantArray)
 			.collect(Collectors.joining(",\n ")) +
-			"]}";
+			"...]}";
 	}
 
 	protected String getStringDeterminantArray(Map.Entry<CausalLogID, ByteBuf> e) {
 		StringBuilder b =
 			new StringBuilder().append(e.getKey()).append(" -> ").append(e.getValue().readableBytes()).append(", ");
-		int numBytes = Math.min(50, e.getValue().readableBytes());
+		int numBytes = Math.min(20, e.getValue().readableBytes());
 		byte[] array = new byte[numBytes];
 		e.getValue().readBytes(array);
 		e.getValue().readerIndex(e.getValue().readerIndex() - numBytes);

@@ -55,7 +55,7 @@ public class RunningState extends AbstractState {
 
 		for (AsyncDeterminant delayedRPCRequest : context.unansweredRPCRequests) {
 			//TODO I think this may block? Or at least cause problems.Should probably execute these async
-			logDebug("Executing delayed RPC request: {}", delayedRPCRequest);
+			logDebugWithVertexID("Executing delayed RPC request: {}", delayedRPCRequest);
 			//delayedRPCRequest.setRecordCount(context.recordCounter.getRecordCount());
 			//delayedRPCRequest.process(context);
 		}
@@ -70,8 +70,8 @@ public class RunningState extends AbstractState {
 		if (subpartition.isRecoveringSubpartititionInFlightState())
 			super.notifyInFlightLogRequestEvent(e);
 		else {
-			logDebug("Received an InflightLogRequest {}", e);
-			logDebug("intermediateResultPartition to request replay from: {}", e.getIntermediateResultPartitionID());
+			logDebugWithVertexID("Received an InflightLogRequest {}", e);
+			logDebugWithVertexID("intermediateResultPartition to request replay from: {}", e.getIntermediateResultPartitionID());
 			subpartition.requestReplay(e.getCheckpointId(), e.getNumberOfBuffersToSkip());
 		}
 	}
@@ -79,13 +79,13 @@ public class RunningState extends AbstractState {
 
 	@Override
 	public void notifyDeterminantRequestEvent(DeterminantRequestEvent e, int channelRequestArrivedFrom) {
-		logDebug("Received a determinant request {} on channel {}", e, channelRequestArrivedFrom);
+		logDebugWithVertexID("Received a determinant request {} on channel {}", e, channelRequestArrivedFrom);
 		//Since we are in running state, we can simply reply
 
 		try {
 			DeterminantResponseEvent responseEvent =
 				context.causalLog.respondToDeterminantRequest(e);
-			logDebug("Responding with: {}", responseEvent);
+			logDebugWithVertexID("Responding with: {}", responseEvent);
 
 			context.inputGate.getInputChannel(channelRequestArrivedFrom).sendTaskEvent(responseEvent);
 		} catch (IOException | InterruptedException ex) {

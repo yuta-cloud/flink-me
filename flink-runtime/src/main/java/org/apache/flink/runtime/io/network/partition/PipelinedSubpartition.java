@@ -112,8 +112,7 @@ public class PipelinedSubpartition extends ResultSubpartition {
 
 	private BufferBuiltDeterminant reuseBufferBuiltDeterminant;
 
-	private final short vertexID;
-
+	private short vertexID;
 
 	PipelinedSubpartition(int index, ResultPartition parent) {
 		this(index, parent, null);
@@ -129,7 +128,6 @@ public class PipelinedSubpartition extends ResultSubpartition {
 		this.isRecoveringSubpartitionInFlightState = new AtomicBoolean(false);
 		this.determinantRequests = new LinkedList<>();
 		this.reuseBufferBuiltDeterminant = new BufferBuiltDeterminant();
-		this.vertexID = recoveryManager.getContext().getTaskVertexID();
 	}
 
 	public void setIsRecoveringSubpartitionInFlightState(boolean isRecoveringSubpartitionInFlightState) {
@@ -143,6 +141,7 @@ public class PipelinedSubpartition extends ResultSubpartition {
 
 	public void setCausalComponents(IRecoveryManager recoveryManager, JobCausalLog causalLog) {
 		this.recoveryManager = recoveryManager;
+		this.vertexID = recoveryManager.getContext().getTaskVertexID();
 		IntermediateResultPartitionID partitionID = parent.getPartitionId().getPartitionId();
 		CausalLogID causalLogID = new CausalLogID(recoveryManager.getContext().getTaskVertexID(),
 			partitionID.getLowerPart(),	partitionID.getUpperPart(), (byte) index);

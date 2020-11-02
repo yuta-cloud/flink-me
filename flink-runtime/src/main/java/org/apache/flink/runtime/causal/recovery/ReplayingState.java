@@ -67,7 +67,7 @@ public class ReplayingState extends AbstractState {
 						  DeterminantResponseEvent determinantAccumulator) {
 		super(recoveryManager, context);
 
-		logDebug("Entered replaying state with determinants: {}", determinantAccumulator);
+		logDebugWithVertexID("Entered replaying state with determinants: {}", determinantAccumulator);
 		determinantEncoder = context.causalLog.getDeterminantEncoder();
 
 		determinantBufferPool = new DeterminantBufferPool();
@@ -103,7 +103,7 @@ public class ReplayingState extends AbstractState {
 			t.setDaemon(true);
 			t.start();
 
-			logDebug("Created recovery thread for Partition {} subpartition index {} with buffer {}", cell.getRowKey(),
+			logDebugWithVertexID("Created recovery thread for Partition {} subpartition index {} with buffer {}", cell.getRowKey(),
 				cell.getColumnKey(), recoveryBuffer);
 		}
 	}
@@ -123,7 +123,7 @@ public class ReplayingState extends AbstractState {
 		//This means that  we now have to wait for the upstream to finish recovering before we do.
 		//Furthermore, we have to resend the inflight log request, and ask to skip X buffers
 
-		logDebug("Got notified of new input channel event, while in state " + this.getClass() + " requesting " +
+		logDebugWithVertexID("Got notified of new input channel event, while in state " + this.getClass() + " requesting " +
 			"upstream" +
 			" " +
 			"to replay and skip numberOfBuffersRemoved");
@@ -183,7 +183,7 @@ public class ReplayingState extends AbstractState {
 		AsyncDeterminant asyncDeterminant = (AsyncDeterminant) nextDeterminant;
 		int currentRecordCount = context.recordCounter.getRecordCount();
 
-		logDebug("Trigger async event, record count: {}, determinant record count: {}", currentRecordCount,
+		logDebugWithVertexID("Trigger async event, record count: {}, determinant record count: {}", currentRecordCount,
 			asyncDeterminant.getRecordCount());
 		if (currentRecordCount != asyncDeterminant.getRecordCount())
 			throw new RuntimeException("Current record count is not the determinants record count. Current: " + currentRecordCount + ", determinant: " + asyncDeterminant.getRecordCount());
@@ -217,7 +217,7 @@ public class ReplayingState extends AbstractState {
 			mainThreadRecoveryBuffer.release();
 
 		}
-		logDebug("Finished recovering main thread! Transitioning to RunningState!");
+		logInfoWithVertexID("Finished recovering main thread! Transitioning to RunningState!");
 		recoveryManager.setState(new RunningState(recoveryManager, context));
 	}
 
@@ -270,7 +270,7 @@ public class ReplayingState extends AbstractState {
 						+ determinant);
 				BufferBuiltDeterminant bufferBuiltDeterminant = (BufferBuiltDeterminant) determinant;
 
-				LOG.info("Vertex {} - Requesting to build and log buffer with {} bytes",
+				LOG.debug("Vertex {} - Requesting to build and log buffer with {} bytes",
 					context.getTaskVertexID(),
 					bufferBuiltDeterminant.getNumberOfBytes());
 				try {

@@ -65,19 +65,19 @@ public abstract class AbstractState implements State {
 		//we got notified of a new input channel while we were recovering.
 		//This means that  we now have to wait for the upstream to finish recovering before we do.
 		//Furthermore, if we have already sent an inflight log request for this channel, we now have to send it again.
-		logDebug("Got notified of unexpected NewInputChannel event, while in state " + this.getClass());
+		logDebugWithVertexID("Got notified of unexpected NewInputChannel event, while in state " + this.getClass());
 	}
 
 	@Override
 	public void notifyNewOutputChannel(IntermediateResultPartitionID intermediateResultPartitionID,
 									   int subpartitionIndex) {
-		logDebug("Got notified of unexpected NewOutputChannel event, while in state " + this.getClass());
+		logDebugWithVertexID("Got notified of unexpected NewOutputChannel event, while in state " + this.getClass());
 
 	}
 
 	@Override
 	public void notifyInFlightLogRequestEvent(InFlightLogRequestEvent e) {
-		logDebug("Received request: {}", e);
+		logInfoWithVertexID("Received request: {}", e);
 		//we got an inflight log request while still recovering. Since we must finish recovery first before
 		//answering, we store it, and when we enter the running state we immediately process it.
 		context.unansweredInFlightLogRequests.put(e.getIntermediateResultPartitionID(), e.getSubpartitionIndex(), e);
@@ -85,7 +85,7 @@ public abstract class AbstractState implements State {
 
 	@Override
 	public void notifyStateRestorationStart(long checkpointId) {
-		logDebug("Started restoring state of checkpoint {}", checkpointId);
+		logInfoWithVertexID("Started restoring state of checkpoint {}", checkpointId);
 		this.context.incompleteStateRestorations.add(checkpointId);
 		if (checkpointId > context.epochProvider.getCurrentEpochID())
 			context.epochProvider.setCurrentEpochID(checkpointId);
@@ -96,13 +96,13 @@ public abstract class AbstractState implements State {
 
 	@Override
 	public void notifyStateRestorationComplete(long checkpointId) {
-		logDebug("Completed restoring state of checkpoint {}", checkpointId);
+		logInfoWithVertexID("Completed restoring state of checkpoint {}", checkpointId);
 		this.context.incompleteStateRestorations.remove(checkpointId);
 	}
 
 	@Override
 	public void notifyDeterminantResponseEvent(DeterminantResponseEvent e) {
-		logDebug("Received {}", e);
+		logInfoWithVertexID("Received {}", e);
 		RecoveryManager.UnansweredDeterminantRequest udr =
 			context.unansweredDeterminantRequests.get(e.getVertexID(), e.getCorrelationID());
 		if (udr != null) {
@@ -119,13 +119,15 @@ public abstract class AbstractState implements State {
 				}
 			}
 		} else
-			logDebug("Do not know what this determinant response event refers to...");
+			if(LOG.isDebugEnabled())
+				logDebugWithVertexID("Do not know what this determinant response event refers to...");
 
 	}
 
 	@Override
 	public void notifyDeterminantRequestEvent(DeterminantRequestEvent e, int channelRequestArrivedFrom) {
-		logDebug("Received {}", e);
+		if(LOG.isDebugEnabled())
+			logDebugWithVertexID("Received {}", e);
 		//If we are a sink and doing transactional recovery, just answer with nothing
 		if (!context.vertexGraphInformation.hasDownstream() && RecoveryManager.sinkRecoveryStrategy == RecoveryManager.SinkRecoveryStrategy.TRANSACTIONAL) {
 			try {
@@ -136,7 +138,8 @@ public abstract class AbstractState implements State {
 		} else {
 			context.unansweredDeterminantRequests.put(e.getFailedVertex(), e.getCorrelationID(),
 				new RecoveryManager.UnansweredDeterminantRequest(e, channelRequestArrivedFrom));
-			logDebug("Recurring determinant request");
+			if(LOG.isDebugEnabled())
+				logDebugWithVertexID("Recurring determinant request");
 			e.setUpstreamCorrelationID(e.getCorrelationID());
 			broadcastDeterminantRequest(e);
 		}
@@ -184,12 +187,21 @@ public abstract class AbstractState implements State {
 	/**
 	 * Simple utility method for prepending vertex id to a log message
 	 */
-	protected void logDebug(String s, Object... a) {
-		//if(LOG.isDebugEnabled()) {
+	protected void logDebugWithVertexID(String s, Object... a) {
 			List<Object> array = new ArrayList<>(a.length + 1);
 			array.add(context.getTaskVertexID());
 			array.addAll(Arrays.asList(a));
-			LOG.info("Vertex {} - " + s, array.toArray());
-		//}
+			LOG.debug("Vertex {} - " + s, array.toArray());
 	}
+
+	/**
+	 * Simple utility method for prepending vertex id to a log message
+	 */
+	protected void logInfoWithVertexID(String s, Object... a) {
+		List<Object> array = new ArrayList<>(a.length + 1);
+		array.add(context.getTaskVertexID());
+		array.addAll(Arrays.asList(a));
+		LOG.info("Vertex {} - " + s, array.toArray());
+	}
+
 }

@@ -64,7 +64,7 @@ public class StandbyState extends AbstractState {
 
 	@Override
 	public void notifyStartRecovery() {
-		logDebug("Received start recovery notification!");
+		logDebugWithVertexID("Received start recovery notification!");
 
 		State newState = new WaitingConnectionsState(recoveryManager, context);
 		recoveryManager.setState(newState);

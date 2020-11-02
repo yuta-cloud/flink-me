@@ -32,8 +32,6 @@ import org.apache.flink.util.Preconditions;
 
 import java.util.concurrent.ScheduledFuture;
 
-import static org.apache.flink.runtime.causal.recovery.RecoveryManager.NO_RECORD_COUNT_TARGET;
-
 /**
  * Source contexts for various stream time characteristics.
  */
@@ -113,8 +111,8 @@ public class StreamSourceContexts {
 		public void collect(T element) {
 
 			synchronized (lock) {
-				recordCounter.incRecordCount();
 				output.collect(reuse.replace(element));
+				recordCounter.incRecordCount();
 			}
 		}
 
@@ -418,8 +416,8 @@ public class StreamSourceContexts {
 					scheduleNextIdleDetectionTask();
 				}
 
-				recordCounter.incRecordCount();
 				processAndCollect(element);
+				recordCounter.incRecordCount();
 			}
 		}
 
@@ -434,8 +432,8 @@ public class StreamSourceContexts {
 					scheduleNextIdleDetectionTask();
 				}
 
-				recordCounter.incRecordCount();
 				processAndCollectWithTimestamp(element, timestamp);
+				recordCounter.incRecordCount();
 			}
 		}
 
@@ -451,8 +449,8 @@ public class StreamSourceContexts {
 						scheduleNextIdleDetectionTask();
 					}
 
-					recordCounter.incRecordCount();
 					processAndEmitWatermark(mark);
+					recordCounter.incRecordCount();
 				}
 			}
 		}

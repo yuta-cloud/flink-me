@@ -184,7 +184,8 @@ public class ResultPartition implements ResultPartitionWriter, BufferPoolOwner {
 				InFlightLogConfig inFlightLogConfig = inFlightLogFactory.getInFlightLogConfig();
 				availabilityFillFactor = inFlightLogConfig.getAvailabilityPolicyFillFactor();
 				long inFlightLogFlusherThreadSleepTime = inFlightLogConfig.getInFlightLogSleepTime();
-				if (inFlightLogFactory.getInFlightLogConfig().getSpillPolicy() == InFlightLogConfig.Policy.AVAILABILITY) {
+				if (inFlightLogConfig.getType() == InFlightLogConfig.Type.SPILLABLE
+					&& inFlightLogConfig.getSpillPolicy() == InFlightLogConfig.Policy.AVAILABILITY) {
 					inFlightLogFlusherRunnable = new FlushRunnable(this, inFlightLogFlusherThreadSleepTime);
 					Thread t = new Thread(inFlightLogFlusherRunnable);
 					t.setDaemon(true);

@@ -688,7 +688,7 @@ public abstract class AbstractFetcher<T, KPH> {
 
 		private long lastWatermarkTimestamp;
 
-		private ProcessingTimeCallbackID id;
+		private final ProcessingTimeCallbackID id  = new ProcessingTimeCallbackID(ProcessingTimeCallbackID.Type.WATERMARK);
 
 		//-------------------------------------------------
 
@@ -702,7 +702,7 @@ public abstract class AbstractFetcher<T, KPH> {
 			this.timerService = checkNotNull(timerService);
 			this.interval = autoWatermarkInterval;
 			this.lastWatermarkTimestamp = Long.MIN_VALUE;
-			id = new ProcessingTimeCallbackID(ProcessingTimeCallbackID.Type.WATERMARK);
+			timerService.registerCallback(this);
 		}
 
 		//-------------------------------------------------

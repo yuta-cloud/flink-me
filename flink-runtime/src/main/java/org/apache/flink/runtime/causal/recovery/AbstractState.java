@@ -52,6 +52,7 @@ public abstract class AbstractState implements State {
 
 	protected final Random random;
 
+
 	public AbstractState(RecoveryManager recoveryManager, RecoveryManagerContext context) {
 		this.recoveryManager = recoveryManager;
 		this.context = context;
@@ -65,13 +66,13 @@ public abstract class AbstractState implements State {
 		//we got notified of a new input channel while we were recovering.
 		//This means that  we now have to wait for the upstream to finish recovering before we do.
 		//Furthermore, if we have already sent an inflight log request for this channel, we now have to send it again.
-		logDebugWithVertexID("Got notified of unexpected NewInputChannel event, while in state " + this.getClass());
+		logInfoWithVertexID("Got notified of unexpected NewInputChannel event, while in state " + this.getClass());
 	}
 
 	@Override
 	public void notifyNewOutputChannel(IntermediateResultPartitionID intermediateResultPartitionID,
 									   int subpartitionIndex) {
-		logDebugWithVertexID("Got notified of unexpected NewOutputChannel event, while in state " + this.getClass());
+		logInfoWithVertexID("Got notified of unexpected NewOutputChannel event, while in state " + this.getClass());
 
 	}
 
@@ -119,15 +120,13 @@ public abstract class AbstractState implements State {
 				}
 			}
 		} else
-			if(LOG.isDebugEnabled())
-				logDebugWithVertexID("Do not know what this determinant response event refers to...");
+			logInfoWithVertexID("Do not know what this determinant response event refers to...");
 
 	}
 
 	@Override
 	public void notifyDeterminantRequestEvent(DeterminantRequestEvent e, int channelRequestArrivedFrom) {
-		if(LOG.isDebugEnabled())
-			logDebugWithVertexID("Received {}", e);
+		logInfoWithVertexID("Received {}", e);
 		//If we are a sink and doing transactional recovery, just answer with nothing
 		if (!context.vertexGraphInformation.hasDownstream() && RecoveryManager.sinkRecoveryStrategy == RecoveryManager.SinkRecoveryStrategy.TRANSACTIONAL) {
 			try {
@@ -139,7 +138,7 @@ public abstract class AbstractState implements State {
 			context.unansweredDeterminantRequests.put(e.getFailedVertex(), e.getCorrelationID(),
 				new RecoveryManager.UnansweredDeterminantRequest(e, channelRequestArrivedFrom));
 			if(LOG.isDebugEnabled())
-				logDebugWithVertexID("Recurring determinant request");
+				logInfoWithVertexID("Recurring determinant request");
 			e.setUpstreamCorrelationID(e.getCorrelationID());
 			broadcastDeterminantRequest(e);
 		}
@@ -161,6 +160,7 @@ public abstract class AbstractState implements State {
 	public void notifyStartRecovery() {
 		LOG.info("Unexpected notification StartRecovery in state " + this.getClass());
 	}
+
 
 	@Override
 	public void triggerAsyncEvent() {

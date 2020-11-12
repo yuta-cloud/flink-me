@@ -293,10 +293,10 @@ public class InternalTimerServiceImpl<K, N> implements InternalTimerService<N>, 
 	public void restoreTimersForKeyGroup(InternalTimersSnapshot<?, ?> restoredSnapshot, int keyGroupIdx) {
 		this.restoredTimersSnapshot = (InternalTimersSnapshot<K, N>) restoredSnapshot;
 
-		if (areSnapshotSerializersIncompatible(restoredSnapshot)) {
-			throw new IllegalArgumentException("Tried to restore timers " +
-				"for the same service with different serializers.");
-		}
+		//if (areSnapshotSerializersIncompatible(restoredSnapshot)) {
+		//	throw new IllegalArgumentException("Tried to restore timers " +
+		//		"for the same service with different serializers.");
+		//}
 
 		this.keyDeserializer = restoredTimersSnapshot.getKeySerializer();
 		this.namespaceDeserializer = restoredTimersSnapshot.getNamespaceSerializer();

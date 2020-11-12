@@ -37,7 +37,6 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBufAllocator;
 import org.apache.flink.shaded.netty4.io.netty.buffer.CompositeByteBuf;
-import org.apache.flink.shaded.netty4.io.netty.util.internal.ConcurrentSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -87,14 +86,14 @@ public abstract class AbstractDeltaSerializerDeserializer implements DeltaSerial
 
 
 	@Override
-	public ByteBuf enrichWithCausalLogDelta(ByteBuf serialized, InputChannelID outputChannelID, long epochID) {
+	public ByteBuf enrichWithCausalLogDelta(ByteBuf serialized, InputChannelID outputChannelID, long epochID,
+											ByteBufAllocator alloc) {
 		if(determinantSharingDepth == 0)
 			return serialized;
 
-		ByteBufAllocator allocator = serialized.alloc();
-		CompositeByteBuf composite = allocator.compositeDirectBuffer(Integer.MAX_VALUE);
+		CompositeByteBuf composite = alloc.compositeDirectBuffer(Integer.MAX_VALUE);
 
-		ByteBuf deltaHeader = allocator.directBuffer();
+		ByteBuf deltaHeader = alloc.directBuffer();
 		deltaHeader.writeInt(0);//Header Size
 		deltaHeader.writeLong(epochID);//Epoch
 
@@ -153,7 +152,7 @@ public abstract class AbstractDeltaSerializerDeserializer implements DeltaSerial
 
 		int offsetFromEpoch = msg.readInt();
 		int bufferSize = msg.readInt();
-		ByteBuf delta = msg.retainedSlice(deltaIndex, bufferSize);
+		ByteBuf delta = msg.slice(deltaIndex, bufferSize);
 
 		if(LOG.isDebugEnabled())
 			LOG.debug("processThreadDelta: causalLogID: {}, offsetOfConsumer: {}, bufSize: {}", causalLogID,

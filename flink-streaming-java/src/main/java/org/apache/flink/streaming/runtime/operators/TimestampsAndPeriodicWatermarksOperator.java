@@ -42,12 +42,12 @@ public class TimestampsAndPeriodicWatermarksOperator<T>
 
 	private transient long currentWatermark;
 
-	private transient ProcessingTimeCallbackID id;
+	private final ProcessingTimeCallbackID id = new ProcessingTimeCallbackID(ProcessingTimeCallbackID.Type.TIMESTAMP_PERIODIC_WATERMARK_EXTRACTOR);
 
 	public TimestampsAndPeriodicWatermarksOperator(AssignerWithPeriodicWatermarks<T> assigner) {
 		super(assigner);
 		this.chainingStrategy = ChainingStrategy.ALWAYS;
-		id = new ProcessingTimeCallbackID(ProcessingTimeCallbackID.Type.TIMESTAMP_PERIODIC_WATERMARK_EXTRACTOR);
+		this.getProcessingTimeService().registerCallback(this);
 	}
 
 	@Override

@@ -197,7 +197,8 @@ public class StreamSourceOperatorWatermarksTest {
 			operator.getContainingTask().getStreamStatusMaintainer(),
 			new CollectorOutput<String>(output),
 			operator.getExecutionConfig().getAutoWatermarkInterval(),
-			-1, operator.getContainingTask().getRecoveryManager());
+			operator.getExecutionConfig().getAutoTimeSetterInterval(),
+			operator.getContainingTask().getRecoveryManager());
 
 		// periodically emit the watermarks
 		// even though we start from 1 the watermark are still

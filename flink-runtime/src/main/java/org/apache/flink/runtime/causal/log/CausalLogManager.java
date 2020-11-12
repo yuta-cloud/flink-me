@@ -37,6 +37,7 @@ import org.apache.flink.runtime.io.network.buffer.NetworkBufferPool;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannelID;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
+import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBufAllocator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -130,21 +131,22 @@ public class CausalLogManager {
 
 
 	public void unregisterTask(JobID jobID, JobVertexID jobVertexId) {
-		JobCausalLog jobCausalLog = waitForCausalLogRegistration(jobIDToManagerMap, jobID);
+		//JobCausalLog jobCausalLog = waitForCausalLogRegistration(jobIDToManagerMap, jobID);
 
-		if(jobCausalLog.unregisterTask(jobVertexId))
-			jobIDToManagerMap.remove(jobID);
+		//if(jobCausalLog.unregisterTask(jobVertexId))
+		//	jobIDToManagerMap.remove(jobID);
 
 	}
 
-	public ByteBuf enrichWithCausalLogDeltas(ByteBuf serialized, InputChannelID outputChannelID, long epochID) {
+	public ByteBuf enrichWithCausalLogDeltas(ByteBuf serialized, InputChannelID outputChannelID, long epochID,
+											 ByteBufAllocator alloc) {
 		if (LOG.isDebugEnabled())
 			LOG.debug("Get next determinants for channel {}", outputChannelID);
 		JobCausalLog log = outputChannelIDToCausalLog.get(outputChannelID);
 		if (log == null)
 			log = waitForCausalLogRegistration(outputChannelIDToCausalLog, outputChannelID);
 
-		serialized = log.enrichWithCausalLogDelta(serialized, outputChannelID, epochID);
+		serialized = log.enrichWithCausalLogDelta(serialized, outputChannelID, epochID, alloc);
 		return serialized;
 	}
 
@@ -170,6 +172,5 @@ public class CausalLogManager {
 		}
 		return c;
 	}
-
 
 }

@@ -168,7 +168,7 @@ public abstract class NettyMessage {
 					if (msg instanceof BufferResponse) {
 						BufferResponse bufferResponse = (BufferResponse) msg;
 						serialized = causalLog.enrichWithCausalLogDeltas(serialized, bufferResponse.receiverId,
-							bufferResponse.epochID);
+							bufferResponse.epochID, ctx.alloc());
 					}
 				} catch (Throwable t) {
 					throw new IOException("Error while serializing message: " + msg, t);

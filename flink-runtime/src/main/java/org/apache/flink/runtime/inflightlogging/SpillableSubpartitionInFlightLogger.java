@@ -139,7 +139,6 @@ public class SpillableSubpartitionInFlightLogger implements InFlightLog {
 				isReplaying);
 			return currentIterator;
 		}
-
 	}
 
 	@Override

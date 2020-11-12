@@ -46,6 +46,9 @@ public class NettyTests {
 		CompositeByteBuf cb = Unpooled.compositeBuffer();
 		cb.addComponents(true, b1, b2);
 
+		assert cb.refCnt() == 1;
+		assert b1.refCnt() == 1;
+
 		byte[] bytes = new byte[cb.readableBytes()];
 		cb.readBytes(bytes);
 		assert b1.readerIndex() == 0;
@@ -54,7 +57,7 @@ public class NettyTests {
 		CompositeByteBuf cb2 = Unpooled.compositeBuffer();
 		cb2.addComponents(true, b1, b2);
 		byte[] bytes2 = new byte[cb2.readableBytes()];
-		cb.readBytes(bytes2);
+		cb2.readBytes(bytes2);
 		assert new String(bytes2).equals("Hello world");
 	}
 
@@ -131,7 +134,7 @@ public class NettyTests {
 		ByteBuf b1 = Unpooled.buffer();
 		b1.writeBytes("Hello world".getBytes());
 
-		ByteBuf slice = b1.slice(0, 5).asReadOnly().retain();
+		ByteBuf slice = b1.slice(0, 5);
 		assert b1.refCnt() == 1;
 		assert slice.refCnt() == 1;
 		assert slice.release();
@@ -154,7 +157,7 @@ public class NettyTests {
 
 		//delta is going to be from 5 - 30, including 6 bytes from first, 11 from second and 8 from third bufs
 		//"Hello worldHello worldHello worldHello worldHello world"
-		//"_____ worldHello worldHello w__________________________
+		//"_____ worldHello worldHello wo_________________________
 		CompositeByteBuf delta = buildDelta(log, 16, 41-16);
 
 		assert delta.refCnt() == 1 ;
@@ -164,7 +167,7 @@ public class NettyTests {
 		byte[] bytes = new byte[delta.readableBytes()];
 		delta.readBytes(bytes);
 		System.out.println(new String(bytes));
-		assert new String(bytes).equals(" worldHello worldHello wo"); //o?
+		assert new String(bytes).equals(" worldHello worldHello wo");
 		delta.readerIndex(0);
 
 		log.readerIndex(12);
@@ -173,7 +176,7 @@ public class NettyTests {
 
 		delta.readBytes(bytes);
 		System.out.println(new String(bytes));
-		assert new String(bytes).equals(" worldHello worldHello wo"); //o?
+		assert new String(bytes).equals(" worldHello worldHello wo");
 
 		delta.release();
 		System.out.println(log.internalComponent(1).refCnt());
@@ -201,4 +204,6 @@ public class NettyTests {
 		return delta;
 
 	}
+
+
 }

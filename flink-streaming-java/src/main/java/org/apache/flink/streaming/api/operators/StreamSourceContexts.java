@@ -76,7 +76,6 @@ public class StreamSourceContexts {
 					checkpointLock,
 					streamStatusMaintainer,
 					idleTimeout, recoveryManager);
-
 				break;
 			case ProcessingTime:
 				ctx = new NonTimestampContext<>(checkpointLock, output, recoveryManager);
@@ -148,15 +147,15 @@ public class StreamSourceContexts {
 	 */
 	private static class AutomaticWatermarkContext<T> extends WatermarkContext<T> {
 
-		private final Output<StreamRecord<T>> output;
-		private final StreamRecord<T> reuse;
+		protected final Output<StreamRecord<T>> output;
+		protected final StreamRecord<T> reuse;
 
-		private final long watermarkInterval;
+		protected final long watermarkInterval;
 
-		private volatile ScheduledFuture<?> nextWatermarkTimer;
-		private volatile long nextWatermarkTime;
+		protected volatile ScheduledFuture<?> nextWatermarkTimer;
+		protected volatile long nextWatermarkTime;
 
-		private long lastRecordTime;
+		protected long lastRecordTime;
 
 		private AutomaticWatermarkContext(
 			final Output<StreamRecord<T>> output,
@@ -166,7 +165,7 @@ public class StreamSourceContexts {
 			final StreamStatusMaintainer streamStatusMaintainer,
 			final long idleTimeout, IRecoveryManager recoveryManager) {
 
-			super(timeService, checkpointLock, streamStatusMaintainer, idleTimeout, recoveryManager);
+			super(timeService, checkpointLock, streamStatusMaintainer, -1, recoveryManager);
 
 			this.output = Preconditions.checkNotNull(output, "The output cannot be null.");
 
@@ -244,7 +243,7 @@ public class StreamSourceContexts {
 			private final Object lock;
 			private final Output<StreamRecord<T>> output;
 
-			private final ProcessingTimeCallbackID id;
+			private final ProcessingTimeCallbackID id = new ProcessingTimeCallbackID(ProcessingTimeCallbackID.Type.WATERMARK);
 
 			private WatermarkEmittingTask(
 					ProcessingTimeService timeService,
@@ -253,7 +252,7 @@ public class StreamSourceContexts {
 				this.timeService = timeService;
 				this.lock = checkpointLock;
 				this.output = output;
-				id = new ProcessingTimeCallbackID(ProcessingTimeCallbackID.Type.WATERMARK);
+				timeService.registerCallback(this);
 			}
 
 			@Override
@@ -316,7 +315,7 @@ public class StreamSourceContexts {
 			final StreamStatusMaintainer streamStatusMaintainer,
 			final long idleTimeout, IRecoveryManager recoveryManager) {
 
-			super(timeService, checkpointLock, streamStatusMaintainer, idleTimeout, recoveryManager);
+			super(timeService, checkpointLock, streamStatusMaintainer, -1, recoveryManager);
 
 			this.output = Preconditions.checkNotNull(output, "The output cannot be null.");
 			this.reuse = new StreamRecord<>(null);
@@ -377,6 +376,7 @@ public class StreamSourceContexts {
 		private volatile boolean failOnNextCheck;
 
 		private final RecordCounter recordCounter;
+		protected final IRecoveryManager recoveryManager;
 
 		/**
 		 * Create a watermark context.
@@ -395,6 +395,8 @@ public class StreamSourceContexts {
 			this.checkpointLock = Preconditions.checkNotNull(checkpointLock, "Checkpoint Lock cannot be null.");
 			this.streamStatusMaintainer = Preconditions.checkNotNull(streamStatusMaintainer, "Stream Status Maintainer cannot be null.");
 
+			timeService.registerCallback(new IdlenessDetectionTask());
+			this.recoveryManager = recoveryManager;
 			this.recordCounter = recoveryManager.getContext().getRecordCounter();
 
 			if (idleTimeout != -1) {

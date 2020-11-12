@@ -82,8 +82,9 @@ public class ThreadCausalLogImpl implements ThreadCausalLog {
 	/**
 	 * This constructor is used for upstream logs as they do not require a determinant encoder
 	 */
-	public ThreadCausalLogImpl(BufferPool determinantBufferPool, CausalLogID causalLogID, int determinantSharingDepth) {
-		this(determinantBufferPool, causalLogID, determinantSharingDepth,null);
+	public ThreadCausalLogImpl(BufferPool determinantBufferPool, CausalLogID causalLogID,
+							   int determinantSharingDepth) {
+		this(determinantBufferPool, causalLogID, determinantSharingDepth, null);
 	}
 
 	/**
@@ -113,9 +114,9 @@ public class ThreadCausalLogImpl implements ThreadCausalLog {
 	@Override
 	public void processUpstreamDelta(ByteBuf delta, int offsetFromEpoch, long epochID) {
 		int determinantSize = delta.readableBytes();
-		if(LOG.isDebugEnabled())
+		if (LOG.isDebugEnabled())
 			LOG.debug("processUpstreamDelta: offsetFromEpoch: {}, epochID: {}, determinantSize: {}", offsetFromEpoch,
-			epochID, determinantSize);
+				epochID, determinantSize);
 		epochReadLock.lock();
 		try {
 			if (determinantSize > 0) {
@@ -132,11 +133,11 @@ public class ThreadCausalLogImpl implements ThreadCausalLog {
 
 						while (notEnoughSpaceFor(numNewDeterminants))
 							addComponent();
-						if(LOG.isDebugEnabled())
+						if (LOG.isDebugEnabled())
 							LOG.debug("processUpstreamDelta: writeIndex: {}, epochStartOffset: {}," +
-								" currentLogicalOffsetFromEpoch: {}, numNewDeterminants: {}",
-							writeIndex, epochStartOffset.getOffset(), currentLogicalOffsetFromEpoch,
-							numNewDeterminants);
+									" currentLogicalOffsetFromEpoch: {}, numNewDeterminants: {}",
+								writeIndex, epochStartOffset.getOffset(), currentLogicalOffsetFromEpoch,
+								numNewDeterminants);
 						delta.readerIndex(determinantSize - numNewDeterminants);
 						//add the new determinants
 						buf.writeBytes(delta, numNewDeterminants);
@@ -153,12 +154,12 @@ public class ThreadCausalLogImpl implements ThreadCausalLog {
 	//========================= ONLY FOR LOCAL LOGS =========================================================
 	@Override
 	public void appendDeterminant(Determinant determinant, long epochID) {
-		if(determinantSharingDepth == 0)
+		if (determinantSharingDepth == 0)
 			return;
 		int determinantEncodedSize = determinant.getEncodedSizeInBytes();
-		if(LOG.isDebugEnabled())
+		if (LOG.isDebugEnabled())
 			LOG.debug("appendDeterminant: Determinant: {}, epochID: {}, encodedSize: {}", determinant, epochID,
-			determinantEncodedSize);
+				determinantEncodedSize);
 		epochReadLock.lock();
 		try {
 			epochStartOffsets.computeIfAbsent(epochID, k -> new EpochStartOffset(k, visibleWriterIndex.get()));
@@ -189,15 +190,16 @@ public class ThreadCausalLogImpl implements ThreadCausalLog {
 	//========================= FOR ALL LOGS =========================================================
 	@Override
 	public boolean hasDeltaForConsumer(InputChannelID outputChannelID, long epochID) {
-		if(determinantSharingDepth == 0)
+		if (determinantSharingDepth == 0)
 			return false;
 		epochReadLock.lock();
 		try {
 			EpochStartOffset epochStartOffset = epochStartOffsets.get(epochID);
 			if (epochStartOffset == null) { //If the epoch does not exist, there is certainly no delta
-				if(LOG.isDebugEnabled())
-					LOG.debug("hasDeltaForConsumer: outputChannel: {}, epochID: {}, returns early because epochStartOffset " +
-					"does not exist", outputChannelID, epochID);
+				if (LOG.isDebugEnabled())
+					LOG.debug("hasDeltaForConsumer: outputChannel: {}, epochID: {}, returns early because " +
+						"epochStartOffset " +
+						"does not exist", outputChannelID, epochID);
 				return false;
 			}
 
@@ -217,9 +219,10 @@ public class ThreadCausalLogImpl implements ThreadCausalLog {
 			int physicalConsumerOffset = consumerOffset.epochStart.offset + consumerOffset.offset;
 			int numBytesToSend = computeNumberOfBytesToSend(epochID, physicalConsumerOffset);
 
-			if(LOG.isDebugEnabled())
-				LOG.debug("hasDeltaForConsumer: outputChannel: {}, epochID: {}, physicalConsumerOffset: {}, numBytesToSend:" +
-				" {}", outputChannelID, epochID, physicalConsumerOffset, numBytesToSend);
+			if (LOG.isDebugEnabled())
+				LOG.debug("hasDeltaForConsumer: outputChannel: {}, epochID: {}, physicalConsumerOffset: {}, " +
+					"numBytesToSend:" +
+					" {}", outputChannelID, epochID, physicalConsumerOffset, numBytesToSend);
 			//If the epoch exists, then there is a delta if there are any bytes to send
 			return numBytesToSend != 0;
 		} finally {
@@ -246,8 +249,9 @@ public class ThreadCausalLogImpl implements ThreadCausalLog {
 			int numBytesToSend = computeNumberOfBytesToSend(epochID, physicalConsumerOffset);
 			ByteBuf update;
 
-			if(LOG.isDebugEnabled())
-				LOG.debug("getDeltaForConsumer: epoch {}, physConsOffset {}. numBytesToSend {}, consumerOffset: {}", epochID, physicalConsumerOffset, numBytesToSend, consumerOffset.getOffset());
+			if (LOG.isDebugEnabled())
+				LOG.debug("getDeltaForConsumer: epoch {}, physConsOffset {}. numBytesToSend {}, consumerOffset: {}",
+					epochID, physicalConsumerOffset, numBytesToSend, consumerOffset.getOffset());
 			if (numBytesToSend == 0)
 				update = Unpooled.EMPTY_BUFFER;
 			else
@@ -268,7 +272,7 @@ public class ThreadCausalLogImpl implements ThreadCausalLog {
 
 	@Override
 	public ByteBuf getDeterminants(long startEpochID) {
-		if(determinantSharingDepth == 0)
+		if (determinantSharingDepth == 0)
 			return Unpooled.EMPTY_BUFFER;
 
 		ByteBuf result;
@@ -298,9 +302,36 @@ public class ThreadCausalLogImpl implements ThreadCausalLog {
 
 	@Override
 	public void close() {
+		while (!fullyConsumed()) {
+			try {
+				Thread.sleep(100);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
 		epochWriteLock.lock();
 		buf.release();
 		epochWriteLock.unlock();
+	}
+
+	@Override
+	public void unregisterConsumer(InputChannelID toCancel) {
+		epochReadLock.lock();
+		channelOffsetMap.remove(toCancel);
+		epochReadLock.unlock();
+
+	}
+
+	private boolean fullyConsumed() {
+		boolean fullyConsumed = true;
+		epochWriteLock.lock();
+		for (ConsumerOffset co : channelOffsetMap.values())
+			if (co.getEpochStart().getOffset() + co.getOffset() < visibleWriterIndex.get()) {
+				fullyConsumed = false;
+				break;
+			}
+		epochWriteLock.unlock();
+		return fullyConsumed;
 	}
 
 
@@ -329,7 +360,8 @@ public class ThreadCausalLogImpl implements ThreadCausalLog {
 			int indexInBuffer = currIndex % bufferComponentSizes;
 			ByteBuf component = buf.internalComponent(bufferIndex);
 			int numBytesFromBuf = Math.min(numBytesLeft, bufferComponentSizes - indexInBuffer);
-			result.addComponent(true, component.retainedSlice(indexInBuffer, numBytesFromBuf));
+			if (numBytesFromBuf > 0)
+				result.addComponent(true, component.retainedSlice(indexInBuffer, numBytesFromBuf));
 
 			numBytesLeft -= numBytesFromBuf;
 			currIndex += numBytesFromBuf;
@@ -352,7 +384,7 @@ public class ThreadCausalLogImpl implements ThreadCausalLog {
 
 	@Override
 	public void notifyCheckpointComplete(long checkpointId) {
-		if(LOG.isDebugEnabled())
+		if (LOG.isDebugEnabled())
 			LOG.debug("Notify checkpoint complete for id {}", checkpointId);
 		epochWriteLock.lock();
 		try {
@@ -366,19 +398,21 @@ public class ThreadCausalLogImpl implements ThreadCausalLog {
 					epochStartOffsets.remove(epochID);
 
 			int followingEpochOffset = followingEpoch.getOffset();
-			if(LOG.isDebugEnabled())
-				LOG.debug("chkComplete visWriterIndex {}, followingEpochOffset {}", visibleWriter, followingEpochOffset);
+			if (LOG.isDebugEnabled())
+				LOG.debug("chkComplete visWriterIndex {}, followingEpochOffset {}", visibleWriter,
+					followingEpochOffset);
 			buf.readerIndex(followingEpochOffset);
 			buf.discardReadComponents();
 			int move = followingEpochOffset - buf.readerIndex();
 
-			if(LOG.isDebugEnabled())
+			if (LOG.isDebugEnabled())
 				LOG.debug("Offsets moved by {} bytes.", move);
-			for (Map.Entry<Long,EpochStartOffset> entry:
+			for (Map.Entry<Long, EpochStartOffset> entry :
 				epochStartOffsets.entrySet()) {
 				EpochStartOffset eso = entry.getValue();
 				int currentOffset = eso.getOffset();
-				LOG.debug("Epoch {} currently at {} moved by {} and moved to {}", entry.getKey(), currentOffset, move, currentOffset - move);
+				LOG.debug("Epoch {} currently at {} moved by {} and moved to {}", entry.getKey(), currentOffset, move,
+					currentOffset - move);
 
 				eso.setOffset(currentOffset - move);
 			}
@@ -390,7 +424,7 @@ public class ThreadCausalLogImpl implements ThreadCausalLog {
 
 
 	private void addComponent() {
-		if(LOG.isDebugEnabled())
+		if (LOG.isDebugEnabled())
 			LOG.debug("Adding component, composite size: {}", buf.capacity());
 		Buffer buffer = null;
 

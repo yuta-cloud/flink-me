@@ -91,4 +91,6 @@ public interface ThreadCausalLog {
 	 * Close the log releasing all held resources
 	 */
 	void close();
+
+	void unregisterConsumer(InputChannelID toCancel);
 }

@@ -20,7 +20,6 @@ package org.apache.flink.runtime.io.network.partition;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.runtime.executiongraph.IntermediateResultPartition;
-import org.apache.flink.runtime.inflightlogging.InFlightLog;
 import org.apache.flink.runtime.inflightlogging.InFlightLogConfig;
 import org.apache.flink.runtime.inflightlogging.InFlightLogFactory;
 import org.apache.flink.runtime.inflightlogging.SpillableSubpartitionInFlightLogger;
@@ -41,13 +40,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.nio.channels.Pipe;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.util.Preconditions.checkArgument;
@@ -394,14 +390,14 @@ public class ResultPartition implements ResultPartitionWriter, BufferPoolOwner {
 			bufferPool.lazyDestroy();
 		}
 
-		for (ResultSubpartition rs : subpartitions) {
-			if (rs instanceof PipelinedSubpartition) {
-				((PipelinedSubpartition) rs).getInFlightLog().destroyBufferPools();
-			}
-		}
-		if(inFlightBufferPool != null) {
-			inFlightBufferPool.lazyDestroy();
-		}
+		//for (ResultSubpartition rs : subpartitions) {
+		//	if (rs instanceof PipelinedSubpartition) {
+		//		((PipelinedSubpartition) rs).getInFlightLog().destroyBufferPools();
+		//	}
+		//}
+		//if(inFlightBufferPool != null) {
+		//	inFlightBufferPool.lazyDestroy();
+		//}
 	}
 
 	/**
@@ -531,13 +527,13 @@ public class ResultPartition implements ResultPartitionWriter, BufferPoolOwner {
 
 	public boolean isPoolAvailabilityLow() {
 		float availability = computePoolAvailability();
-		LOG.info("Poll Availability: {} < {} ? Pool: {} ", availability, availabilityFillFactor,
-				inFlightBufferPool);
-		return availability < availabilityFillFactor;
+		LOG.info("In-Flight Availability: {} < {} ", availability, availabilityFillFactor);
+
+		return availability <= availabilityFillFactor;
 	}
 
 	private float computePoolAvailability() {
-		if (inFlightBufferPool == null)
+		if (inFlightBufferPool == null || inFlightBufferPool.isDestroyed())
 			return 1;
 		return 1 - ((float) inFlightBufferPool.bestEffortGetNumOfUsedBuffers()) / inFlightBufferPool.getNumBuffers();
 	}

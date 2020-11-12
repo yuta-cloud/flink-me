@@ -45,7 +45,7 @@ import org.apache.flink.runtime.io.network.partition.consumer.InputChannelID;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
-import org.apache.flink.shaded.netty4.io.netty.util.internal.ConcurrentSet;
+import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBufAllocator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -91,6 +91,8 @@ public class JobCausalLogImpl implements JobCausalLog {
 
 	private final AtomicLong latestCompletedCheckpoint;
 
+	private final BufferAvailabilityLogger logger;
+
 	public JobCausalLogImpl(int determinantSharingDepth, BufferPool bufferPool,
 							DeltaEncodingStrategy deltaEncodingStrategy, boolean enableDeltaSharingOptimizations) {
 		this.determinantSharingDepth = determinantSharingDepth;
@@ -113,6 +115,10 @@ public class JobCausalLogImpl implements JobCausalLog {
 				hierarchicalThreadCausalLogsToBeShared, vertexIDToDistance, localTasks, determinantSharingDepth,
 				bufferPool, enableDeltaSharingOptimizations);
 		this.latestCompletedCheckpoint = new AtomicLong(0);
+
+		logger = new BufferAvailabilityLogger(bufferPool);
+		Thread t = new Thread(logger);
+		t.start();
 	}
 
 	@Override
@@ -173,8 +179,9 @@ public class JobCausalLogImpl implements JobCausalLog {
 	}
 
 	@Override
-	public ByteBuf enrichWithCausalLogDelta(ByteBuf serialized, InputChannelID outputChannelID, long epochID) {
-		return deltaSerdeStrategy.enrichWithCausalLogDelta(serialized, outputChannelID, epochID);
+	public ByteBuf enrichWithCausalLogDelta(ByteBuf serialized, InputChannelID outputChannelID, long epochID,
+											ByteBufAllocator alloc) {
+		return deltaSerdeStrategy.enrichWithCausalLogDelta(serialized, outputChannelID, epochID, alloc);
 	}
 
 	@Override
@@ -203,6 +210,9 @@ public class JobCausalLogImpl implements JobCausalLog {
 
 	@Override
 	public void unregisterDownstreamConsumer(InputChannelID toCancel) {
+		for(ThreadCausalLog threadCausalLog : flatThreadCausalLogs.values()){
+			threadCausalLog.unregisterConsumer(toCancel);
+		}
 		//TODO- is anything necessary really?
 	}
 
@@ -235,16 +245,50 @@ public class JobCausalLogImpl implements JobCausalLog {
 	}
 
 	@Override
-	public boolean unregisterTask(JobVertexID jobVertexId) {
-		localTasks.remove(jobVertexId);
-		if (localTasks.size() == 0) {
+	public synchronized boolean unregisterTask(JobVertexID jobVertexId) {
+		boolean noMoreLocalTasks = false;
+		if (localTasks.size() == 1) {
 			for (ThreadCausalLog threadCausalLog : flatThreadCausalLogs.values()) {
 				threadCausalLog.close();
 			}
+			logger.shutdown();
 			determinantBufferPool.lazyDestroy();
-			return true;
+			noMoreLocalTasks = true;
 		}
-		return false;
+		localTasks.remove(jobVertexId);
+		return noMoreLocalTasks;
+	}
+
+	static class BufferAvailabilityLogger implements Runnable {
+
+		private final BufferPool bufferPool;
+		private boolean shutdown;
+		private final float total;
+
+		public BufferAvailabilityLogger(BufferPool bufferPool){
+			this.bufferPool = bufferPool;
+			this.shutdown = false;
+			this.total =  bufferPool.getNumBuffers();
+		}
+
+		@Override
+		public void run() {
+			while(!shutdown){
+				try {
+					Thread.sleep(100);
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+				if(!bufferPool.isDestroyed()) {
+					int used = bufferPool.bestEffortGetNumOfUsedBuffers();
+					LOG.info("Determinant availability {}/{}={}", used, total, used / total);
+				}
+			}
+		}
+
+		public void shutdown() {
+			this.shutdown = true;
+		}
 	}
 
 }

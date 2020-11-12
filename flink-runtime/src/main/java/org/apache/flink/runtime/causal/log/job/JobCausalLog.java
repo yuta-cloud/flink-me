@@ -37,6 +37,7 @@ import org.apache.flink.runtime.io.network.partition.consumer.InputChannelID;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
+import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBufAllocator;
 
 /**
  * Manages the {@link org.apache.flink.runtime.causal.log.thread.ThreadCausalLog}s of a specific job.
@@ -53,7 +54,8 @@ public interface JobCausalLog {
 
 	void processCausalLogDelta(ByteBuf msg);
 
-	ByteBuf enrichWithCausalLogDelta(ByteBuf serialized, InputChannelID inputChannelID, long epochID);
+	ByteBuf enrichWithCausalLogDelta(ByteBuf serialized, InputChannelID inputChannelID, long epochID,
+									 ByteBufAllocator alloc);
 
 	DeterminantResponseEvent respondToDeterminantRequest(DeterminantRequestEvent e);
 

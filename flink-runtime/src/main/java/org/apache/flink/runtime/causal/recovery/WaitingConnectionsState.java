@@ -61,7 +61,7 @@ public class WaitingConnectionsState extends AbstractState{
 			}
 		}
 
-		logDebugWithVertexID("Waiting for new connections!");
+		logInfoWithVertexID("Waiting for new connections!");
 	}
 
 
@@ -72,7 +72,7 @@ public class WaitingConnectionsState extends AbstractState{
 
 	@Override
 	public void notifyNewInputChannel(InputChannel inputChannel, int consumedSubpartitionIndex, int numberOfBuffersRemoved) {
-		logDebugWithVertexID("Got Notified of new input channel {}, consuming index {} and having to skip {} buffers.", inputChannel, consumedSubpartitionIndex, numberOfBuffersRemoved);
+		logInfoWithVertexID("Got Notified of new input channel {}, consuming index {} and having to skip {} buffers.", inputChannel, consumedSubpartitionIndex, numberOfBuffersRemoved);
 		SingleInputGate singleInputGate = inputChannel.getInputGate();
 		int channelIndex = inputChannel.getChannelIndex();
 		inputChannelsReestablishmentStatus[context.inputGate.getAbsoluteChannelIndex(singleInputGate, channelIndex)] = Boolean.TRUE;
@@ -82,7 +82,7 @@ public class WaitingConnectionsState extends AbstractState{
 
 	@Override
 	public void notifyNewOutputChannel(IntermediateResultPartitionID intermediateResultPartitionID, int subpartitionIndex){
-		logDebugWithVertexID("Got Notified of new output channel for intermediateResultPartition {} index {}.", intermediateResultPartitionID, subpartitionIndex);
+		logInfoWithVertexID("Got Notified of new output channel for intermediateResultPartition {} index {}.", intermediateResultPartitionID, subpartitionIndex);
 		outputChannelsReestablishmentStatus.get(intermediateResultPartitionID)[subpartitionIndex] = true;
 		checkConnectionsComplete();
 	}
@@ -92,7 +92,7 @@ public class WaitingConnectionsState extends AbstractState{
 		for(Boolean[] booleans : outputChannelsReestablishmentStatus.values())
 			channelStatus = Stream.concat(channelStatus, Arrays.stream(booleans));
 		if(channelStatus.allMatch(x -> x)){
-			logDebugWithVertexID("Got all connections set-up. Switching to WaitingDeterminantsState.");
+			logInfoWithVertexID("Got all connections set-up. Switching to WaitingDeterminantsState.");
 			State newState = new WaitingDeterminantsState(recoveryManager,context);
 			recoveryManager.setState(newState);
 		}

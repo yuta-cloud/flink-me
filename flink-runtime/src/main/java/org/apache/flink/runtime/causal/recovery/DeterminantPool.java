@@ -29,45 +29,47 @@ import org.apache.flink.runtime.causal.determinant.*;
 
 import java.util.ArrayDeque;
 import java.util.Queue;
+import java.util.Timer;
 
 //We use this cache to avoid object creation during replay
 //We require two determinants of each type because while one is being processed, the next may already be
 // a determinant of the same type
-public class DeterminantBufferPool {
+public class DeterminantPool {
 
 
+	private static final int NUM_BASE_DETERMINANTS = 10;
 	Queue<Determinant>[] determinantCache;
 
-	public DeterminantBufferPool(){
+	public DeterminantPool(){
 		determinantCache = new Queue[7];
 
 		determinantCache[OrderDeterminant.getTypeTag()] = new ArrayDeque<>();
-		determinantCache[OrderDeterminant.getTypeTag()].add(new OrderDeterminant());
-		determinantCache[OrderDeterminant.getTypeTag()].add(new OrderDeterminant());
+		for(int i = 0; i < NUM_BASE_DETERMINANTS; i++)
+			determinantCache[OrderDeterminant.getTypeTag()].add(new OrderDeterminant());
 
 		determinantCache[TimestampDeterminant.getTypeTag()] = new ArrayDeque<>();
-		determinantCache[TimestampDeterminant.getTypeTag()].add(new TimestampDeterminant());
-		determinantCache[TimestampDeterminant.getTypeTag()].add(new TimestampDeterminant());
+		for(int i = 0; i < NUM_BASE_DETERMINANTS; i++)
+			determinantCache[TimestampDeterminant.getTypeTag()].add(new TimestampDeterminant());
 
 		determinantCache[RNGDeterminant.getTypeTag()] = new ArrayDeque<>();
-		determinantCache[RNGDeterminant.getTypeTag()].add(new RNGDeterminant());
-		determinantCache[RNGDeterminant.getTypeTag()].add(new RNGDeterminant());
+		for(int i = 0; i < NUM_BASE_DETERMINANTS; i++)
+			determinantCache[RNGDeterminant.getTypeTag()].add(new RNGDeterminant());
 
 		determinantCache[TimerTriggerDeterminant.getTypeTag()] = new ArrayDeque<>();
-		determinantCache[TimerTriggerDeterminant.getTypeTag()].add(new TimerTriggerDeterminant());
-		determinantCache[TimerTriggerDeterminant.getTypeTag()].add(new TimerTriggerDeterminant());
+		for(int i = 0; i < NUM_BASE_DETERMINANTS; i++)
+			determinantCache[TimerTriggerDeterminant.getTypeTag()].add(new TimerTriggerDeterminant());
 
 		determinantCache[SourceCheckpointDeterminant.getTypeTag()] = new ArrayDeque<>();
-		determinantCache[SourceCheckpointDeterminant.getTypeTag()].add(new SourceCheckpointDeterminant());
-		determinantCache[SourceCheckpointDeterminant.getTypeTag()].add(new SourceCheckpointDeterminant());
+		for(int i = 0; i < NUM_BASE_DETERMINANTS; i++)
+			determinantCache[SourceCheckpointDeterminant.getTypeTag()].add(new SourceCheckpointDeterminant());
 
 		determinantCache[IgnoreCheckpointDeterminant.getTypeTag()] = new ArrayDeque<>();
-		determinantCache[IgnoreCheckpointDeterminant.getTypeTag()].add(new IgnoreCheckpointDeterminant());
-		determinantCache[IgnoreCheckpointDeterminant.getTypeTag()].add(new IgnoreCheckpointDeterminant());
+		for(int i = 0; i < NUM_BASE_DETERMINANTS; i++)
+			determinantCache[IgnoreCheckpointDeterminant.getTypeTag()].add(new IgnoreCheckpointDeterminant());
 
 		determinantCache[BufferBuiltDeterminant.getTypeTag()] = new ArrayDeque<>();
-		determinantCache[BufferBuiltDeterminant.getTypeTag()].add(new BufferBuiltDeterminant());
-		determinantCache[BufferBuiltDeterminant.getTypeTag()].add(new BufferBuiltDeterminant());
+		for(int i = 0; i < NUM_BASE_DETERMINANTS; i++)
+			determinantCache[BufferBuiltDeterminant.getTypeTag()].add(new BufferBuiltDeterminant());
 	}
 
 
@@ -78,30 +80,51 @@ public class DeterminantBufferPool {
 	}
 
 	public OrderDeterminant getOrderDeterminant() {
-		return (OrderDeterminant) determinantCache[Determinant.ORDER_DETERMINANT_TAG].poll();
+		Queue<Determinant> q = determinantCache[Determinant.ORDER_DETERMINANT_TAG];
+		if(q.isEmpty())
+			q.add(new OrderDeterminant());
+		return (OrderDeterminant) q.poll();
 	}
 
 	public TimestampDeterminant getTimestampDeterminant() {
-		return (TimestampDeterminant) determinantCache[Determinant.TIMESTAMP_DETERMINANT_TAG].poll();
+		Queue<Determinant> q = determinantCache[Determinant.TIMESTAMP_DETERMINANT_TAG];
+		if(q.isEmpty())
+			q.add(new TimestampDeterminant());
+		return (TimestampDeterminant) q.poll();
 	}
 
 	public RNGDeterminant getRNGDeterminant() {
-		return (RNGDeterminant) determinantCache[Determinant.RNG_DETERMINANT_TAG].poll();
+		Queue<Determinant> q = determinantCache[Determinant.RNG_DETERMINANT_TAG];
+		if(q.isEmpty())
+			q.add(new RNGDeterminant());
+		return (RNGDeterminant) q.poll();
 	}
 
 	public TimerTriggerDeterminant getTimerTriggerDeterminant() {
-		return (TimerTriggerDeterminant) determinantCache[Determinant.TIMER_TRIGGER_DETERMINANT].poll();
+		Queue<Determinant> q = determinantCache[Determinant.TIMER_TRIGGER_DETERMINANT];
+		if(q.isEmpty())
+			q.add(new TimerTriggerDeterminant());
+		return (TimerTriggerDeterminant) q.poll();
 	}
 
 	public SourceCheckpointDeterminant getSourceCheckpointDeterminant() {
-		return (SourceCheckpointDeterminant) determinantCache[Determinant.SOURCE_CHECKPOINT_DETERMINANT].poll();
+		Queue<Determinant> q = determinantCache[Determinant.SOURCE_CHECKPOINT_DETERMINANT];
+		if(q.isEmpty())
+			q.add(new SourceCheckpointDeterminant());
+		return (SourceCheckpointDeterminant) q.poll();
 	}
 
 	public IgnoreCheckpointDeterminant getIgnoreCheckpointDeterminant() {
-		return (IgnoreCheckpointDeterminant) determinantCache[Determinant.IGNORE_CHECKPOINT_DETERMINANT].poll();
+		Queue<Determinant> q = determinantCache[Determinant.IGNORE_CHECKPOINT_DETERMINANT];
+		if(q.isEmpty())
+			q.add(new IgnoreCheckpointDeterminant());
+		return (IgnoreCheckpointDeterminant) q.poll();
 	}
 
 	public BufferBuiltDeterminant getBufferBuiltDeterminant() {
-		return (BufferBuiltDeterminant) determinantCache[Determinant.BUFFER_BUILT_TAG].poll();
+		Queue<Determinant> q = determinantCache[Determinant.BUFFER_BUILT_TAG];
+		if(q.isEmpty())
+			q.add(new BufferBuiltDeterminant());
+		return (BufferBuiltDeterminant) q.poll();
 	}
 }

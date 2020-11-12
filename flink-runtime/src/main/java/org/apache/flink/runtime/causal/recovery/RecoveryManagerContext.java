@@ -66,6 +66,7 @@ public class RecoveryManagerContext {
 	final AbstractInvokable invokable;
 	final CompletableFuture<Void> readyToReplayFuture;
 
+
 	public RecoveryManagerContext(AbstractInvokable invokable, EpochProvider epochProvider, JobCausalLog causalLog,
 						   CompletableFuture<Void> readyToReplayFuture, VertexGraphInformation vertexGraphInformation,
 						   RecordCounter recordCounter, CheckpointForceable checkpointForceable,

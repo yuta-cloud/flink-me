@@ -18,12 +18,8 @@
 package org.apache.flink.runtime.causal.determinant;
 
 
-import org.apache.flink.runtime.causal.recovery.DeterminantBufferPool;
+import org.apache.flink.runtime.causal.recovery.DeterminantPool;
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
-
-import java.nio.ByteBuffer;
-import java.util.List;
-import java.util.Queue;
 
 /**
  * Encoding strategy for determinants. Takes a determinant and returns its representation as bytes.
@@ -37,7 +33,7 @@ public interface DeterminantEncoder {
 
 	Determinant decodeNext(ByteBuf buffer);
 
-    Determinant decodeNext(ByteBuf b, DeterminantBufferPool determinantCache);
+    Determinant decodeNext(ByteBuf b, DeterminantPool determinantCache);
 
 	Determinant decodeOrderDeterminant(ByteBuf b);
 

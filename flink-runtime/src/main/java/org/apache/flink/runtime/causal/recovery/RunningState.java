@@ -70,7 +70,7 @@ public class RunningState extends AbstractState {
 		if (subpartition.isRecoveringSubpartititionInFlightState())
 			super.notifyInFlightLogRequestEvent(e);
 		else {
-			logDebugWithVertexID("Received an InflightLogRequest {}", e);
+			logInfoWithVertexID("Received an InflightLogRequest {}", e);
 			logDebugWithVertexID("intermediateResultPartition to request replay from: {}", e.getIntermediateResultPartitionID());
 			subpartition.requestReplay(e.getCheckpointId(), e.getNumberOfBuffersToSkip());
 		}
@@ -79,13 +79,13 @@ public class RunningState extends AbstractState {
 
 	@Override
 	public void notifyDeterminantRequestEvent(DeterminantRequestEvent e, int channelRequestArrivedFrom) {
-		logDebugWithVertexID("Received a determinant request {} on channel {}", e, channelRequestArrivedFrom);
+		logInfoWithVertexID("Received a determinant request {} on channel {}", e, channelRequestArrivedFrom);
 		//Since we are in running state, we can simply reply
 
 		try {
 			DeterminantResponseEvent responseEvent =
 				context.causalLog.respondToDeterminantRequest(e);
-			logDebugWithVertexID("Responding with: {}", responseEvent);
+			logInfoWithVertexID("Responding with: {}", responseEvent);
 
 			context.inputGate.getInputChannel(channelRequestArrivedFrom).sendTaskEvent(responseEvent);
 		} catch (IOException | InterruptedException ex) {

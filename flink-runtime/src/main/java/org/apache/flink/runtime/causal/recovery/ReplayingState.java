@@ -59,7 +59,7 @@ public class ReplayingState extends AbstractState {
 
 	private final ByteBuf mainThreadRecoveryBuffer;
 
-	private final DeterminantBufferPool determinantBufferPool;
+	private final DeterminantPool determinantPool;
 
 	Determinant nextDeterminant;
 
@@ -67,10 +67,10 @@ public class ReplayingState extends AbstractState {
 						  DeterminantResponseEvent determinantAccumulator) {
 		super(recoveryManager, context);
 
-		logDebugWithVertexID("Entered replaying state with determinants: {}", determinantAccumulator);
+		logInfoWithVertexID("Entered replaying state with determinants: {}", determinantAccumulator);
 		determinantEncoder = context.causalLog.getDeterminantEncoder();
 
-		determinantBufferPool = new DeterminantBufferPool();
+		determinantPool = new DeterminantPool();
 
 		createSubpartitionRecoveryThreads(determinantAccumulator);
 
@@ -123,7 +123,7 @@ public class ReplayingState extends AbstractState {
 		//This means that  we now have to wait for the upstream to finish recovering before we do.
 		//Furthermore, we have to resend the inflight log request, and ask to skip X buffers
 
-		logDebugWithVertexID("Got notified of new input channel event, while in state " + this.getClass() + " requesting " +
+		logInfoWithVertexID("Got notified of new input channel event, while in state " + this.getClass() + " requesting " +
 			"upstream" +
 			" " +
 			"to replay and skip numberOfBuffersRemoved");
@@ -145,7 +145,7 @@ public class ReplayingState extends AbstractState {
 		if (!(nextDeterminant instanceof RNGDeterminant))
 			throw new RuntimeException("Unexpected Determinant type: Expected RNG, but got: " + nextDeterminant);
 		int toReturn = ((RNGDeterminant) nextDeterminant).getNumber();
-		determinantBufferPool.recycle(nextDeterminant);
+		determinantPool.recycle(nextDeterminant);
 		prepareNext();
 		if (nextDeterminant == null)
 			finishReplaying();
@@ -158,7 +158,7 @@ public class ReplayingState extends AbstractState {
 			throw new RuntimeException("Unexpected Determinant type: Expected Order, but got: " + nextDeterminant);
 
 		byte toReturn = ((OrderDeterminant) nextDeterminant).getChannel();
-		determinantBufferPool.recycle(nextDeterminant);
+		determinantPool.recycle(nextDeterminant);
 		prepareNext();
 		if (nextDeterminant == null)
 			finishReplaying();
@@ -171,7 +171,7 @@ public class ReplayingState extends AbstractState {
 			throw new RuntimeException("Unexpected Determinant type: Expected Timestamp, but got: " + nextDeterminant);
 
 		long toReturn = ((TimestampDeterminant) nextDeterminant).getTimestamp();
-		determinantBufferPool.recycle(nextDeterminant);
+		determinantPool.recycle(nextDeterminant);
 		prepareNext();
 		if (nextDeterminant == null)
 			finishReplaying();
@@ -183,8 +183,8 @@ public class ReplayingState extends AbstractState {
 		AsyncDeterminant asyncDeterminant = (AsyncDeterminant) nextDeterminant;
 		int currentRecordCount = context.recordCounter.getRecordCount();
 
-		logDebugWithVertexID("Trigger async event, record count: {}, determinant record count: {}", currentRecordCount,
-			asyncDeterminant.getRecordCount());
+		if(LOG.isDebugEnabled())
+			logDebugWithVertexID("Trigger {}", asyncDeterminant);
 		if (currentRecordCount != asyncDeterminant.getRecordCount())
 			throw new RuntimeException("Current record count is not the determinants record count. Current: " + currentRecordCount + ", determinant: " + asyncDeterminant.getRecordCount());
 		//Prepare next first, because the async event, in being processed, may require determinants
@@ -192,7 +192,7 @@ public class ReplayingState extends AbstractState {
 		prepareNext();
 		asyncDeterminant.process(context);
 		//Now that we have used it, we may recycle it
-		determinantBufferPool.recycle(asyncDeterminant);
+		determinantPool.recycle(asyncDeterminant);
 		if (nextDeterminant == null)
 			finishReplaying();
 	}
@@ -200,7 +200,7 @@ public class ReplayingState extends AbstractState {
 	private void prepareNext() {
 		nextDeterminant = null;
 		if (mainThreadRecoveryBuffer.isReadable()) {
-			nextDeterminant = determinantEncoder.decodeNext(mainThreadRecoveryBuffer, determinantBufferPool);
+			nextDeterminant = determinantEncoder.decodeNext(mainThreadRecoveryBuffer, determinantPool);
 
 			if (nextDeterminant instanceof AsyncDeterminant)
 				context.recordCounter.setRecordCountTarget(((AsyncDeterminant) nextDeterminant).getRecordCount());
@@ -226,6 +226,8 @@ public class ReplayingState extends AbstractState {
 		return "ReplayingState{}";
 	}
 
+
+
 	private static class SubpartitionRecoveryThread extends Thread {
 		private final PipelinedSubpartition pipelinedSubpartition;
 		private final ByteBuf recoveryBuffer;
@@ -249,13 +251,13 @@ public class ReplayingState extends AbstractState {
 		@Override
 		public void run() {
 			//1. Netty has been told that there is no data.
-			DeterminantBufferPool determinantBufferPool = new DeterminantBufferPool();
+			DeterminantPool determinantPool = new DeterminantPool();
 
 			//2. Rebuild in-flight log and subpartition state
 			Determinant determinant;
 			while (recoveryBuffer.isReadable()) {
 				try {
-					determinant = determinantEncoder.decodeNext(recoveryBuffer, determinantBufferPool);
+					determinant = determinantEncoder.decodeNext(recoveryBuffer, determinantPool);
 				} catch (Exception e) {
 					LOG.error("Vertex {} - Recovery thread for partition {} index {} found exception",
 						context.getTaskVertexID(), partitionID, index, e);
@@ -270,7 +272,8 @@ public class ReplayingState extends AbstractState {
 						+ determinant);
 				BufferBuiltDeterminant bufferBuiltDeterminant = (BufferBuiltDeterminant) determinant;
 
-				LOG.debug("Vertex {} - Requesting to build and log buffer with {} bytes",
+				if(LOG.isDebugEnabled())
+					LOG.debug("Vertex {} - Requesting to build and log buffer with {} bytes",
 					context.getTaskVertexID(),
 					bufferBuiltDeterminant.getNumberOfBytes());
 				try {
@@ -278,7 +281,7 @@ public class ReplayingState extends AbstractState {
 				} catch (InterruptedException e) {
 					return;
 				}
-				determinantBufferPool.recycle(determinant);
+				determinantPool.recycle(determinant);
 			}
 			LOG.info("Vertex {} - Done recovering pipelined subpartition", context.getTaskVertexID());
 			//Safety check that recovery brought us to the exact same state as pre-failure
@@ -290,7 +293,7 @@ public class ReplayingState extends AbstractState {
 			// If there is a replay request, we have to prepare it, before setting isRecovering to true
 			InFlightLogRequestEvent unansweredRequest =
 				context.unansweredInFlightLogRequests.remove(partitionID, index);
-			LOG.info("Checking for unanswered inflight request for this subpartition.");
+			LOG.debug("Checking for unanswered inflight request for this subpartition.");
 			if (unansweredRequest != null) {
 				LOG.info("There is an unanswered replay request for this subpartition.");
 				pipelinedSubpartition.requestReplay(unansweredRequest.getCheckpointId(),
@@ -301,7 +304,7 @@ public class ReplayingState extends AbstractState {
 			pipelinedSubpartition.setIsRecoveringSubpartitionInFlightState(false);
 			pipelinedSubpartition.notifyDataAvailable();
 			recoveryBuffer.release();
-			LOG.info("Subpartition is free to restart sending buffers.");
+			LOG.debug("Subpartition is free to restart sending buffers.");
 
 		}
 	}

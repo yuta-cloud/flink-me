@@ -97,7 +97,7 @@ public class WaitingDeterminantsState extends AbstractState {
 	public void notifyDeterminantResponseEvent(DeterminantResponseEvent e) {
 		if (e.getVertexID().equals(context.vertexGraphInformation.getThisTasksVertexID())) {
 
-			logDebugWithVertexID("Received a DeterminantResponseEvent that is a direct response to my request: {}", e);
+			logInfoWithVertexID("Received a DeterminantResponseEvent that is a direct response to my request: {}", e);
 			numResponsesReceived++;
 			determinantAccumulator.merge(e);
 
@@ -153,7 +153,7 @@ public class WaitingDeterminantsState extends AbstractState {
 							new InFlightLogRequestEvent(inputChannel.getPartitionId().getPartitionId(),
 								consumedIndex,
 								context.epochProvider.getCurrentEpochID());
-						logDebugWithVertexID("Sending inFlightLog request {} through input gate {}, channel {}.",
+						logInfoWithVertexID("Sending inFlightLog request {} through input gate {}, channel {}.",
 							inFlightLogRequestEvent, singleInputGate, i);
 						inputChannel.sendTaskEvent(inFlightLogRequestEvent);
 					}
@@ -169,7 +169,7 @@ public class WaitingDeterminantsState extends AbstractState {
 			DeterminantRequestEvent determinantRequestEvent =
 				new DeterminantRequestEvent(context.vertexGraphInformation.getThisTasksVertexID(),
 					context.epochProvider.getCurrentEpochID());
-			logDebugWithVertexID("Sending determinant requests: {}", determinantRequestEvent);
+			logInfoWithVertexID("Sending determinant requests: {}", determinantRequestEvent);
 			broadcastDeterminantRequest(determinantRequestEvent);
 		}
 	}
@@ -178,7 +178,7 @@ public class WaitingDeterminantsState extends AbstractState {
 		logDebugWithVertexID("Go to replaying? Received {}, Expected {}, Restoring {}", numResponsesReceived, numResponsesExpected
 			, recoveryManager.isRestoringState());
 		if (numResponsesReceived == numResponsesExpected && !recoveryManager.isRestoringState()) {
-			logDebugWithVertexID("Received all determinants, transitioning to Replaying state!");
+			logInfoWithVertexID("Received all determinants, transitioning to Replaying state!");
 			recoveryManager.setState(new ReplayingState(recoveryManager, context, determinantAccumulator));
 		}
 	}

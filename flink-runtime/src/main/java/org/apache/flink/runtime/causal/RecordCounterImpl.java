@@ -40,7 +40,7 @@ public final class RecordCounterImpl implements RecordCounter {
 	//The input record count target at which the recovery manager should be notified.
 	private int recordCountTarget;
 
-	private  IRecoveryManager recoveryManager;
+	private IRecoveryManager recoveryManager;
 
 	public RecordCounterImpl() {
 		recordCount = 0;
@@ -57,26 +57,20 @@ public final class RecordCounterImpl implements RecordCounter {
 		recordCount++;
 
 		//Before returning control to the caller, check if we first should execute async nondeterministic event
-		while(recordCountTarget == recordCount)
-			fireAsyncEvent();
+		fireAnyAsyncEvent();
 	}
 
 	@Override
 	public final void resetRecordCount() {
 		recordCount = 0;
 		//check if async event is first event of the epoch
-		while(recordCountTarget == recordCount)
-			fireAsyncEvent();
+		fireAnyAsyncEvent();
 	}
 
 	@Override
 	public void setRecordCountTarget(int target) {
 		this.recordCountTarget = target;
 		//check if async event is first event of the first epoch
-		while(recordCountTarget == recordCount)
-			fireAsyncEvent();
-
-
 	}
 
 	@Override
@@ -84,8 +78,10 @@ public final class RecordCounterImpl implements RecordCounter {
 		this.recoveryManager = recoveryManager;
 	}
 
-	private void fireAsyncEvent(){
-		recordCountTarget = NO_RECORD_COUNT_TARGET;
-		recoveryManager.triggerAsyncEvent();
+	private void fireAnyAsyncEvent() {
+		while (recordCountTarget == recordCount) {
+			recordCountTarget = NO_RECORD_COUNT_TARGET;
+			recoveryManager.triggerAsyncEvent();
+		}
 	}
 }

@@ -18,7 +18,7 @@
 package org.apache.flink.runtime.causal.determinant;
 
 
-import org.apache.flink.runtime.causal.recovery.DeterminantBufferPool;
+import org.apache.flink.runtime.causal.recovery.DeterminantPool;
 import org.apache.flink.runtime.checkpoint.CheckpointType;
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
 import org.apache.flink.shaded.netty4.io.netty.buffer.Unpooled;
@@ -80,7 +80,7 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 	}
 
 	@Override
-	public Determinant decodeNext(ByteBuf b, DeterminantBufferPool determinantCache) {
+	public Determinant decodeNext(ByteBuf b, DeterminantPool determinantCache) {
 		if (b == null)
 			return null;
 		if (!b.isReadable())

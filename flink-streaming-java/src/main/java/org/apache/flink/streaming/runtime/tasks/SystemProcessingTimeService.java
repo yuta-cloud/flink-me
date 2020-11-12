@@ -29,6 +29,7 @@ import org.apache.flink.runtime.causal.log.job.JobCausalLog;
 import org.apache.flink.runtime.causal.log.thread.ThreadCausalLog;
 import org.apache.flink.runtime.causal.recovery.RecoveryManager;
 import org.apache.flink.api.common.services.TimeService;
+import org.apache.flink.runtime.causal.services.PeriodicTimeCausalTimeService;
 import org.apache.flink.util.Preconditions;
 
 import org.slf4j.Logger;
@@ -84,6 +85,7 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 
 	private final Map<ProcessingTimeCallbackID, PreregisteredTimer> preregisteredTimerTasks;
 
+	private final Map<ProcessingTimeCallbackID, ProcessingTimeCallback> callbacks;
 
 	public SystemProcessingTimeService(AsyncExceptionHandler failureHandler, Object checkpointLock) {
 		this(failureHandler, checkpointLock, null);
@@ -93,20 +95,26 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 		AsyncExceptionHandler task,
 		Object checkpointLock,
 		ThreadFactory threadFactory) {
-		this(task, checkpointLock, threadFactory, null, null, null, null, null);
+		this(task, checkpointLock, threadFactory, null,
+			null, null, null, null);
 	}
 
-	public <OUT> SystemProcessingTimeService(AsyncExceptionHandler task, Object checkpointLock, ThreadFactory threadFactory, TimeService timeService, EpochProvider epochProvider, RecordCounter recordCounter, JobCausalLog causalLog, RecoveryManager recoveryManager) {
+	public <OUT> SystemProcessingTimeService(AsyncExceptionHandler task, Object checkpointLock,
+											 ThreadFactory threadFactory, TimeService timeService,
+											 EpochProvider epochProvider, RecordCounter recordCounter,
+											 JobCausalLog causalLog, RecoveryManager recoveryManager) {
 		this.task = checkNotNull(task);
 		this.checkpointLock = checkNotNull(checkpointLock);
 		this.timeService = timeService;
 
 		this.epochProvider = epochProvider;
 		this.recordCounter = recordCounter;
-		this.mainThreadCausalLog = causalLog.getThreadCausalLog(new CausalLogID(recoveryManager.getContext().getTaskVertexID()));
+		this.mainThreadCausalLog =
+			causalLog.getThreadCausalLog(new CausalLogID(recoveryManager.getContext().getTaskVertexID()));
 		this.recoveryManager = recoveryManager;
 
 		this.preregisteredTimerTasks = new HashMap<>();
+		this.callbacks = new HashMap<>();
 		this.reuseTimerTriggerDeterminant = new TimerTriggerDeterminant();
 
 		this.status = new AtomicInteger(STATUS_ALIVE);
@@ -124,11 +132,15 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 		this.timerService.setContinueExistingPeriodicTasksAfterShutdownPolicy(false);
 		this.timerService.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
 
+
+
 	}
+
+
 
 	@Override
 	public long getCurrentProcessingTime() {
-		return System.currentTimeMillis();
+		return timeService.currentTimeMillis();
 	}
 
 	@Override
@@ -150,7 +162,7 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 		// delay the firing of the timer by 1 ms to align the semantics with watermark. A watermark
 		// T says we won't see elements in the future with a timestamp smaller or equal to T.
 		// With processing time, we therefore need to delay firing the timer by one ms.
-		long delay = Math.max(timestamp - getCurrentProcessingTime(), 0) + 1;
+		long delay = Math.max(timestamp - System.currentTimeMillis(), 0) + 1;
 		ScheduledFuture<?> future;
 		TriggerTask toRegister = new TriggerTask(status, task, checkpointLock, target, timestamp, mainThreadCausalLog,
 			epochProvider, recordCounter, reuseTimerTriggerDeterminant);
@@ -163,15 +175,16 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 	}
 
 	private ScheduledFuture<?> registerTimerRecovering(TriggerTask toRegister, long delay) {
-		LOG.debug("We are recovering, differing one-shot timer registration!");
-		long submissionTime = getCurrentProcessingTime();
 		ProcessingTimeCallbackID id = toRegister.getTarget().getID();
-		preregisteredTimerTasks.put(id, new PreregisteredTimer(toRegister, delay, submissionTime));
+		if(LOG.isDebugEnabled())
+			LOG.debug("We are recovering, differing one-shot timer registration for {}!", id);
+		preregisteredTimerTasks.put(id, new PreregisteredTimer(toRegister, delay));
 		return new PreregisteredCompleteableFuture<>(id);
 	}
 
 	private ScheduledFuture<?> registerTimerRunning(TriggerTask toRegister, long delay) {
-		LOG.debug("We are running, directly registering one-shot timer!");
+		if(LOG.isDebugEnabled())
+			LOG.debug("We are running, directly registering one-shot timer!");
 		// we directly try to register the timer and only react to the status on exception
 		// that way we save unnecessary volatile accesses for each timer
 		try {
@@ -192,29 +205,37 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 
 	@Override
 	public ScheduledFuture<?> scheduleAtFixedRate(ProcessingTimeCallback callback, long initialDelay, long period) {
-		long nextTimestamp = getCurrentProcessingTime() + initialDelay;
+		long nextTimestamp = System.currentTimeMillis() + initialDelay;
 
 		RepeatedTriggerTask toRegister = new RepeatedTriggerTask(status, task, checkpointLock, callback, nextTimestamp,
 			period, mainThreadCausalLog, epochProvider, recordCounter, reuseTimerTriggerDeterminant);
 		ScheduledFuture<?> future;
 		if (recoveryManager.isRecovering())
-			future = registerAtFixedRateRecovering(initialDelay, period, toRegister);
+			future = registerAtFixedRateRecovering(initialDelay, toRegister);
 		else
 			future = registerAtFixedRateRunning(initialDelay, period, toRegister);
 		return future;
 	}
 
-	private ScheduledFuture<?> registerAtFixedRateRecovering(long initialDelay, long period, RepeatedTriggerTask toRegister) {
-		LOG.debug("We are recovering, differing fixed rate timer registration!");
-		long submissionTime = getCurrentProcessingTime();
+	@Override
+	public void registerCallback(ProcessingTimeCallback callback) {
+		this.callbacks.put(callback.getID(), callback);
+	}
+
+	private ScheduledFuture<?> registerAtFixedRateRecovering(long initialDelay,
+															 RepeatedTriggerTask toRegister) {
 		ProcessingTimeCallbackID id = toRegister.getTarget().getID();
-		preregisteredTimerTasks.put(id, new PreregisteredTimer(toRegister, initialDelay, submissionTime));
+		if(LOG.isDebugEnabled())
+			LOG.debug("We are recovering, differing fixed rate timer registration for {}!", id);
+		preregisteredTimerTasks.put(id, new PreregisteredTimer(toRegister, initialDelay));
 		return new PreregisteredCompleteableFuture<>(id);
 
 	}
 
-	private ScheduledFuture<?> registerAtFixedRateRunning(long initialDelay, long period, RepeatedTriggerTask toRegister) {
-		LOG.debug("We are running, directly registering fixed rate timer!");
+	private ScheduledFuture<?> registerAtFixedRateRunning(long initialDelay, long period,
+														  RepeatedTriggerTask toRegister) {
+		if(LOG.isDebugEnabled())
+			LOG.debug("We are running, directly registering fixed rate timer!");
 		// we directly try to register the timer and only react to the status on exception
 		// that way we save unnecessary volatile accesses for each timer
 		try {
@@ -325,21 +346,29 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 
 	@Override
 	public void forceExecution(ProcessingTimeCallbackID id, long timestamp) {
-		LOG.debug("Forcing execution of task with callback id {} for timestamp {}", id, timestamp);
+
 		PreregisteredTimer timerTask = preregisteredTimerTasks.get(id);
-		if (timerTask == null)
-			throw new RuntimeException("Timer not found during recovery");
-		Runnable runnable = timerTask.getTask();
+		if(timerTask != null) {
+			Runnable runnable = timerTask.getTask();
 
-		if (runnable instanceof TriggerTask) {
-			preregisteredTimerTasks.remove(id);
-			((TriggerTask) runnable).runTask(timestamp);
-		} else if (runnable instanceof RepeatedTriggerTask) {
-			((RepeatedTriggerTask) runnable).runTask(timestamp);
-		}else {
-			throw new RuntimeException("Unknown timer task type or null");
+			if (runnable instanceof TriggerTask) {
+				preregisteredTimerTasks.remove(id);
+				((TriggerTask) runnable).runTask(timestamp);
+			} else if (runnable instanceof RepeatedTriggerTask) {
+				((RepeatedTriggerTask) runnable).runTask(timestamp);
+			}
+			return;
 		}
+		ProcessingTimeCallback callback = callbacks.get(id);
 
+		if(callback == null)
+			throw new RuntimeException("Timer "+ id+ " not found during recovery");
+
+		try {
+			callback.onProcessingTime(timestamp);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
 
 	}
 
@@ -350,8 +379,11 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 			LOG.debug("Preregistered timer: {}", preregisteredTimer);
 			if (preregisteredTimer.task instanceof TriggerTask)
 				registerTimerRunning((TriggerTask) preregisteredTimer.task, preregisteredTimer.delay);
-			else if (preregisteredTimer.task instanceof RepeatedTriggerTask)//register using period as delay, since it has been executed a few times already
-				registerAtFixedRateRunning(((RepeatedTriggerTask) preregisteredTimer.task).period, ((RepeatedTriggerTask) preregisteredTimer.task).period, (RepeatedTriggerTask) preregisteredTimer.task);
+			else if (preregisteredTimer.task instanceof RepeatedTriggerTask)//register using period as delay, since it
+				// has been executed a few times already
+				registerAtFixedRateRunning(((RepeatedTriggerTask) preregisteredTimer.task).period,
+					((RepeatedTriggerTask) preregisteredTimer.task).period,
+					(RepeatedTriggerTask) preregisteredTimer.task);
 		}
 		preregisteredTimerTasks.clear();
 	}
@@ -495,7 +527,8 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 					nextTimestamp = timestamp + period;
 				} catch (Throwable t) {
 					TimerException asyncException = new TimerException(t);
-					exceptionHandler.handleAsyncException("Caught exception while processing repeated timer task.", asyncException);
+					exceptionHandler.handleAsyncException("Caught exception while processing repeated timer task.",
+						asyncException);
 				}
 			}
 		}
@@ -631,12 +664,10 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 	private static class PreregisteredTimer {
 		Runnable task;
 		long delay;
-		long submissionTime;
 
-		public PreregisteredTimer(Runnable task, long delay, long submissionTime) {
+		public PreregisteredTimer(Runnable task, long delay) {
 			this.task = task;
 			this.delay = delay;
-			this.submissionTime = submissionTime;
 		}
 
 		public Runnable getTask() {
@@ -647,8 +678,5 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 			return delay;
 		}
 
-		public long getSubmissionTime() {
-			return submissionTime;
-		}
 	}
 }

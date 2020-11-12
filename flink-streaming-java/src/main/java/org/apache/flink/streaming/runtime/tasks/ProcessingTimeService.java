@@ -67,7 +67,9 @@ public abstract class ProcessingTimeService {
 	 */
 	public abstract ScheduledFuture<?> scheduleAtFixedRate(ProcessingTimeCallback callback, long initialDelay, long period);
 
-	/**
+    public abstract void registerCallback(ProcessingTimeCallback callback);
+
+    /**
 	 * Returns <tt>true</tt> if the service has been shut down, <tt>false</tt> otherwise.
 	 */
 	public abstract boolean isTerminated();

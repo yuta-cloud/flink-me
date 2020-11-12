@@ -129,6 +129,8 @@ public class ExecutionConfig implements Serializable, Archiveable<ArchivedExecut
 
 	private long autoWatermarkInterval = 0;
 
+	private long autoTimeSetterInterval = 5;
+
 	/**
 	 * Interval in milliseconds for sending latency tracking marks from the sources to the sinks.
 	 */
@@ -238,6 +240,18 @@ public class ExecutionConfig implements Serializable, Archiveable<ArchivedExecut
 	public long getAutoWatermarkInterval()  {
 		return this.autoWatermarkInterval;
 	}
+
+
+	public ExecutionConfig setAutoTimeSetterInterval(long interval) {
+		this.autoTimeSetterInterval = interval;
+		return this;
+	}
+
+
+	public long getAutoTimeSetterInterval()  {
+		return this.autoTimeSetterInterval;
+	}
+
 
 	/**
 	 * Interval for sending latency tracking marks from the sources to the sinks.

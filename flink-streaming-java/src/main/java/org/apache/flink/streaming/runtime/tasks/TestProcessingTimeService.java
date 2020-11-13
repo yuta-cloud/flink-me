@@ -80,6 +80,10 @@ public class TestProcessingTimeService extends ProcessingTimeService {
 	}
 
 	@Override
+	public void registerCallback(ProcessingTimeCallback p) {
+	}
+
+	@Override
 	public long getCurrentProcessingTimeCausal() {
 		return currentTime;
 	}

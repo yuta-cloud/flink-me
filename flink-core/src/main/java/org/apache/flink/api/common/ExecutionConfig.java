@@ -185,6 +185,7 @@ public class ExecutionConfig implements Serializable, Archiveable<ArchivedExecut
 	private LinkedHashSet<Class<?>> registeredKryoTypes = new LinkedHashSet<>();
 
 	private LinkedHashSet<Class<?>> registeredPojoTypes = new LinkedHashSet<>();
+	private boolean slotSharing = true;
 
 	// --------------------------------------------------------------------------------------------
 
@@ -994,6 +995,14 @@ public class ExecutionConfig implements Serializable, Archiveable<ArchivedExecut
 	@Internal
 	public ArchivedExecutionConfig archive() {
 		return new ArchivedExecutionConfig(this);
+	}
+
+	public boolean isSlotSharingEnabled() {
+		return slotSharing;
+	}
+	public ExecutionConfig disableSlotSharing(){
+		this.slotSharing = false;
+		return this;
 	}
 
 

@@ -637,37 +637,36 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 			final ResultPartitionID resultPartitionId,
 			final Throwable cause) {
 
-		return CompletableFuture.completedFuture(Acknowledge.get());
-		//Execution producerExecutionToFail = executionGraph.getRegisteredExecutions().get(resultPartitionId.getProducerId());
-		//if (producerExecutionToFail == null) {
-		//	return CompletableFuture.completedFuture(Acknowledge.get());
-		//}
-		//else {
-		//	final IntermediateResult intermediateResult =
-		//			executionGraph.getAllIntermediateResults().get(intermediateResultId);
+		Execution producerExecutionToFail = executionGraph.getRegisteredExecutions().get(resultPartitionId.getProducerId());
+		if (producerExecutionToFail == null) {
+			return CompletableFuture.completedFuture(Acknowledge.get());
+		}
+		else {
+			final IntermediateResult intermediateResult =
+					executionGraph.getAllIntermediateResults().get(intermediateResultId);
 
-		//	if (intermediateResult != null) {
-		//		final ExecutionVertex producerVertex = intermediateResult
-		//						.getPartitionById(resultPartitionId.getPartitionId())
-		//						.getProducer();
-		//		// Check whether another fail signal for the same vertex was sent recently
-		//		if (producerVertex.concurrentFailExecutionSignal()) {
-		//			return CompletableFuture.completedFuture(Acknowledge.get());
-		//		}
-		//		// Try to find the producing execution
-		//		Execution producerExecutionCurrent = producerVertex.getCurrentExecutionAttempt();
+			if (intermediateResult != null) {
+				final ExecutionVertex producerVertex = intermediateResult
+								.getPartitionById(resultPartitionId.getPartitionId())
+								.getProducer();
+				// Check whether another fail signal for the same vertex was sent recently
+				if (producerVertex.concurrentFailExecutionSignal()) {
+					return CompletableFuture.completedFuture(Acknowledge.get());
+				}
+				// Try to find the producing execution
+				Execution producerExecutionCurrent = producerVertex.getCurrentExecutionAttempt();
 
-		//		if (producerExecutionToFail.getAttemptNumber() == producerExecutionCurrent.getAttemptNumber() &&
-		//			producerExecutionCurrent.getState() == ExecutionState.RUNNING) {
-		//			log.info("Fail externally producer execution {} of result partition {} because of {}.", producerExecutionCurrent, resultPartitionId, cause);
-		//			producerExecutionCurrent.fail(cause);
-		//		}
-		//		return CompletableFuture.completedFuture(Acknowledge.get());
-		//	} else {
-		//		return FutureUtils.completedExceptionally(new IllegalArgumentException("Intermediate data set with ID "
-		//				+ intermediateResultId + " not found."));
-		//	}
-		//}
+				if (producerExecutionToFail.getAttemptNumber() == producerExecutionCurrent.getAttemptNumber() &&
+					producerExecutionCurrent.getState() == ExecutionState.RUNNING) {
+					log.info("Fail externally producer execution {} of result partition {} because of {}.", producerExecutionCurrent, resultPartitionId, cause);
+					producerExecutionCurrent.fail(cause);
+				}
+				return CompletableFuture.completedFuture(Acknowledge.get());
+			} else {
+				return FutureUtils.completedExceptionally(new IllegalArgumentException("Intermediate data set with ID "
+						+ intermediateResultId + " not found."));
+			}
+		}
 	}
 
 	@Override
@@ -677,29 +676,28 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 			final Throwable cause,
 			final Time timeout) {
 
+		final Execution producerExecution = executionGraph.getRegisteredExecutions().get(resultPartitionId.getProducerId());
+		// If producer failed no need to fail consumer.
+		if (producerExecution == null) {
+			return CompletableFuture.completedFuture(Acknowledge.get());
+		}
+
+		final ExecutionVertex producerExecutionVertex = producerExecution.getVertex();
+		final IntermediateResultPartition irp = producerExecutionVertex.getProducedPartitions().get(resultPartitionId.getPartitionId());
+		final ExecutionVertex consumerVertex = irp.getConsumers().get(0).get(subpartitionIndex).getTarget();
+
+		// Check whether another fail signal for the same vertex was sent recently
+		if (consumerVertex.concurrentFailExecutionSignal()) {
+			return CompletableFuture.completedFuture(Acknowledge.get());
+		}
+
+		final Execution consumerExecution = consumerVertex.getCurrentExecutionAttempt();
+		if (consumerExecution.getState() == ExecutionState.RUNNING) {
+			log.info("Fail externally consumer execution {} of result partition {} subpartition {} because of {}.", consumerExecution, resultPartitionId, subpartitionIndex, cause);
+			consumerExecution.fail(cause);
+		}
+
 		return CompletableFuture.completedFuture(Acknowledge.get());
-		//final Execution producerExecution = executionGraph.getRegisteredExecutions().get(resultPartitionId.getProducerId());
-		//// If producer failed no need to fail consumer.
-		//if (producerExecution == null) {
-		//	return CompletableFuture.completedFuture(Acknowledge.get());
-		//}
-
-		//final ExecutionVertex producerExecutionVertex = producerExecution.getVertex();
-		//final IntermediateResultPartition irp = producerExecutionVertex.getProducedPartitions().get(resultPartitionId.getPartitionId());
-		//final ExecutionVertex consumerVertex = irp.getConsumers().get(0).get(subpartitionIndex).getTarget();
-
-		//// Check whether another fail signal for the same vertex was sent recently
-		//if (consumerVertex.concurrentFailExecutionSignal()) {
-		//	return CompletableFuture.completedFuture(Acknowledge.get());
-		//}
-
-		//final Execution consumerExecution = consumerVertex.getCurrentExecutionAttempt();
-		//if (consumerExecution.getState() == ExecutionState.RUNNING) {
-		//	log.info("Fail externally consumer execution {} of result partition {} subpartition {} because of {}.", consumerExecution, resultPartitionId, subpartitionIndex, cause);
-		//	consumerExecution.fail(cause);
-		//}
-
-		//return CompletableFuture.completedFuture(Acknowledge.get());
 	}
 
 

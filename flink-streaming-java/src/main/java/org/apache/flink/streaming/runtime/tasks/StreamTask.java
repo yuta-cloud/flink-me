@@ -457,6 +457,8 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 			}
 
 			if (isStandby()) {
+				//TODO this was just a quick workaround, clean this up
+				((RecordCounterImpl)recordCounter).setOperatorsOpened();
 				//This will trigger any timers that should be fired at record count 0
 				recordCounter.resetRecordCount();
 			}

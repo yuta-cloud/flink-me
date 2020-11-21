@@ -42,9 +42,12 @@ public final class RecordCounterImpl implements RecordCounter {
 
 	private IRecoveryManager recoveryManager;
 
+	private boolean operatorsOpened;
+
 	public RecordCounterImpl() {
 		recordCount = 0;
 		recordCountTarget = NO_RECORD_COUNT_TARGET;
+		operatorsOpened = false;
 	}
 
 	@Override
@@ -71,6 +74,7 @@ public final class RecordCounterImpl implements RecordCounter {
 	public void setRecordCountTarget(int target) {
 		this.recordCountTarget = target;
 		//check if async event is first event of the first epoch
+		fireAnyAsyncEvent();
 	}
 
 	@Override
@@ -78,10 +82,17 @@ public final class RecordCounterImpl implements RecordCounter {
 		this.recoveryManager = recoveryManager;
 	}
 
+	public void setOperatorsOpened(){
+		operatorsOpened = true;
+		fireAnyAsyncEvent();
+	}
+
 	private void fireAnyAsyncEvent() {
-		while (recordCountTarget == recordCount) {
-			recordCountTarget = NO_RECORD_COUNT_TARGET;
-			recoveryManager.triggerAsyncEvent();
+		if(operatorsOpened) {
+			while (recordCountTarget == recordCount) {
+				recordCountTarget = NO_RECORD_COUNT_TARGET;
+				recoveryManager.triggerAsyncEvent();
+			}
 		}
 	}
 }

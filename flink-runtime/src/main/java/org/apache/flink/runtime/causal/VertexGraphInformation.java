@@ -67,7 +67,7 @@ public class VertexGraphInformation {
 		this.jobVertex = CausalGraphUtils.fromSortedList(sortedJobVertexes, jobVertexID);
 		this.thisTasksVertexID = CausalGraphUtils.computeVertexId(sortedJobVertexes, jobVertexID, subtaskIndex);
 
-		this.distancesToVertex = CausalGraphUtils.computeDistances(sortedJobVertexes, jobVertexID, subtaskIndex);
+		this.distancesToVertex = CausalGraphUtils.computeDistances(sortedJobVertexes, jobVertexID);
 
 		this.upstreamVertexes = _getUpstreamVertexes();
 		this.downstreamVertexes = _getDownstreamVertexes();

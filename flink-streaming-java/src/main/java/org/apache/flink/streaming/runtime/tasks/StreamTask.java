@@ -202,13 +202,13 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 	/**
 	 * Future for standby tasks that completes when they are required to run
 	 */
-	private volatile CompletableFuture<Void> standbyFuture;
+	private final CompletableFuture<Void> standbyFuture;
 
 
 	/**
 	 * Future for standby tasks that signals that we are ready to start replaying or otherwise executing
 	 */
-	private volatile CompletableFuture<Void> readyToReplayFuture;
+	private final CompletableFuture<Void> readyToReplayFuture;
 
 
 	/**
@@ -234,11 +234,11 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 	private final TimeService timeService;
 	private final RandomService randomService;
-	private AtomicLong currentEpochID;
+	private final AtomicLong currentEpochID;
 	private final RecordCounter recordCounter;
 
-	private SourceCheckpointDeterminant reuseSourceCheckpointDeterminant;
-	private IgnoreCheckpointDeterminant ignoreCheckpointReuseDeterminant;
+	private final SourceCheckpointDeterminant reuseSourceCheckpointDeterminant;
+	private final IgnoreCheckpointDeterminant ignoreCheckpointReuseDeterminant;
 
 	// ------------------------------------------------------------------------
 
@@ -444,6 +444,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 				recoveryManager.notifyStartRecovery();
 				readyToReplayFuture.get();
 				LOG.debug("Task {} starts execution after readyToReplayFuture {}.", getName(), readyToReplayFuture);
+				//Reads timestamp and seed from log
 				if (timeService instanceof PeriodicTimeCausalTimeService)
 					((PeriodicTimeCausalTimeService) timeService).notifyNewEpoch();
 				if (randomService instanceof DeterministicCausalRandomService)

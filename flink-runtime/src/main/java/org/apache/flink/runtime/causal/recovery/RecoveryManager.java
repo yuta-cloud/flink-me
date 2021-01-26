@@ -38,9 +38,7 @@ public class RecoveryManager implements IRecoveryManager {
 
 	private static final Logger LOG = LoggerFactory.getLogger(RecoveryManager.class);
 
-
 	public static final SinkRecoveryStrategy sinkRecoveryStrategy = SinkRecoveryStrategy.TRANSACTIONAL;
-
 
 	public enum SinkRecoveryStrategy {
 		TRANSACTIONAL,
@@ -142,62 +140,12 @@ public class RecoveryManager implements IRecoveryManager {
 	public State getState() {
 		return currentState;
 	}
-	//=============== Consult determinants ==============================
-	@Override
-	public int replayRandomInt() {
-		return currentState.replayRandomInt();
-	}
 
-	@Override
-	public byte replayNextChannel() {
-		return currentState.replayNextChannel();
-	}
-
-	@Override
-	public long replayNextTimestamp() {
-		return currentState.replayNextTimestamp();
-	}
-
-	@Override
-	public synchronized void triggerAsyncEvent() {
-		this.currentState.triggerAsyncEvent();
+	public LogReplayer getLogReplayer() {
+		return currentState.getLogReplayer();
 	}
 
 
-
-	//=======================================================================
-
-	public static class UnansweredDeterminantRequest {
-		private int numResponsesReceived;
-		private int requestingChannel;
-
-		private DeterminantResponseEvent response;
-
-		public UnansweredDeterminantRequest(DeterminantRequestEvent event, int requestingChannel) {
-			this.numResponsesReceived = 0;
-			this.requestingChannel = requestingChannel;
-			this.response = new DeterminantResponseEvent(event);
-			this.response.setCorrelationID(event.getUpstreamCorrelationID());
-		}
-
-		public int getNumResponsesReceived() {
-			return numResponsesReceived;
-		}
-
-
-		public int getRequestingChannel() {
-			return requestingChannel;
-		}
-
-		public void incResponsesReceived() {
-			numResponsesReceived++;
-		}
-
-		public DeterminantResponseEvent getCurrentResponse() {
-			return response;
-		}
-
-	}
 
 
 }

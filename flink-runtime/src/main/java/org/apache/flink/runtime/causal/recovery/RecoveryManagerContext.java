@@ -31,6 +31,7 @@ import org.apache.flink.runtime.causal.*;
 import org.apache.flink.runtime.causal.determinant.AsyncDeterminant;
 import org.apache.flink.runtime.causal.log.job.JobCausalLog;
 import org.apache.flink.runtime.event.InFlightLogRequestEvent;
+import org.apache.flink.runtime.io.network.api.DeterminantRequestEvent;
 import org.apache.flink.runtime.io.network.partition.PipelinedSubpartition;
 import org.apache.flink.runtime.io.network.partition.ResultPartition;
 import org.apache.flink.runtime.io.network.partition.ResultSubpartition;
@@ -53,13 +54,12 @@ public class RecoveryManagerContext {
 	InputGate inputGate;
 	Table<IntermediateResultPartitionID, Integer, PipelinedSubpartition> subpartitionTable;
 
-	EpochProvider epochProvider;
-	RecordCounter recordCounter;
+	final EpochTracker epochTracker;
 
 	ProcessingTimeForceable processingTimeForceable;
 	CheckpointForceable checkpointForceable;
 
-	final Table<VertexID, Long, RecoveryManager.UnansweredDeterminantRequest> unansweredDeterminantRequests;
+	final Table<VertexID, Long, UnansweredDeterminantRequest> unansweredDeterminantRequests;
 	final Table<IntermediateResultPartitionID, Integer, InFlightLogRequestEvent> unansweredInFlightLogRequests;
 	final List<AsyncDeterminant> unansweredRPCRequests;
 
@@ -67,10 +67,10 @@ public class RecoveryManagerContext {
 	final CompletableFuture<Void> readyToReplayFuture;
 
 
-	public RecoveryManagerContext(AbstractInvokable invokable, EpochProvider epochProvider, JobCausalLog causalLog,
-						   CompletableFuture<Void> readyToReplayFuture, VertexGraphInformation vertexGraphInformation,
-						   RecordCounter recordCounter, CheckpointForceable checkpointForceable,
-						   ResultPartition[] partitions) {
+	public RecoveryManagerContext(AbstractInvokable invokable, JobCausalLog causalLog,
+								  CompletableFuture<Void> readyToReplayFuture, VertexGraphInformation vertexGraphInformation,
+								  EpochTracker epochTracker, CheckpointForceable checkpointForceable,
+								  ResultPartition[] partitions) {
 		this.invokable = invokable;
 		this.causalLog = causalLog;
 		this.readyToReplayFuture = readyToReplayFuture;
@@ -81,8 +81,7 @@ public class RecoveryManagerContext {
 
 		this.incompleteStateRestorations = new HashSet<>();
 
-		this.epochProvider = epochProvider;
-		this.recordCounter = recordCounter;
+		this.epochTracker = epochTracker;
 		this.checkpointForceable = checkpointForceable;
 
 		this.unansweredRPCRequests = new LinkedList<>();
@@ -124,8 +123,8 @@ public class RecoveryManagerContext {
 		return vertexID;
 	}
 
-	public RecordCounter getRecordCounter(){
-		return this.recordCounter;
+	public EpochTracker getEpochTracker(){
+		return this.epochTracker;
 	}
 
 	public void setInputGate(InputGate inputGate) {
@@ -140,5 +139,37 @@ public class RecoveryManagerContext {
 	public int getNumberOfDirectDownstreamNeighbourVertexes(){
 		return subpartitionTable.size();
 	}
+//=======================================================================
 
+	public static class UnansweredDeterminantRequest {
+		private int numResponsesReceived;
+		private final int requestingChannel;
+
+		private final DeterminantResponseEvent response;
+
+		public UnansweredDeterminantRequest(DeterminantRequestEvent event, int requestingChannel) {
+			this.numResponsesReceived = 0;
+			this.requestingChannel = requestingChannel;
+			this.response = new DeterminantResponseEvent(event);
+			this.response.setCorrelationID(event.getUpstreamCorrelationID());
+		}
+
+		public int getNumResponsesReceived() {
+			return numResponsesReceived;
+		}
+
+
+		public int getRequestingChannel() {
+			return requestingChannel;
+		}
+
+		public void incResponsesReceived() {
+			numResponsesReceived++;
+		}
+
+		public DeterminantResponseEvent getCurrentResponse() {
+			return response;
+		}
+
+	}
 }

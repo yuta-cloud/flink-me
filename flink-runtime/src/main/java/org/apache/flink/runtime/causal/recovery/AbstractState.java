@@ -88,11 +88,11 @@ public abstract class AbstractState implements State {
 	public void notifyStateRestorationStart(long checkpointId) {
 		logInfoWithVertexID("Started restoring state of checkpoint {}", checkpointId);
 		this.context.incompleteStateRestorations.add(checkpointId);
-		if (checkpointId > context.epochProvider.getCurrentEpochID())
-			context.epochProvider.setCurrentEpochID(checkpointId);
+		//if (checkpointId > context.epochTracker.getCurrentEpoch())
+		//	context.getEpochTracker().startNewEpoch(checkpointId); //TODO this will notify subscribers, which we dont want
 
-		for (PipelinedSubpartition ps : context.subpartitionTable.values())
-			ps.setStartingEpoch(context.epochProvider.getCurrentEpochID());
+		//for (PipelinedSubpartition ps : context.subpartitionTable.values())
+		//	ps.setStartingEpoch(context.getEpochTracker().getCurrentEpoch());
 	}
 
 	@Override
@@ -104,7 +104,7 @@ public abstract class AbstractState implements State {
 	@Override
 	public void notifyDeterminantResponseEvent(DeterminantResponseEvent e) {
 		logInfoWithVertexID("Received {}", e);
-		RecoveryManager.UnansweredDeterminantRequest udr =
+		RecoveryManagerContext.UnansweredDeterminantRequest udr =
 			context.unansweredDeterminantRequests.get(e.getVertexID(), e.getCorrelationID());
 		if (udr != null) {
 			udr.incResponsesReceived();
@@ -136,7 +136,7 @@ public abstract class AbstractState implements State {
 			}
 		} else {
 			context.unansweredDeterminantRequests.put(e.getFailedVertex(), e.getCorrelationID(),
-				new RecoveryManager.UnansweredDeterminantRequest(e, channelRequestArrivedFrom));
+				new RecoveryManagerContext.UnansweredDeterminantRequest(e, channelRequestArrivedFrom));
 			if(LOG.isDebugEnabled())
 				logInfoWithVertexID("Recurring determinant request");
 			e.setUpstreamCorrelationID(e.getCorrelationID());
@@ -147,7 +147,7 @@ public abstract class AbstractState implements State {
 	protected void broadcastDeterminantRequest(DeterminantRequestEvent e) {
 		for (PipelinedSubpartition ps : context.subpartitionTable.values()) {
 			e.setCorrelationID(random.nextLong());
-			try (BufferConsumer event = EventSerializer.toBufferConsumer(e)) {
+			try (BufferConsumer event = EventSerializer.toBufferConsumer(e, context.epochTracker.getCurrentEpoch())) {
 				ps.bypassDeterminantRequest(event.copy());
 			} catch (IOException ex) {
 				ex.printStackTrace();
@@ -163,25 +163,8 @@ public abstract class AbstractState implements State {
 
 
 	@Override
-	public void triggerAsyncEvent() {
-		throw new RuntimeException("Unexpected check for Async event in state" + this.getClass());
-	}
-
-	//==============================================================
-
-	@Override
-	public int replayRandomInt() {
-		throw new RuntimeException("Unexpected replayRandomInt request in state " + this.getClass());
-	}
-
-	@Override
-	public byte replayNextChannel() {
-		throw new RuntimeException("Unexpected replayNextChannel request in state " + this.getClass());
-	}
-
-	@Override
-	public long replayNextTimestamp() {
-		throw new RuntimeException("Unexpected replayNextTimestamp request in state " + this.getClass());
+	public LogReplayer getLogReplayer() {
+		throw new RuntimeException("Unexpected request of LogReplayer in state" + this.getClass());
 	}
 
 	/**

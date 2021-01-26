@@ -19,6 +19,8 @@
 package org.apache.flink.runtime.io.network.partition;
 
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.runtime.causal.EpochTrackerImpl;
+import org.apache.flink.runtime.inflightlogging.InMemorySubpartitionInFlightLogger;
 import org.apache.flink.runtime.io.network.ConnectionID;
 import org.apache.flink.runtime.io.network.ConnectionManager;
 import org.apache.flink.runtime.io.network.TaskEventDispatcher;
@@ -76,7 +78,7 @@ public class InputGateFairnessTest {
 		final PipelinedSubpartition[] sources = new PipelinedSubpartition[numChannels];
 
 		for (int i = 0; i < numChannels; i++) {
-			PipelinedSubpartition partition = new PipelinedSubpartition(0, resultPartition);
+			PipelinedSubpartition partition = new PipelinedSubpartition(0, resultPartition, new InMemorySubpartitionInFlightLogger());
 
 			for (int p = 0; p < buffersPerChannel; p++) {
 				partition.add(bufferConsumer.copy());
@@ -137,7 +139,7 @@ public class InputGateFairnessTest {
 			final PipelinedSubpartition[] sources = new PipelinedSubpartition[numChannels];
 
 			for (int i = 0; i < numChannels; i++) {
-				sources[i] = new PipelinedSubpartition(0, resultPartition);
+				sources[i] = new PipelinedSubpartition(0, resultPartition, new InMemorySubpartitionInFlightLogger());
 			}
 
 			// ----- create reading side -----

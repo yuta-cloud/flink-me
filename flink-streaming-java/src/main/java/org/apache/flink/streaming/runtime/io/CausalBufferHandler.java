@@ -17,7 +17,6 @@
  */
 package org.apache.flink.streaming.runtime.io;
 
-import org.apache.flink.runtime.causal.EpochProvider;
 import org.apache.flink.runtime.causal.log.job.JobCausalLog;
 import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
 import org.apache.flink.runtime.causal.services.BufferOrderService;
@@ -39,18 +38,18 @@ public class CausalBufferHandler implements CheckpointBarrierHandler {
 
 	private final Object lock;
 
-	private CheckpointBarrierHandler wrapped;
-	private BufferOrderService bufferOrderService;
+	private final CheckpointBarrierHandler wrapped;
+	private final BufferOrderService bufferOrderService;
 
-	public CausalBufferHandler(EpochProvider epochProvider,
-							   JobCausalLog causalLog,
-							   IRecoveryManager recoveryManager,
-							   CheckpointBarrierHandler wrapped,
-							   int numInputChannels,
-							   Object checkpointLock) {
+	public CausalBufferHandler(
+		JobCausalLog causalLog,
+		IRecoveryManager recoveryManager,
+		CheckpointBarrierHandler wrapped,
+		int numInputChannels,
+		Object checkpointLock) {
 		this.wrapped = wrapped;
 		this.lock = checkpointLock;
-		this.bufferOrderService = new CausalBufferOrderService(causalLog, recoveryManager, epochProvider, wrapped,
+		this.bufferOrderService = new CausalBufferOrderService(causalLog, recoveryManager, wrapped,
 			numInputChannels);
 	}
 

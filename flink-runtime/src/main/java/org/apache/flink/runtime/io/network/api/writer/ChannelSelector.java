@@ -19,7 +19,7 @@
 package org.apache.flink.runtime.io.network.api.writer;
 
 import org.apache.flink.core.io.IOReadableWritable;
-import org.apache.flink.runtime.causal.CheckpointBarrierListener;
+import org.apache.flink.runtime.causal.EpochStartListener;
 import org.apache.flink.api.common.services.RandomService;
 
 /**
@@ -28,7 +28,7 @@ import org.apache.flink.api.common.services.RandomService;
  *
  * @param <T> the type of record which is sent through the attached output gate
  */
-public interface ChannelSelector<T extends IOReadableWritable> extends CheckpointBarrierListener {
+public interface ChannelSelector<T extends IOReadableWritable> extends EpochStartListener {
 
 	/**
 	 * Returns the logical channel indexes, to which the given record should be

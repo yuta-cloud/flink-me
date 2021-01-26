@@ -23,7 +23,7 @@ import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.SimpleCounter;
-import org.apache.flink.runtime.causal.RecordCounter;
+import org.apache.flink.runtime.causal.EpochTracker;
 import org.apache.flink.runtime.event.AbstractEvent;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.network.api.EndOfPartitionEvent;
@@ -91,7 +91,7 @@ public class StreamTwoInputProcessor<IN1, IN2> {
 
 	private final Object lock;
 
-	private final RecordCounter recordCounter;
+	private final EpochTracker epochTracker;
 
 	// ---------------- Status and Watermark Valves ------------------
 
@@ -153,7 +153,7 @@ public class StreamTwoInputProcessor<IN1, IN2> {
 		WatermarkGauge input2WatermarkGauge,
 		RecordWriterOutput<?>[] recordWriterOutputs) throws IOException {
 
-		recordCounter = checkpointedTask.getRecordCounter();
+		epochTracker = checkpointedTask.getRecordCounter();
 
 		inputGate = InputGateUtil.createInputGate(inputGates1, inputGates2);
 		checkpointedTask.getRecoveryManager().getContext().setInputGate(inputGate);
@@ -244,20 +244,20 @@ public class StreamTwoInputProcessor<IN1, IN2> {
 					if (recordOrWatermark.isWatermark()) {
 						synchronized (lock) {
 							statusWatermarkValve1.inputWatermark(recordOrWatermark.asWatermark(), currentChannel);
-							recordCounter.incRecordCount();
+							epochTracker.incRecordCount();
 						}
 						return true;
 					} else if (recordOrWatermark.isStreamStatus()) {
 						synchronized (lock) {
 							statusWatermarkValve1.inputStreamStatus(recordOrWatermark.asStreamStatus(),
 								currentChannel);
-							recordCounter.incRecordCount();
+							epochTracker.incRecordCount();
 						}
 						return true;
 					} else if (recordOrWatermark.isLatencyMarker()) {
 						synchronized (lock) {
 							streamOperator.processLatencyMarker1(recordOrWatermark.asLatencyMarker());
-							recordCounter.incRecordCount();
+							epochTracker.incRecordCount();
 						}
 						return true;
 					} else {
@@ -266,7 +266,7 @@ public class StreamTwoInputProcessor<IN1, IN2> {
 							numRecordsIn.inc();
 							streamOperator.setKeyContextElement1(record);
 							streamOperator.processElement1(record);
-							recordCounter.incRecordCount();
+							epochTracker.incRecordCount();
 						}
 						return true;
 
@@ -277,20 +277,20 @@ public class StreamTwoInputProcessor<IN1, IN2> {
 						synchronized (lock) {
 							statusWatermarkValve2.inputWatermark(recordOrWatermark.asWatermark(),
 								currentChannel - numInputChannels1);
-							recordCounter.incRecordCount();
+							epochTracker.incRecordCount();
 						}
 						return true;
 					} else if (recordOrWatermark.isStreamStatus()) {
 						synchronized (lock) {
 							statusWatermarkValve2.inputStreamStatus(recordOrWatermark.asStreamStatus(),
 								currentChannel - numInputChannels1);
-							recordCounter.incRecordCount();
+							epochTracker.incRecordCount();
 						}
 						return true;
 					} else if (recordOrWatermark.isLatencyMarker()) {
 						synchronized (lock) {
 							streamOperator.processLatencyMarker2(recordOrWatermark.asLatencyMarker());
-							recordCounter.incRecordCount();
+							epochTracker.incRecordCount();
 						}
 						return true;
 					} else {
@@ -300,7 +300,7 @@ public class StreamTwoInputProcessor<IN1, IN2> {
 							streamOperator.setKeyContextElement2(record);
 							LOG.debug("{}: Process element no {}: {}.", taskName, numRecordsIn.getCount(), record);
 							streamOperator.processElement2(record);
-							recordCounter.incRecordCount();
+							epochTracker.incRecordCount();
 						}
 						return true;
 					}

@@ -19,6 +19,7 @@
 package org.apache.flink.runtime.io.network.partition;
 
 import org.apache.flink.configuration.AkkaOptions;
+import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.runtime.execution.Environment;
@@ -31,7 +32,6 @@ import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
 import org.apache.flink.runtime.jobmanager.scheduler.SlotSharingGroup;
-import org.apache.flink.runtime.testingUtils.TestingUtils;
 import org.apache.flink.runtime.testutils.MiniClusterResource;
 import org.apache.flink.runtime.testutils.MiniClusterResourceConfiguration;
 import org.apache.flink.util.TestLogger;
@@ -61,7 +61,7 @@ public class PartialConsumePipelinedResultTest extends TestLogger {
 
 	private static Configuration getFlinkConfiguration() {
 		final Configuration config = new Configuration();
-		config.setString(AkkaOptions.ASK_TIMEOUT, TestingUtils.DEFAULT_AKKA_ASK_TIMEOUT());
+		config.setString(AkkaOptions.ASK_TIMEOUT, AkkaOptions.ASK_TIMEOUT.defaultValue());
 		config.setInteger(TaskManagerOptions.NETWORK_NUM_BUFFERS, NUMBER_OF_NETWORK_BUFFERS);
 
 		return config;
@@ -120,7 +120,7 @@ public class PartialConsumePipelinedResultTest extends TestLogger {
 
 			for (int i = 0; i < 8; i++) {
 				final BufferBuilder bufferBuilder = writer.getBufferProvider().requestBufferBuilderBlocking();
-				writer.addBufferConsumer(bufferBuilder.createBufferConsumer(), 0);
+				writer.addBufferConsumer(bufferBuilder.createBufferConsumer(0), 0);
 				Thread.sleep(50);
 				bufferBuilder.finish();
 			}

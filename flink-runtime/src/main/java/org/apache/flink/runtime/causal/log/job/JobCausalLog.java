@@ -36,6 +36,7 @@ import org.apache.flink.runtime.io.network.api.writer.ResultPartitionWriter;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannelID;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
+import org.apache.flink.runtime.state.CheckpointListener;
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBufAllocator;
 
@@ -46,7 +47,7 @@ import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBufAllocator;
  *
  * After a failure of an upstream vertex V, one can also request all determinants of vertex V.
  */
-public interface JobCausalLog {
+public interface JobCausalLog extends CheckpointListener {
 
 	void registerTask(VertexGraphInformation vertexGraphInformation, JobVertexID jobVertexId, ResultPartitionWriter[] resultPartitionsOfLocalVertex);
 
@@ -63,8 +64,6 @@ public interface JobCausalLog {
 
 	void unregisterDownstreamConsumer(InputChannelID toCancel);
 
-
-	void notifyCheckpointComplete(long checkpointID);
 
 	//================ Safety check metrics==================================================
 	int threadLogLength(CausalLogID causalLogID);

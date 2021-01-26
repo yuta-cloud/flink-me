@@ -23,7 +23,7 @@ import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.SimpleCounter;
-import org.apache.flink.runtime.causal.RecordCounter;
+import org.apache.flink.runtime.causal.EpochTracker;
 import org.apache.flink.runtime.event.AbstractEvent;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.network.api.EndOfPartitionEvent;
@@ -112,7 +112,7 @@ public class StreamInputProcessor<IN> {
 
 	private boolean isFinished;
 
-	private final RecordCounter recordCounter;
+	private final EpochTracker epochTracker;
 
 
 	@SuppressWarnings("unchecked")
@@ -130,7 +130,7 @@ public class StreamInputProcessor<IN> {
 		WatermarkGauge watermarkGauge) throws IOException {
 
 
-		this.recordCounter = checkpointedTask.getRecordCounter();
+		this.epochTracker = checkpointedTask.getRecordCounter();
 		inputGate = InputGateUtil.createInputGate(inputGates);
 		checkpointedTask.getRecoveryManager().getContext().setInputGate(inputGate);
 
@@ -196,21 +196,21 @@ public class StreamInputProcessor<IN> {
 					synchronized (lock) {
 						// handle watermark
 						statusWatermarkValve.inputWatermark(recordOrMark.asWatermark(), currentChannel);
-						recordCounter.incRecordCount();
+						epochTracker.incRecordCount();
 					}
 					return true;
 				} else if (recordOrMark.isStreamStatus()) {
 					synchronized (lock) {
 						// handle stream status
 						statusWatermarkValve.inputStreamStatus(recordOrMark.asStreamStatus(), currentChannel);
-						recordCounter.incRecordCount();
+						epochTracker.incRecordCount();
 					}
 					return true;
 				} else if (recordOrMark.isLatencyMarker()) {
 					synchronized (lock) {
 						// handle latency marker
 						streamOperator.processLatencyMarker(recordOrMark.asLatencyMarker());
-						recordCounter.incRecordCount();
+						epochTracker.incRecordCount();
 					}
 					return true;
 				} else {
@@ -220,7 +220,7 @@ public class StreamInputProcessor<IN> {
 						numRecordsIn.inc();
 						streamOperator.setKeyContextElement1(record);
 						streamOperator.processElement(record);
-						recordCounter.incRecordCount();
+						epochTracker.incRecordCount();
 					}
 					return true;
 				}

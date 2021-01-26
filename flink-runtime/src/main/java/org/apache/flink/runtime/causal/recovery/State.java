@@ -53,12 +53,5 @@ public interface State {
 
 	//======= Replay ======
 
-	int replayRandomInt();
-
-	byte replayNextChannel();
-
-	long replayNextTimestamp();
-
-    void triggerAsyncEvent();
-
+    LogReplayer getLogReplayer();
 }

@@ -60,7 +60,7 @@ public class RoundRobinChannelSelector<T extends IOReadableWritable> implements 
 
 
 	@Override
-	public void notifyCheckpointBarrier(long checkpointID) {
+	public void notifyEpochStart(long epochID) {
 		this.nextChannelToSendTo[0] = 0;
 	}
 }

@@ -45,8 +45,8 @@ public class StandbyState extends AbstractState {
 
 	//Concurrent sets with notifications received before the WaitConnectionsState
 	//These may happen when we do not use highly available standby tasks
-	private Set<EarlyNewInputChannelNotification> inputChannelNotifications;
-	private Set<EarlyNewOutputChannelNotification> outputChannelNotifications;
+	private final Set<EarlyNewInputChannelNotification> inputChannelNotifications;
+	private final Set<EarlyNewOutputChannelNotification> outputChannelNotifications;
 
 	public StandbyState(RecoveryManager recoveryManager, RecoveryManagerContext context) {
 		super(recoveryManager, context);

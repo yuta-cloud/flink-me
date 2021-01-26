@@ -19,7 +19,9 @@
 package org.apache.flink.runtime.io.network.partition;
 
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.runtime.causal.EpochTracker;
 import org.apache.flink.runtime.executiongraph.IntermediateResultPartition;
+import org.apache.flink.runtime.inflightlogging.InFlightLog;
 import org.apache.flink.runtime.inflightlogging.InFlightLogConfig;
 import org.apache.flink.runtime.inflightlogging.InFlightLogFactory;
 import org.apache.flink.runtime.inflightlogging.SpillableSubpartitionInFlightLogger;
@@ -34,7 +36,6 @@ import org.apache.flink.runtime.io.network.partition.consumer.LocalInputChannel;
 import org.apache.flink.runtime.io.network.partition.consumer.RemoteInputChannel;
 import org.apache.flink.runtime.jobgraph.DistributionPattern;
 import org.apache.flink.runtime.taskmanager.TaskActions;
-import org.apache.flink.runtime.taskmanager.TaskManager;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -175,7 +176,8 @@ public class ResultPartition implements ResultPartitionWriter, BufferPoolOwner {
 			case PIPELINED:
 			case PIPELINED_BOUNDED:
 				for (int i = 0; i < subpartitions.length; i++) {
-					subpartitions[i] = new PipelinedSubpartition(i, this, inFlightLogFactory.build());
+					InFlightLog inFlightLog = inFlightLogFactory.build();
+					subpartitions[i] = new PipelinedSubpartition(i, this, inFlightLog);
 				}
 				InFlightLogConfig inFlightLogConfig = inFlightLogFactory.getInFlightLogConfig();
 				availabilityFillFactor = inFlightLogConfig.getAvailabilityPolicyFillFactor();
@@ -205,7 +207,7 @@ public class ResultPartition implements ResultPartitionWriter, BufferPoolOwner {
 	 * <p>There is one pool for each result partition, which is shared by all its sub partitions.
 	 *
 	 * <p>The pool is registered with the partition *after* it as been constructed in order to conform
-	 * to the life-cycle of task registrations in the {@link TaskManager}.
+	 * to the life-cycle of task registrations in the TaskManager.
 	 */
 	public void registerBufferPool(BufferPool bufferPool) {
 		checkArgument(bufferPool.getNumberOfRequiredMemorySegments() >= getNumberOfSubpartitions(),
@@ -220,8 +222,8 @@ public class ResultPartition implements ResultPartitionWriter, BufferPoolOwner {
 
 	public void registerInFlightBufferPool(BufferPool inFlightBufferPool) {
 		this.inFlightBufferPool = inFlightBufferPool;
-		for(ResultSubpartition subpartition : subpartitions)
-			((PipelinedSubpartition)subpartition).getInFlightLog().registerBufferPool(inFlightBufferPool);
+		for (ResultSubpartition subpartition : subpartitions)
+			((PipelinedSubpartition) subpartition).getInFlightLog().registerBufferPool(inFlightBufferPool);
 	}
 
 	public JobID getJobId() {
@@ -254,18 +256,6 @@ public class ResultPartition implements ResultPartitionWriter, BufferPoolOwner {
 		return owningTaskName;
 	}
 
-	@Override
-	public void notifyCheckpointBarrier(long checkpointId) {
-		for (ResultSubpartition sb : subpartitions)
-			sb.notifyCheckpointBarrier(checkpointId);
-	}
-
-	@Override
-	public void notifyCheckpointComplete(long checkpointId) throws Exception {
-		for (ResultSubpartition sb : subpartitions)
-			sb.notifyCheckpointComplete(checkpointId);
-	}
-
 	public int getNumberOfQueuedBuffers() {
 		int totalBuffers = 0;
 
@@ -286,6 +276,7 @@ public class ResultPartition implements ResultPartitionWriter, BufferPoolOwner {
 	}
 
 	// ------------------------------------------------------------------------
+
 
 	@Override
 	public void addBufferConsumer(BufferConsumer bufferConsumer, int subpartitionIndex) throws IOException {
@@ -373,7 +364,7 @@ public class ResultPartition implements ResultPartitionWriter, BufferPoolOwner {
 					LOG.error("Error during release of result subpartition: " + t.getMessage(), t);
 				}
 			}
-			if(inFlightLogFlusherRunnable != null)
+			if (inFlightLogFlusherRunnable != null)
 				inFlightLogFlusherRunnable.stop();
 		}
 	}
@@ -549,13 +540,13 @@ public class ResultPartition implements ResultPartitionWriter, BufferPoolOwner {
 							 long flusherSleep) {
 			this.toMonitor = toMonitor;
 			this.inFlightLoggers = Arrays.stream(toMonitor.getResultSubpartitions())
-					.map(s -> (SpillableSubpartitionInFlightLogger) ((PipelinedSubpartition) s).getInFlightLog())
-					.collect(Collectors.toList());
+				.map(s -> (SpillableSubpartitionInFlightLogger) ((PipelinedSubpartition) s).getInFlightLog())
+				.collect(Collectors.toList());
 			this.flusherSleep = flusherSleep;
 			this.running = true;
 		}
 
-		public void stop(){
+		public void stop() {
 			running = false;
 		}
 

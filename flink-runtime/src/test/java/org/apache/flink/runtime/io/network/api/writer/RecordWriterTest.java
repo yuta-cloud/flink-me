@@ -491,17 +491,6 @@ public class RecordWriterTest {
 		}
 
 		@Override
-		public void notifyCheckpointBarrier(long checkpointId) {
-
-		}
-
-		@Override
-		public void notifyCheckpointComplete(long checkpointId) {
-
-		}
-
-
-		@Override
 		public BufferProvider getBufferProvider() {
 			return bufferProvider;
 		}
@@ -566,16 +555,6 @@ public class RecordWriterTest {
 		@Override
 		public String getTaskName() {
 			return null;
-		}
-
-		@Override
-		public void notifyCheckpointBarrier(long checkpointId) {
-
-		}
-
-		@Override
-		public void notifyCheckpointComplete(long checkpointId) {
-
 		}
 
 		@Override
@@ -655,7 +634,7 @@ public class RecordWriterTest {
 		}
 
 		@Override
-		public void notifyCheckpointBarrier(long checkpointID) {
+		public void notifyEpochStart(long epochID) {
 
 		}
 	}
@@ -686,7 +665,7 @@ public class RecordWriterTest {
 		}
 
 		@Override
-		public void notifyCheckpointBarrier(long checkpointID) {
+		public void notifyEpochStart(long epochID) {
 
 		}
 	}

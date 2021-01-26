@@ -25,7 +25,6 @@
 package org.apache.flink.runtime.causal.services;
 
 import org.apache.flink.api.common.services.RandomService;
-import org.apache.flink.runtime.causal.EpochProvider;
 import org.apache.flink.runtime.causal.determinant.RNGDeterminant;
 import org.apache.flink.runtime.causal.log.job.JobCausalLog;
 import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
@@ -41,13 +40,12 @@ public class CausalRandomService extends AbstractCausalService implements Random
 	protected final XORShiftRandom rng = new XORShiftRandom();
 
 	//RNG determinant object used to avoid object creation and so garbage collection
-	private RNGDeterminant reuseRNGDeterminant;
+	private final RNGDeterminant reuseRNGDeterminant;
 
 	private static final Logger LOG = LoggerFactory.getLogger(CausalRandomService.class);
 
-	public CausalRandomService(JobCausalLog jobCausalLog, IRecoveryManager recoveryManager,
-							   EpochProvider epochProvider) {
-		super(jobCausalLog, recoveryManager, epochProvider);
+	public CausalRandomService(JobCausalLog jobCausalLog, IRecoveryManager recoveryManager) {
+		super(jobCausalLog, recoveryManager);
 		this.reuseRNGDeterminant = new RNGDeterminant();
 	}
 
@@ -61,7 +59,7 @@ public class CausalRandomService extends AbstractCausalService implements Random
 		int toReturn;
 
 		if (isRecovering()) {
-			toReturn = recoveryManager.replayRandomInt();
+			toReturn = recoveryManager.getLogReplayer().replayRandomInt();
 			if (LOG.isDebugEnabled())
 				LOG.info("nextInt(): (State: RECOVERING) Replayed random is {}", toReturn);
 		} else {
@@ -73,7 +71,7 @@ public class CausalRandomService extends AbstractCausalService implements Random
 		//Whether we are recovering or not, we append the determinant. If recovering, we still need to restore the
 		// causal log to the pre-failure state.
 		threadCausalLog.appendDeterminant(reuseRNGDeterminant.replace(toReturn),
-			epochProvider.getCurrentEpochID());
+			epochTracker.getCurrentEpoch());
 		return toReturn;
 	}
 

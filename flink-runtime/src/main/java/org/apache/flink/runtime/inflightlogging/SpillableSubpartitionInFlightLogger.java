@@ -207,7 +207,7 @@ public class SpillableSubpartitionInFlightLogger implements InFlightLog {
 		private final BufferFileWriter writer;
 		private int nextBufferToFlush;
 		private int nextBufferToCompleteFlushing;
-		private long epochID;
+		private final long epochID;
 
 
 		public Epoch(BufferFileWriter writer, long epochID) {

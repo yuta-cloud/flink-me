@@ -116,7 +116,7 @@ public class WaitingDeterminantsState extends AbstractState {
 		IntermediateResultPartitionID requestReplayFor = inputChannel.getPartitionId().getPartitionId();
 		try {
 			inputChannel.sendTaskEvent(new InFlightLogRequestEvent(requestReplayFor, channelIndex,
-				context.epochProvider.getCurrentEpochID()));
+				context.getEpochTracker().getCurrentEpoch()));
 		} catch (IOException | InterruptedException e) {
 			e.printStackTrace();
 		}
@@ -128,9 +128,9 @@ public class WaitingDeterminantsState extends AbstractState {
 			PipelinedSubpartition subpartition = context.subpartitionTable.get(intermediateResultPartitionID, index);
 			DeterminantRequestEvent event =
 				new DeterminantRequestEvent(context.vertexGraphInformation.getThisTasksVertexID(),
-					context.epochProvider.getCurrentEpochID());
+					context.getEpochTracker().getCurrentEpoch());
 			event.setCorrelationID(random.nextLong());
-			subpartition.bypassDeterminantRequest(EventSerializer.toBufferConsumer(event));
+			subpartition.bypassDeterminantRequest(EventSerializer.toBufferConsumer(event, context.epochTracker.getCurrentEpoch()));
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
@@ -152,7 +152,7 @@ public class WaitingDeterminantsState extends AbstractState {
 						InFlightLogRequestEvent inFlightLogRequestEvent =
 							new InFlightLogRequestEvent(inputChannel.getPartitionId().getPartitionId(),
 								consumedIndex,
-								context.epochProvider.getCurrentEpochID());
+								context.getEpochTracker().getCurrentEpoch());
 						logInfoWithVertexID("Sending inFlightLog request {} through input gate {}, channel {}.",
 							inFlightLogRequestEvent, singleInputGate, i);
 						inputChannel.sendTaskEvent(inFlightLogRequestEvent);
@@ -168,7 +168,7 @@ public class WaitingDeterminantsState extends AbstractState {
 		if (context.vertexGraphInformation.hasDownstream()) {
 			DeterminantRequestEvent determinantRequestEvent =
 				new DeterminantRequestEvent(context.vertexGraphInformation.getThisTasksVertexID(),
-					context.epochProvider.getCurrentEpochID());
+					context.getEpochTracker().getCurrentEpoch());
 			logInfoWithVertexID("Sending determinant requests: {}", determinantRequestEvent);
 			broadcastDeterminantRequest(determinantRequestEvent);
 		}

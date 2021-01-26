@@ -26,7 +26,6 @@
 package org.apache.flink.runtime.causal.services;
 
 import org.apache.flink.api.common.services.RandomService;
-import org.apache.flink.runtime.causal.EpochProvider;
 import org.apache.flink.runtime.causal.determinant.RNGDeterminant;
 import org.apache.flink.runtime.causal.log.job.JobCausalLog;
 import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
@@ -40,14 +39,13 @@ public class DeterministicCausalRandomService extends AbstractCausalService impl
 	protected final XORShiftRandom rng;
 
 	//RNG determinant object used to avoid object creation and so garbage collection
-	private RNGDeterminant reuseRNGDeterminant;
+	private final RNGDeterminant reuseRNGDeterminant;
 
 	private static final Logger LOG = LoggerFactory.getLogger(DeterministicCausalRandomService.class);
 
 
-	public DeterministicCausalRandomService(JobCausalLog jobCausalLog, IRecoveryManager recoveryManager,
-							   EpochProvider epochProvider) {
-		super(jobCausalLog, recoveryManager, epochProvider);
+	public DeterministicCausalRandomService(JobCausalLog jobCausalLog, IRecoveryManager recoveryManager) {
+		super(jobCausalLog, recoveryManager);
 		this.reuseRNGDeterminant = new RNGDeterminant();
 		rng = new XORShiftRandom();
 	}
@@ -63,26 +61,27 @@ public class DeterministicCausalRandomService extends AbstractCausalService impl
 		return rng.nextInt(maxExclusive);
 	}
 
-	public void notifyNewEpoch(){
-		resetSeed();
-	}
-
-	private void resetSeed(){
+	private void updateSeed(){
 		//Use rng determinant to record seed
 		int seed;
 
 		if (isRecovering()) {
-			seed = recoveryManager.replayRandomInt();
+			seed = recoveryManager.getLogReplayer().replayRandomInt();
 			if (LOG.isDebugEnabled())
 				LOG.debug("nextInt(): (State: RECOVERING) Replayed seed is {}", seed);
 		} else {
 			seed = (int) System.currentTimeMillis();
-			threadCausalLog.appendDeterminant(reuseRNGDeterminant.replace(seed), epochProvider.getCurrentEpochID());
+			threadCausalLog.appendDeterminant(reuseRNGDeterminant.replace(seed), epochTracker.getCurrentEpoch());
 			if (LOG.isDebugEnabled())
 				LOG.debug("nextInt(): (State: RUNNING) Fresh seed is {}", seed);
 		}
 
 		rng.setSeed(seed);
+	}
+
+	@Override
+	public void notifyEpochStart(long epochID){
+		updateSeed();
 	}
 
 }

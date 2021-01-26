@@ -20,7 +20,9 @@ package org.apache.flink.runtime.io.network.partition;
 
 import org.apache.flink.core.memory.MemorySegment;
 import org.apache.flink.core.memory.MemorySegmentFactory;
+import org.apache.flink.runtime.causal.EpochTrackerImpl;
 import org.apache.flink.runtime.event.AbstractEvent;
+import org.apache.flink.runtime.inflightlogging.InMemorySubpartitionInFlightLogger;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.buffer.BufferBuilder;
 import org.apache.flink.runtime.io.network.buffer.BufferConsumer;
@@ -72,7 +74,7 @@ public class PipelinedSubpartitionTest extends SubpartitionTestBase {
 	PipelinedSubpartition createSubpartition() {
 		final ResultPartition parent = mock(ResultPartition.class);
 
-		return new PipelinedSubpartition(0, parent);
+		return new PipelinedSubpartition(0, parent, new InMemorySubpartitionInFlightLogger());
 	}
 
 	@Test
@@ -289,14 +291,11 @@ public class PipelinedSubpartitionTest extends SubpartitionTestBase {
 		partition.add(buffer1);
 		partition.pollBuffer();
 		partition.add(buffer2);
-		partition.notifyCheckpointBarrier(1);
 		partition.add(chk1);
 		partition.add(buffer3);
 		partition.add(buffer4);
 		partition.pollBuffer();
 		partition.pollBuffer();
-		partition.notifyCheckpointComplete(1);
-		partition.notifyCheckpointBarrier(2);
 		partition.add(chk2);
 		partition.pollBuffer();
 		partition.pollBuffer();

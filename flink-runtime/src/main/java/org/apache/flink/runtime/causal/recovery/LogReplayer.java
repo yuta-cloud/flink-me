@@ -23,10 +23,17 @@
  *
  */
 
-package org.apache.flink.runtime.causal;
+package org.apache.flink.runtime.causal.recovery;
 
-public interface EpochProvider {
-	long getCurrentEpochID();
+public interface LogReplayer {
 
-	void setCurrentEpochID(long currentEpochID);
+	void triggerAsyncEvent();
+
+	int replayRandomInt();
+
+	byte replayNextChannel();
+
+	long replayNextTimestamp();
+
+	void checkFinished();
 }

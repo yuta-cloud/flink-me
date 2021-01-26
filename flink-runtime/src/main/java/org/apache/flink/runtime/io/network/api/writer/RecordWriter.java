@@ -21,10 +21,13 @@ package org.apache.flink.runtime.io.network.api.writer;
 import org.apache.flink.core.io.IOReadableWritable;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.SimpleCounter;
-import org.apache.flink.runtime.causal.CheckpointBarrierListener;
+import org.apache.flink.runtime.causal.EpochStartListener;
 import org.apache.flink.api.common.services.RandomService;
 import org.apache.flink.api.common.services.SimpleRandomService;
+import org.apache.flink.runtime.causal.EpochTracker;
+import org.apache.flink.runtime.causal.EpochTrackerImpl;
 import org.apache.flink.runtime.event.AbstractEvent;
+import org.apache.flink.runtime.io.network.api.CheckpointBarrier;
 import org.apache.flink.runtime.io.network.api.serialization.EventSerializer;
 import org.apache.flink.runtime.io.network.api.serialization.RecordSerializer;
 import org.apache.flink.runtime.io.network.api.serialization.SpanningRecordSerializer;
@@ -54,7 +57,7 @@ import static org.apache.flink.util.Preconditions.checkState;
  *
  * @param <T> the type of the record that can be emitted with this record writer
  */
-public class RecordWriter<T extends IOReadableWritable> implements CheckpointListener, CheckpointBarrierListener {
+public class RecordWriter<T extends IOReadableWritable> implements EpochStartListener {
 
 	private static final Logger LOG = LoggerFactory.getLogger(RecordWriter.class);
 
@@ -70,8 +73,9 @@ public class RecordWriter<T extends IOReadableWritable> implements CheckpointLis
 
 	protected final Optional<BufferBuilder>[] bufferBuilders;
 
-
 	protected final boolean flushAlways;
+
+	private final EpochTracker epochTracker;
 
 	protected Counter numBytesOut = new SimpleCounter();
 
@@ -85,16 +89,16 @@ public class RecordWriter<T extends IOReadableWritable> implements CheckpointLis
 
 	@SuppressWarnings("unchecked")
 	public RecordWriter(ResultPartitionWriter writer, ChannelSelector<T> channelSelector) {
-		this(writer, channelSelector, false, new SimpleRandomService());
+		this(writer, channelSelector, false, new SimpleRandomService(), new EpochTrackerImpl());
 	}
 
-	public RecordWriter(ResultPartitionWriter writer, ChannelSelector<T> channelSelector, boolean flushAlways, RandomService randomService) {
+	public RecordWriter(ResultPartitionWriter writer, ChannelSelector<T> channelSelector, boolean flushAlways, RandomService randomService, EpochTracker epochTracker) {
 		this.flushAlways = flushAlways;
 		this.targetPartition = writer;
 		this.channelSelector = channelSelector;
 		this.channelSelector.setRandomService(randomService);
 		this.randomService = randomService;
-
+		this.epochTracker = epochTracker;
 		this.numChannels = writer.getNumberOfSubpartitions();
 
 		this.serializer = new SpanningRecordSerializer<T>();
@@ -189,7 +193,8 @@ public class RecordWriter<T extends IOReadableWritable> implements CheckpointLis
 	public void broadcastEvent(AbstractEvent event) throws IOException {
 		LOG.info("{}: RecordWriter broadcast event {}.", targetPartition.getTaskName(), event);
 
-		try (BufferConsumer eventBufferConsumer = EventSerializer.toBufferConsumer(event)) {
+		boolean isBarrier = event instanceof CheckpointBarrier;
+		try (BufferConsumer eventBufferConsumer = EventSerializer.toBufferConsumer(event, epochTracker.getCurrentEpoch())) {
 			for (int targetChannel = 0; targetChannel < numChannels; targetChannel++) {
 				tryFinishCurrentBufferBuilder(targetChannel);
 
@@ -206,7 +211,9 @@ public class RecordWriter<T extends IOReadableWritable> implements CheckpointLis
 	public void emitEvent(AbstractEvent event, int targetChannel) throws IOException {
 		LOG.info("{}: RecordWriter emit event {}.", targetPartition.getTaskName(), event);
 
-		try (BufferConsumer eventBufferConsumer = EventSerializer.toBufferConsumer(event)) {
+		boolean isBarrier = event instanceof CheckpointBarrier;
+
+		try (BufferConsumer eventBufferConsumer = EventSerializer.toBufferConsumer(event, epochTracker.getCurrentEpoch())) {
 
 			tryFinishCurrentBufferBuilder(targetChannel);
 
@@ -268,7 +275,7 @@ public class RecordWriter<T extends IOReadableWritable> implements CheckpointLis
 
 		BufferBuilder bufferBuilder = targetPartition.getBufferProvider().requestBufferBuilderBlocking();
 		bufferBuilders[targetChannel] = Optional.of(bufferBuilder);
-		targetPartition.addBufferConsumer(bufferBuilder.createBufferConsumer(), targetChannel);
+		targetPartition.addBufferConsumer(bufferBuilder.createBufferConsumer(epochTracker.getCurrentEpoch()), targetChannel);
 		return bufferBuilder;
 	}
 
@@ -280,13 +287,8 @@ public class RecordWriter<T extends IOReadableWritable> implements CheckpointLis
 	}
 
 	@Override
-	public void notifyCheckpointBarrier(long checkpointID) {
-		targetPartition.notifyCheckpointBarrier(checkpointID);
-		channelSelector.notifyCheckpointBarrier(checkpointID);
+	public void notifyEpochStart(long epochID) {
+		channelSelector.notifyEpochStart(epochID);
 	}
 
-	@Override
-	public void notifyCheckpointComplete(long checkpointId) throws Exception {
-		targetPartition.notifyCheckpointComplete(checkpointId);
-	}
 }

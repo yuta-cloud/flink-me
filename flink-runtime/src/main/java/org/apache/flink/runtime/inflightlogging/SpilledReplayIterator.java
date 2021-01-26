@@ -67,17 +67,17 @@ public class SpilledReplayIterator extends InFlightLogIterator<Buffer> {
 
 
 	//The queues to contain buffers	which are asynchronously read
-	private ConcurrentMap<Long, LinkedBlockingDeque<Buffer>> readyBuffersPerEpoch;
+	private final ConcurrentMap<Long, LinkedBlockingDeque<Buffer>> readyBuffersPerEpoch;
 
 	//The cursor indicating the consumers position in the log
-	private EpochCursor consumerCursor;
+	private final EpochCursor consumerCursor;
 
-	private EpochCursor prefetchCursor;
+	private final EpochCursor prefetchCursor;
 
 	//Used to signal back to flusher thread that we are done replaying and that it may resume flushing
 	private final AtomicBoolean isReplaying;
 
-	private Map<Long, BufferFileReader> epochReaders;
+	private final Map<Long, BufferFileReader> epochReaders;
 
 	public SpilledReplayIterator(SortedMap<Long, SpillableSubpartitionInFlightLogger.Epoch> logToReplay,
 								 BufferPool prefetchBufferPool,
@@ -174,7 +174,7 @@ public class SpilledReplayIterator extends InFlightLogIterator<Buffer> {
 			try {
 				while (!consumerCursor.behind(prefetchCursor)) {
 					prefetchNextBuffers();
-					if(!consumerCursor.behind(prefetchCursor))
+					if (!consumerCursor.behind(prefetchCursor))
 						spillLock.wait(5);
 				}
 
@@ -209,7 +209,7 @@ public class SpilledReplayIterator extends InFlightLogIterator<Buffer> {
 			synchronized (spillLock) {
 				while (!consumerCursor.behind(prefetchCursor)) {
 					prefetchNextBuffers();
-					if(!consumerCursor.behind(prefetchCursor))
+					if (!consumerCursor.behind(prefetchCursor))
 						spillLock.wait(5);
 				}
 
@@ -351,11 +351,10 @@ public class SpilledReplayIterator extends InFlightLogIterator<Buffer> {
 		}
 
 		private void advanceEpochIfNeeded() {
-			if (reachedEndOfEpoch(nextEpochOffset, nextEpoch))
-				if (nextEpoch != lastEpoch) {
-					nextEpoch++;
-					nextEpochOffset = 0;
-				}
+			if (reachedEndOfEpoch(nextEpochOffset, nextEpoch) && nextEpoch != lastEpoch) {
+				nextEpoch++;
+				nextEpochOffset = 0;
+			}
 		}
 
 		private boolean reachedEndOfEpoch(int offset, long epochID) {
@@ -367,14 +366,14 @@ public class SpilledReplayIterator extends InFlightLogIterator<Buffer> {
 				(this.getNextEpoch() == other.getNextEpoch() && this.getNextEpochOffset() < other.getNextEpochOffset());
 		}
 
-		public void previous(){
+		public void previous() {
 			advanceEpochIfNeeded();
 			nextEpochOffset--;
 			remaining++;
 
-			if(nextEpochOffset == -1) {
-					nextEpoch--;
-					nextEpochOffset = log.get(nextEpoch).getEpochSize() - 1;
+			if (nextEpochOffset == -1) {
+				nextEpoch--;
+				nextEpochOffset = log.get(nextEpoch).getEpochSize() - 1;
 			}
 		}
 

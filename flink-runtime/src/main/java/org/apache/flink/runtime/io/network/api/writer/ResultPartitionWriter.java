@@ -18,12 +18,11 @@
 
 package org.apache.flink.runtime.io.network.api.writer;
 
-import org.apache.flink.runtime.causal.CheckpointBarrierListener;
+import org.apache.flink.runtime.causal.EpochStartListener;
 import org.apache.flink.runtime.io.network.buffer.BufferConsumer;
 import org.apache.flink.runtime.io.network.buffer.BufferProvider;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.io.network.partition.ResultSubpartition;
-import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.state.CheckpointListener;
 
 import java.io.IOException;
@@ -31,7 +30,7 @@ import java.io.IOException;
 /**
  * A buffer-oriented runtime result writer API for producing results.
  */
-public interface ResultPartitionWriter extends CheckpointBarrierListener, CheckpointListener {
+public interface ResultPartitionWriter {
 
 	BufferProvider getBufferProvider();
 

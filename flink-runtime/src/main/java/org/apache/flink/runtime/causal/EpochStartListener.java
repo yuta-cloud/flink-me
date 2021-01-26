@@ -25,20 +25,8 @@
 
 package org.apache.flink.runtime.causal;
 
-import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
+public interface EpochStartListener {
 
-public interface RecordCounter {
+	void notifyEpochStart(long epochID);
 
-	int getRecordCount();
-
-	/**
-	 * For correctness, it is important that all calls to this method are done under the checkpoint lock
-	 */
-	void incRecordCount();
-
-	void resetRecordCount();
-
-	void setRecordCountTarget(int target);
-
-	void setRecoveryManager(IRecoveryManager recoveryManager);
 }

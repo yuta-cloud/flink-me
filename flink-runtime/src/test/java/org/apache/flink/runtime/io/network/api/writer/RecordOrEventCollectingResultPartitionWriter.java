@@ -82,14 +82,4 @@ public class RecordOrEventCollectingResultPartitionWriter<T> extends AbstractCol
 		return null;
 	}
 
-	@Override
-	public void notifyCheckpointBarrier(long checkpointId) {
-
-	}
-
-	@Override
-	public void notifyCheckpointComplete(long checkpointId) {
-
-	}
-
 }

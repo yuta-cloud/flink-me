@@ -33,11 +33,10 @@ import org.apache.flink.runtime.causal.log.thread.ThreadCausalLog;
 import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
 import org.apache.flink.runtime.causal.recovery.RecoveryManager;
 import org.apache.flink.runtime.causal.recovery.RecoveryManagerContext;
-import org.apache.flink.runtime.causal.services.CausalTimeService;
 import org.apache.flink.api.common.services.RandomService;
 import org.apache.flink.api.common.services.TimeService;
 import org.apache.flink.runtime.causal.services.DeterministicCausalRandomService;
-import org.apache.flink.runtime.causal.services.PeriodicTimeCausalTimeService;
+import org.apache.flink.runtime.causal.services.PeriodicCausalTimeService;
 import org.apache.flink.runtime.checkpoint.CheckpointMetaData;
 import org.apache.flink.runtime.checkpoint.CheckpointMetrics;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
@@ -53,10 +52,9 @@ import org.apache.flink.runtime.io.network.partition.PipelinedSubpartition;
 import org.apache.flink.runtime.io.network.partition.ResultPartition;
 import org.apache.flink.runtime.io.network.partition.ResultSubpartition;
 import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGate;
-import org.apache.flink.runtime.jobgraph.JobVertex;
-import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
+import org.apache.flink.runtime.plugable.DeserializationDelegate;
 import org.apache.flink.runtime.plugable.SerializationDelegate;
 import org.apache.flink.runtime.state.*;
 import org.apache.flink.runtime.taskmanager.DispatcherThreadFactory;
@@ -126,7 +124,7 @@ import java.util.concurrent.atomic.AtomicReference;
 @Internal
 public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 	extends AbstractInvokable
-	implements AsyncExceptionHandler, EpochProvider, CheckpointForceable {
+	implements AsyncExceptionHandler, CheckpointForceable {
 
 	/**
 	 * The thread group that holds all trigger timer threads.
@@ -234,8 +232,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 	private final TimeService timeService;
 	private final RandomService randomService;
-	private final AtomicLong currentEpochID;
-	private final RecordCounter recordCounter;
+	private final EpochTracker epochTracker;
 
 	private final SourceCheckpointDeterminant reuseSourceCheckpointDeterminant;
 	private final IgnoreCheckpointDeterminant ignoreCheckpointReuseDeterminant;
@@ -280,14 +277,9 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 			this.readyToReplayFuture = null;
 		}
 
-		List<JobVertex> sortedJobVertexes = environment.getTopologicallySortedJobVertexes();
-		JobVertexID jobVertexID = environment.getJobVertexId();
-		int subtaskIndex = environment.getTaskInfo().getIndexOfThisSubtask();
+		VertexGraphInformation vertexGraphInformation = new VertexGraphInformation(environment);
 
-		VertexGraphInformation vertexGraphInformation = new VertexGraphInformation(sortedJobVertexes, jobVertexID,
-			subtaskIndex);
-
-		recordCounter = new RecordCounterImpl();
+		epochTracker = new EpochTrackerImpl();
 
 		SingleInputGate[] inputGates = environment.getContainingTask().getAllInputGates();
 
@@ -295,28 +287,25 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 			this.getEnvironment().getJobVertexId(),
 			vertexGraphInformation, getExecutionConfig().getDeterminantSharingDepth(),
 			getEnvironment().getAllWriters());
+		epochTracker.subscribeToCheckpointCompleteEvents(causalLog);
 		this.mainThreadCausalLog =
 			causalLog.getThreadCausalLog(new CausalLogID(vertexGraphInformation.getThisTasksVertexID().getVertexID()));
 
-		RecoveryManagerContext rmContext = new RecoveryManagerContext(this, this, causalLog,
-			readyToReplayFuture, vertexGraphInformation, recordCounter,
+		RecoveryManagerContext rmContext = new RecoveryManagerContext(this, causalLog,
+			readyToReplayFuture, vertexGraphInformation, epochTracker,
 			this, environment.getContainingTask().getProducedPartitions());
 
 		this.recoveryManager = new RecoveryManager(rmContext);
-		recordCounter.setRecoveryManager(recoveryManager);
+		epochTracker.setRecoveryManager(recoveryManager);
 
-		currentEpochID = new AtomicLong(environment.getTaskStateManager().getCurrentCheckpointRestoreID());
-
-		//if (getConfiguration().getTimeCharacteristic() == TimeCharacteristic.ProcessingTime
-		//	|| (getConfiguration().getTimeCharacteristic() == TimeCharacteristic.IngestionTime
-		//	&& !vertexGraphInformation.hasUpstream()))
-		this.timeService = new PeriodicTimeCausalTimeService(causalLog, recoveryManager, this,
+		this.timeService = new PeriodicCausalTimeService(causalLog, recoveryManager,
 			getExecutionConfig().getAutoTimeSetterInterval());
-		//else
-		//	this.timeService = new CausalTimeService(causalLog, recoveryManager, this);
-		this.randomService = new DeterministicCausalRandomService(causalLog, recoveryManager, this);
+		this.randomService = new DeterministicCausalRandomService(causalLog, recoveryManager);
 
-		this.streamRecordWriters = createStreamRecordWriters(configuration, environment, randomService);
+		this.streamRecordWriters = createStreamRecordWriters(configuration, environment, randomService, epochTracker);
+		for (StreamRecordWriter<SerializationDelegate<StreamRecord<OUT>>> streamRecordWriter : streamRecordWriters)
+			epochTracker.subscribeToEpochStartEvents(streamRecordWriter);
+
 
 		for (SingleInputGate inputGate : inputGates) {
 			inputGate.setRecoveryManager(recoveryManager);
@@ -339,7 +328,6 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 				InFlightLogRequestEvent.class);
 			LOG.info("Set InFlightLogRequestEventListener {} for resultPartition {}.", iflrel, partition);
 		}
-
 
 		reuseSourceCheckpointDeterminant = new SourceCheckpointDeterminant();
 		ignoreCheckpointReuseDeterminant = new IgnoreCheckpointDeterminant();
@@ -395,15 +383,15 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 					"Time Trigger for " + getName(), getUserCodeClassLoader());
 
 				timerService = new SystemProcessingTimeService(this, getCheckpointLock(), timerThreadFactory,
-					timeService, this, recordCounter, causalLog, recoveryManager);
-
-
+					timeService, epochTracker, causalLog, recoveryManager);
 			}
+
 			recoveryManager.getContext().setProcessingTimeService((ProcessingTimeForceable) timerService);
 
-			if (timeService instanceof PeriodicTimeCausalTimeService) {
-				timerService.scheduleAtFixedRate(new TimeSetterTask(((PeriodicTimeCausalTimeService) timeService).getCurrentTime()), 10,
-					((PeriodicTimeCausalTimeService) timeService).getInterval());
+			//TODO don't like this, timeService should schedule itself ideally
+			if (timeService instanceof PeriodicCausalTimeService) {
+				timerService.scheduleAtFixedRate(new TimeSetterTask(((PeriodicCausalTimeService) timeService).getCurrentTime()), 10,
+					((PeriodicCausalTimeService) timeService).getInterval());
 			}
 
 			operatorChain = new OperatorChain<>(this, streamRecordWriters);
@@ -437,19 +425,10 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 			// standby task are dispatched to the standby task. See Task.dispatchStateToStandbyTask().
 			// Also block until input channel connections are ready, determinants have arrived and we are ready to
 			// replay.
-			if (isStandby()) {
-				getEnvironment().getContainingTask().transitionToStandbyState();
-				standbyFuture.get();
-				LOG.debug("Task {} starts recovery after standbyFuture {}.", getName(), standbyFuture);
-				recoveryManager.notifyStartRecovery();
-				readyToReplayFuture.get();
-				LOG.debug("Task {} starts execution after readyToReplayFuture {}.", getName(), readyToReplayFuture);
-				//Reads timestamp and seed from log
-				if (timeService instanceof PeriodicTimeCausalTimeService)
-					((PeriodicTimeCausalTimeService) timeService).notifyNewEpoch();
-				if (randomService instanceof DeterministicCausalRandomService)
-					((DeterministicCausalRandomService) randomService).notifyNewEpoch();
-			}
+			if (isStandby())
+				blockUntilReplaying();
+
+			//At this point we are either running or in replaying state of recovery.
 
 			// we need to make sure that any triggers scheduled in open() cannot be
 			// executed before all operators are opened
@@ -457,18 +436,16 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 				openAllOperators();
 			}
 
-			if (isStandby()) {
-				//TODO this was just a quick workaround, clean this up
-				((RecordCounterImpl)recordCounter).setOperatorsOpened();
-				//This will trigger any timers that should be fired at record count 0
-				recordCounter.resetRecordCount();
-			}
+			//This should notify any subscribers that we are starting at 0 or any other epoch id
+			//This will restore the periodic timer timestamp, which may be needed in open...
+			//But the "open" timestamp requests did not happen prior to failure, so maybe nondeterministic.
+			//On the other hand, execution of the timers must come after the call to open.
+			epochTracker.startNewEpoch(getEnvironment().getTaskStateManager().getCurrentCheckpointRestoreID());
 
 			// final check to exit early before starting to run
 			if (canceled) {
 				throw new CancelTaskException();
 			}
-
 
 			// let the task do its work
 			isRunning = true;
@@ -559,6 +536,15 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 				}
 			}
 		}
+	}
+
+	private void blockUntilReplaying() throws InterruptedException, ExecutionException {
+		getEnvironment().getContainingTask().transitionToStandbyState();
+		standbyFuture.get();
+		LOG.debug("Task {} starts recovery after standbyFuture {}.", getName(), standbyFuture);
+		recoveryManager.notifyStartRecovery();
+		readyToReplayFuture.get();
+		LOG.debug("Task {} starts execution after readyToReplayFuture {}.", getName(), readyToReplayFuture);
 	}
 
 	@Override
@@ -814,12 +800,8 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 		return recoveryManager;
 	}
 
-	public RecordCounter getRecordCounter() {
-		return recordCounter;
-	}
-
-	public EpochProvider getEpochProvider() {
-		return this;
+	public EpochTracker getRecordCounter() {
+		return epochTracker;
 	}
 
 	@Override
@@ -843,22 +825,17 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 				if (!this.recoveryManager.getContext().vertexGraphInformation.hasUpstream()) {
 					this.mainThreadCausalLog.appendDeterminant(reuseSourceCheckpointDeterminant.replace(
-						recordCounter.getRecordCount(),
+						epochTracker.getRecordCount(),
 						checkpointMetaData.getCheckpointId(),
 						checkpointMetaData.getTimestamp(),
 						checkpointOptions.getCheckpointType(),
 						checkpointOptions.getTargetLocation().getReferenceBytes()
-					), currentEpochID.get());
+					), epochTracker.getCurrentEpoch());
 				}
 
 				// Step (1): Prepare the checkpoint, allow operators to do some pre-barrier work.
 				//           The pre-barrier work should be nothing or minimal in the common case.
 				operatorChain.prepareSnapshotPreBarrier(checkpointMetaData.getCheckpointId());
-
-				currentEpochID.set(checkpointMetaData.getCheckpointId());
-
-				//Inform the partitions that a checkpoint barrier is going to come next
-				this.streamRecordWriters.forEach(rw -> rw.notifyCheckpointBarrier(currentEpochID.get()));
 
 				// Step (2): Send the checkpoint barrier downstream
 				operatorChain.broadcastCheckpointBarrier(
@@ -866,16 +843,12 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 					checkpointMetaData.getTimestamp(),
 					checkpointOptions);
 
-
 				// Step (3): Take the state snapshot. This should be largely asynchronous, to not
 				//           impact progress of the streaming topology
 				checkpointState(checkpointMetaData, checkpointOptions, checkpointMetrics);
 
-				if (timeService instanceof PeriodicTimeCausalTimeService)
-					((PeriodicTimeCausalTimeService) timeService).notifyNewEpoch();
-				if (randomService instanceof DeterministicCausalRandomService)
-					((DeterministicCausalRandomService) randomService).notifyNewEpoch();
-				recordCounter.resetRecordCount();
+				//Needs to happen before barrier broadcast, so the pipelined subpartitions are aware of incoming barrier
+				epochTracker.startNewEpoch(checkpointMetaData.getCheckpointId());
 
 				return true;
 			} else {
@@ -912,10 +885,10 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 	public void ignoreCheckpoint(long checkpointId) {
 
 		synchronized (lock) {
-			ignoreCheckpointReuseDeterminant.replace(recordCounter.getRecordCount(), checkpointId);
+			ignoreCheckpointReuseDeterminant.replace(epochTracker.getRecordCount(), checkpointId);
 			if (isRunning && !recoveryManager.isRecovering()) {
 				LOG.info("Ignoring checkpoint, appending determinant and ignoring.");
-				this.mainThreadCausalLog.appendDeterminant(ignoreCheckpointReuseDeterminant, currentEpochID.get());
+				this.mainThreadCausalLog.appendDeterminant(ignoreCheckpointReuseDeterminant, epochTracker.getCurrentEpoch());
 				CheckpointBarrierHandler handler = getCheckpointBarrierHandler();
 				try {
 					handler.ignoreCheckpoint(checkpointId);
@@ -954,15 +927,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 					}
 				}
 
-				causalLog.notifyCheckpointComplete(checkpointId);
-				//Notify InFlightLogger
-				this.streamRecordWriters.forEach(rw -> {
-					try {
-						rw.notifyCheckpointComplete(checkpointId);
-					} catch (Exception e) {
-						e.printStackTrace();
-					}
-				});
+				epochTracker.notifyCheckpointComplete(checkpointId);
 			} else {
 				LOG.debug("Ignoring notification of complete checkpoint for not-running task {}", getName());
 			}
@@ -1334,15 +1299,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 		return cancelables;
 	}
 
-	@Override
-	public long getCurrentEpochID() {
-		return currentEpochID.get();
-	}
 
-	@Override
-	public void setCurrentEpochID(long currentEpochID) {
-		this.currentEpochID.set(currentEpochID);
-	}
 	// ------------------------------------------------------------------------
 
 	private static final class CheckpointingOperation {
@@ -1496,7 +1453,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 	@VisibleForTesting
 	public static <OUT> List<StreamRecordWriter<SerializationDelegate<StreamRecord<OUT>>>> createStreamRecordWriters(
 		StreamConfig configuration,
-		Environment environment, RandomService randomService) {
+		Environment environment, RandomService randomService, EpochTracker epochTracker) {
 		List<StreamRecordWriter<SerializationDelegate<StreamRecord<OUT>>>> streamRecordWriters = new ArrayList<>();
 		List<StreamEdge> outEdgesInOrder = configuration.getOutEdgesInOrder(environment.getUserClassLoader());
 		Map<Integer, StreamConfig> chainedConfigs =
@@ -1510,8 +1467,13 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 				i,
 				environment,
 				environment.getTaskInfo().getTaskName(),
-				chainedConfigs.get(edge.getSourceId()).getBufferTimeout(), randomService);
+				chainedConfigs.get(edge.getSourceId()).getBufferTimeout(), randomService, epochTracker);
 			streamRecordWriters.add(newRecordWriter);
+
+			//TODO do not love this cast.
+			for(ResultSubpartition ps :  newRecordWriter.getResultPartition().getResultSubpartitions())
+				if(ps instanceof PipelinedSubpartition)
+					epochTracker.subscribeToCheckpointCompleteEvents(((PipelinedSubpartition) ps).getInFlightLog());
 		}
 		return streamRecordWriters;
 	}
@@ -1521,7 +1483,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 		int outputIndex,
 		Environment environment,
 		String taskName,
-		long bufferTimeout, RandomService randomService) {
+		long bufferTimeout, RandomService randomService, EpochTracker epochTracker) {
 		@SuppressWarnings("unchecked")
 		StreamPartitioner<OUT> outputPartitioner = (StreamPartitioner<OUT>) edge.getPartitioner();
 
@@ -1538,14 +1500,14 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 		}
 
 		StreamRecordWriter<SerializationDelegate<StreamRecord<OUT>>> output =
-			new StreamRecordWriter<>(bufferWriter, outputPartitioner, bufferTimeout, taskName, randomService);
+			new StreamRecordWriter<>(bufferWriter, outputPartitioner, bufferTimeout, taskName, randomService, epochTracker);
 		output.setMetricGroup(environment.getMetricGroup().getIOMetricGroup());
 		return output;
 	}
 
-
+	//Problem is, we cant move this into PeriodicCausalTimeservice because it does not depend on flink-streaming
 	static class TimeSetterTask implements ProcessingTimeCallback {
-		private final ProcessingTimeCallbackID id = new ProcessingTimeCallbackID("TSS");
+		private final ProcessingTimeCallbackID id = new ProcessingTimeCallbackID("PTS");
 		private final long[] timeToSet;
 
 		public TimeSetterTask(long[] timeToSet) {

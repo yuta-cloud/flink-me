@@ -18,6 +18,8 @@
 
 package org.apache.flink.runtime.io.network.partition;
 
+import org.apache.flink.runtime.causal.EpochTrackerImpl;
+import org.apache.flink.runtime.inflightlogging.InMemorySubpartitionInFlightLogger;
 import org.apache.flink.runtime.io.network.buffer.BufferBuilder;
 
 import org.junit.After;
@@ -57,7 +59,7 @@ public class PipelinedSubpartitionWithReadViewTest {
 	@Before
 	public void setup() throws IOException {
 		final ResultPartition parent = mock(ResultPartition.class);
-		subpartition = new PipelinedSubpartition(0, parent);
+		subpartition = new PipelinedSubpartition(0, parent, new InMemorySubpartitionInFlightLogger());
 		availablityListener = new AwaitableBufferAvailablityListener();
 		readView = subpartition.createReadView(availablityListener);
 	}
@@ -70,8 +72,8 @@ public class PipelinedSubpartitionWithReadViewTest {
 
 	@Test(expected = IllegalStateException.class)
 	public void testAddTwoNonFinishedBuffer() {
-		subpartition.add(createBufferBuilder().createBufferConsumer());
-		subpartition.add(createBufferBuilder().createBufferConsumer());
+		subpartition.add(createBufferBuilder().createBufferConsumer(0));
+		subpartition.add(createBufferBuilder().createBufferConsumer(0));
 		assertNull(readView.getNextBuffer());
 	}
 

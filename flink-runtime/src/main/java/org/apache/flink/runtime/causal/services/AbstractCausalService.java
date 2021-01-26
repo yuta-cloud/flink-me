@@ -25,7 +25,8 @@
 
 package org.apache.flink.runtime.causal.services;
 
-import org.apache.flink.runtime.causal.EpochProvider;
+import org.apache.flink.runtime.causal.EpochStartListener;
+import org.apache.flink.runtime.causal.EpochTracker;
 import org.apache.flink.runtime.causal.log.job.CausalLogID;
 import org.apache.flink.runtime.causal.log.job.JobCausalLog;
 import org.apache.flink.runtime.causal.log.thread.ThreadCausalLog;
@@ -36,7 +37,7 @@ import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
  * Whenever a request is made to one, we first have to check whether we are recovering.
  * If we are not, a new nondeterministic event occurs, which must be recorded into the causal log.
  */
-public abstract class AbstractCausalService {
+public abstract class AbstractCausalService implements EpochStartListener {
 
 	// Causal services will request replay of a single nondeterministic event from the recovery manager
 	protected final IRecoveryManager recoveryManager;
@@ -45,18 +46,18 @@ public abstract class AbstractCausalService {
 	protected final ThreadCausalLog threadCausalLog;
 
 	// Causal services need to know to which epoch this nondeterministic event belongs to
-	protected final EpochProvider epochProvider;
+	protected final EpochTracker epochTracker;
 
 	// Boolean used to short-circuit accesses to the recovery manager when not in recovery
 	private boolean isRecovering;
 
-	public AbstractCausalService(JobCausalLog causalLog, IRecoveryManager recoveryManager,
-								 EpochProvider epochProvider){
+	public AbstractCausalService(JobCausalLog causalLog, IRecoveryManager recoveryManager){
 		CausalLogID causalLogID = new CausalLogID(recoveryManager.getContext().getTaskVertexID());
 		this.threadCausalLog = causalLog.getThreadCausalLog(causalLogID);
 		this.recoveryManager = recoveryManager;
-		this.epochProvider = epochProvider;
+		this.epochTracker = recoveryManager.getContext().getEpochTracker();
 		this.isRecovering = recoveryManager.isRecovering();
+		this.epochTracker.subscribeToEpochStartEvents(this);
 	}
 
 	/**
@@ -71,4 +72,8 @@ public abstract class AbstractCausalService {
 		return isRecovering && (isRecovering = recoveryManager.isRecovering());
 	}
 
+	@Override
+	public void notifyEpochStart(long epochID){
+		//do nothing by default
+	}
 }

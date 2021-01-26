@@ -40,7 +40,7 @@ public abstract class StreamPartitioner<T> implements
 		//Default implementation do nothing
 	}
 	@Override
-	public void notifyCheckpointBarrier(long checkpointID) {
+	public void notifyEpochStart(long epochID) {
 		//Default implementation do nothing
 	}
 }

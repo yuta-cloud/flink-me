@@ -75,7 +75,7 @@ public class RescalePartitioner<T> extends StreamPartitioner<T> {
 	}
 
 	@Override
-	public void notifyCheckpointBarrier(long checkpointID) {
+	public void notifyEpochStart(long epochID) {
 		this.returnArray[0] = -1;
 	}
 }

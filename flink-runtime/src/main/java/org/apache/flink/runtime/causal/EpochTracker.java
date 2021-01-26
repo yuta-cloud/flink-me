@@ -25,8 +25,31 @@
 
 package org.apache.flink.runtime.causal;
 
-public interface CheckpointBarrierListener {
 
-	void notifyCheckpointBarrier(long checkpointID);
+import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
+import org.apache.flink.runtime.state.CheckpointListener;
 
+public interface EpochTracker {
+
+	long getCurrentEpoch();
+
+	int getRecordCount();
+
+	/**
+	 * Called AFTER each input record is processed.
+	 * For correctness, it is important that all calls to this method are done under the checkpoint lock
+	 */
+	void incRecordCount();
+
+	void startNewEpoch(long epochID);
+
+	void setRecordCountTarget(int target);
+
+	void setRecoveryManager(IRecoveryManager recoveryManager);
+
+	void subscribeToEpochStartEvents(EpochStartListener listener);
+
+	void subscribeToCheckpointCompleteEvents(CheckpointListener listener);
+
+    void notifyCheckpointComplete(long checkpointId);
 }

@@ -20,6 +20,7 @@ package org.apache.flink.runtime.io.network.partition;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.TaskManagerOptions;
+import org.apache.flink.runtime.causal.EpochTracker;
 import org.apache.flink.runtime.io.disk.iomanager.BufferFileWriter;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.network.api.EndOfPartitionEvent;
@@ -62,7 +63,7 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  *
  * <p>Note on thread safety. Synchronizing on {@code buffers} is used to synchronize
  * writes and reads. Synchronizing on {@code this} is used against concurrent
- * {@link #add(BufferConsumer)} and clean ups {@link #release()} / {@link #finish()} which
+ * {@link #add(BufferConsumer, boolean)} and clean ups {@link #release()} / {@link #finish()} which
  * also are touching {@code spillWriter}. Since we do not want to block reads during
  * spilling, we need those two synchronization. Probably this model could be simplified.
  */
@@ -87,7 +88,6 @@ class SpillableSubpartition extends ResultSubpartition {
 
 	SpillableSubpartition(int index, ResultPartition parent, IOManager ioManager) {
 		super(index, parent);
-
 		this.ioManager = checkNotNull(ioManager);
 	}
 
@@ -132,7 +132,7 @@ class SpillableSubpartition extends ResultSubpartition {
 	@Override
 	public synchronized void finish() throws IOException {
 		synchronized (buffers) {
-			if (add(EventSerializer.toBufferConsumer(EndOfPartitionEvent.INSTANCE), true)) {
+			if (add(EventSerializer.toBufferConsumer(EndOfPartitionEvent.INSTANCE, 0L), true)) {
 				isFinished = true;
 			}
 
@@ -294,16 +294,6 @@ class SpillableSubpartition extends ResultSubpartition {
 	@Override
 	public boolean isReleased() {
 		return isReleased;
-	}
-
-	@Override
-	public void notifyCheckpointBarrier(long checkpointId) {
-
-	}
-
-	@Override
-	public void notifyCheckpointComplete(long checkpointId) {
-
 	}
 
 	@Override

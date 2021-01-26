@@ -20,6 +20,7 @@ package org.apache.flink.streaming.api.operators;
 
 import org.apache.flink.runtime.causal.*;
 import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
+import org.apache.flink.runtime.causal.recovery.LogReplayer;
 import org.apache.flink.runtime.causal.recovery.RecoveryManagerContext;
 import org.apache.flink.runtime.causal.recovery.State;
 import org.apache.flink.runtime.event.InFlightLogRequestEvent;
@@ -150,11 +151,6 @@ public class StreamSourceContextIdleDetectionTests {
 				}
 
 				@Override
-				public void triggerAsyncEvent() {
-
-				}
-
-				@Override
 				public boolean isRecovering() {
 					return false;
 				}
@@ -180,19 +176,10 @@ public class StreamSourceContextIdleDetectionTests {
 				}
 
 				@Override
-				public int replayRandomInt() {
-					return 0;
+				public LogReplayer getLogReplayer() {
+					return null;
 				}
 
-				@Override
-				public byte replayNextChannel() {
-					return 0;
-				}
-
-				@Override
-				public long replayNextTimestamp() {
-					return 0;
-				}
 			});
 
 		// -------------------------- begin test scenario --------------------------
@@ -324,11 +311,6 @@ public class StreamSourceContextIdleDetectionTests {
 				}
 
 				@Override
-				public void triggerAsyncEvent() {
-
-				}
-
-				@Override
 				public boolean isRecovering() {
 					return false;
 				}
@@ -354,19 +336,10 @@ public class StreamSourceContextIdleDetectionTests {
 				}
 
 				@Override
-				public int replayRandomInt() {
-					return 0;
+				public LogReplayer getLogReplayer() {
+					return null;
 				}
 
-				@Override
-				public byte replayNextChannel() {
-					return 0;
-				}
-
-				@Override
-				public long replayNextTimestamp() {
-					return 0;
-				}
 			});
 
 		// -------------------------- begin test scenario --------------------------

@@ -50,7 +50,9 @@ import static org.mockito.Mockito.verify;
  */
 public class ResultPartitionTest {
 
-	/** Asynchronous I/O manager. */
+	/**
+	 * Asynchronous I/O manager.
+	 */
 	private static final IOManager ioManager = new IOManagerAsync();
 
 	private static final InFlightLogFactory inFlightLogFactory = new InMemoryInFlightLogFactory();
@@ -230,7 +232,7 @@ public class ResultPartitionTest {
 	 */
 	private void testReleaseMemory(final ResultPartitionType resultPartitionType) throws Exception {
 		final int numAllBuffers = 10;
-		final NetworkEnvironment network = new NetworkEnvironment(numAllBuffers, 128, 0, 0, 2, 8,2,8, true);
+		final NetworkEnvironment network = new NetworkEnvironment(numAllBuffers, 128, 0, 0, 2, 8, 2, 8, true);
 		final ResultPartitionConsumableNotifier notifier = new NoOpResultPartitionConsumableNotifier();
 		final ResultPartition resultPartition = createPartition(notifier, resultPartitionType, false);
 		try {

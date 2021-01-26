@@ -77,7 +77,7 @@ public class CustomPartitionerWrapper<K, T> extends StreamPartitioner<T> {
 	}
 
 	@Override
-	public void notifyCheckpointBarrier(long checkpointID) {
+	public void notifyEpochStart(long epochID) {
 		//TODO partitioner.notifyCheckpointBarrier(long checkpointID);
 	}
 }

@@ -26,6 +26,7 @@
 package org.apache.flink.runtime.causal;
 
 import org.apache.flink.runtime.causal.recovery.WaitingDeterminantsState;
+import org.apache.flink.runtime.execution.Environment;
 import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.slf4j.Logger;
@@ -59,11 +60,11 @@ public class VertexGraphInformation {
 	 */
 	private final Map<VertexID, Integer> distancesToVertex;
 
-	public VertexGraphInformation(List<JobVertex> sortedJobVertexes, JobVertexID jobVertexID, int subtaskIndex) {
+	public VertexGraphInformation(Environment environment) {
 
-		this.sortedJobVertexes = sortedJobVertexes;
-		this.jobVertexID = jobVertexID;
-		this.subtaskIndex = subtaskIndex;
+		this.sortedJobVertexes = environment.getTopologicallySortedJobVertexes();
+		this.jobVertexID = environment.getJobVertexId();
+		this.subtaskIndex = environment.getTaskInfo().getIndexOfThisSubtask();
 		this.jobVertex = CausalGraphUtils.fromSortedList(sortedJobVertexes, jobVertexID);
 		this.thisTasksVertexID = CausalGraphUtils.computeVertexId(sortedJobVertexes, jobVertexID, subtaskIndex);
 

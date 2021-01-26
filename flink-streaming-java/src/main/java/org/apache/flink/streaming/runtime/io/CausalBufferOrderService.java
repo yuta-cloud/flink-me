@@ -25,7 +25,6 @@
 
 package org.apache.flink.streaming.runtime.io;
 
-import org.apache.flink.runtime.causal.EpochProvider;
 import org.apache.flink.runtime.causal.determinant.OrderDeterminant;
 import org.apache.flink.runtime.causal.log.job.JobCausalLog;
 import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
@@ -36,6 +35,7 @@ import org.apache.flink.runtime.io.network.partition.consumer.BufferOrEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayDeque;
 import java.util.LinkedList;
 import java.util.Queue;
 
@@ -53,10 +53,10 @@ public class CausalBufferOrderService extends AbstractCausalService implements B
 	private final CheckpointBarrierHandler bufferSource;
 
 	// We use this to buffer buffers from the incorrect channels in order to deliver them in correct order
-	private Queue<BufferOrEvent>[] bufferedBuffersPerChannel;
+	private final ArrayDeque<BufferOrEvent>[] bufferedBuffersPerChannel;
 
 	// The determinant object we reuse to avoid object creation and thus large GC
-	private OrderDeterminant reuseOrderDeterminant;
+	private final OrderDeterminant reuseOrderDeterminant;
 
 	// The number of input channels this task has. Important for buffering and exception cases such as = 1
 	private final int numInputChannels;
@@ -65,13 +65,13 @@ public class CausalBufferOrderService extends AbstractCausalService implements B
 	private int numBufferedBuffers;
 
 	public CausalBufferOrderService(JobCausalLog jobCausalLog, IRecoveryManager recoveryManager,
-									EpochProvider epochProvider, CheckpointBarrierHandler bufferSource,
+									CheckpointBarrierHandler bufferSource,
 									int numInputChannels) {
-		super(jobCausalLog, recoveryManager, epochProvider);
+		super(jobCausalLog, recoveryManager);
 		this.bufferSource = bufferSource;
-		this.bufferedBuffersPerChannel = new LinkedList[numInputChannels];
+		this.bufferedBuffersPerChannel = new ArrayDeque[numInputChannels];
 		for (int i = 0; i < numInputChannels; i++)
-			bufferedBuffersPerChannel[i] = new LinkedList<>();
+			bufferedBuffersPerChannel[i] = new ArrayDeque<>(10);
 		this.numInputChannels = numInputChannels;
 		this.numBufferedBuffers = 0;
 		this.reuseOrderDeterminant = new OrderDeterminant();
@@ -93,7 +93,7 @@ public class CausalBufferOrderService extends AbstractCausalService implements B
 
 		if(toReturn != null)
 			threadCausalLog.appendDeterminant(reuseOrderDeterminant.replace((byte) toReturn.getChannelIndex()),
-			epochProvider.getCurrentEpochID());
+			epochTracker.getCurrentEpoch());
 
 		return toReturn;
 	}
@@ -123,7 +123,7 @@ public class CausalBufferOrderService extends AbstractCausalService implements B
 
 	private BufferOrEvent getNextNonBlockedReplayed() throws Exception {
 		BufferOrEvent toReturn;
-		byte nextChannel = recoveryManager.replayNextChannel();
+		byte nextChannel = recoveryManager.getLogReplayer().replayNextChannel();
 		LOG.debug("Determinant says next channel is {}!", nextChannel);
 		while (true) {
 			if (!bufferedBuffersPerChannel[nextChannel].isEmpty()) {

@@ -20,8 +20,8 @@ package org.apache.flink.runtime.io.network.partition;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
-import org.apache.flink.runtime.causal.CheckpointBarrierListener;
-import org.apache.flink.runtime.causal.VertexID;
+import org.apache.flink.runtime.causal.EpochStartListener;
+import org.apache.flink.runtime.causal.EpochTracker;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.buffer.BufferConsumer;
 import org.apache.flink.runtime.state.CheckpointListener;
@@ -36,7 +36,7 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
 /**
  * A single subpartition of a {@link ResultPartition} instance.
  */
-public abstract class ResultSubpartition implements CheckpointListener, CheckpointBarrierListener {
+public abstract class ResultSubpartition {
 
 	/** The index of the subpartition at the parent partition. */
 	protected final int index;

@@ -20,6 +20,8 @@ package org.apache.flink.runtime.io.network.partition;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.core.testutils.CheckedThread;
+import org.apache.flink.runtime.causal.EpochTrackerImpl;
+import org.apache.flink.runtime.inflightlogging.InMemorySubpartitionInFlightLogger;
 import org.apache.flink.runtime.io.network.ConnectionID;
 import org.apache.flink.runtime.io.network.ConnectionManager;
 import org.apache.flink.runtime.io.network.TaskEventDispatcher;
@@ -78,7 +80,7 @@ public class InputGateConcurrentTest {
 					resultPartitionManager, mock(TaskEventDispatcher.class), UnregisteredMetricGroups.createUnregisteredTaskMetricGroup().getIOMetricGroup());
 			gate.setInputChannel(new IntermediateResultPartitionID(), channel);
 
-			partitions[i] = new PipelinedSubpartition(0, resultPartition);
+			partitions[i] = new PipelinedSubpartition(0, resultPartition, new InMemorySubpartitionInFlightLogger());
 			sources[i] = new PipelinedSubpartitionSource(partitions[i]);
 		}
 
@@ -163,7 +165,7 @@ public class InputGateConcurrentTest {
 		for (int i = 0, local = 0; i < numChannels; i++) {
 			if (localOrRemote.get(i)) {
 				// local channel
-				PipelinedSubpartition psp = new PipelinedSubpartition(0, resultPartition);
+				PipelinedSubpartition psp = new PipelinedSubpartition(0, resultPartition,  new InMemorySubpartitionInFlightLogger());
 				localPartitions[local++] = psp;
 				sources[i] = new PipelinedSubpartitionSource(psp);
 

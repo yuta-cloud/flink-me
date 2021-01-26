@@ -31,6 +31,7 @@ import org.apache.flink.runtime.io.network.api.DeterminantRequestEvent;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannel;
 import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
+import sun.rmi.runtime.Log;
 
 public interface IRecoveryManager {
 
@@ -51,8 +52,6 @@ public interface IRecoveryManager {
 
 	void notifyStartRecovery();
 
-	void triggerAsyncEvent();
-
 	// =======================================================
 
 	boolean isRecovering();
@@ -66,15 +65,6 @@ public interface IRecoveryManager {
 	RecoveryManagerContext getContext();
 
 	//====================================================
-	/*
-	The following methods must be called from deterministic contexts. Otherwise it will
-	cause everything to blow up.
-	 */
 
-	int replayRandomInt();
-
-	byte replayNextChannel();
-
-	long replayNextTimestamp();
-
+	LogReplayer getLogReplayer();
 }

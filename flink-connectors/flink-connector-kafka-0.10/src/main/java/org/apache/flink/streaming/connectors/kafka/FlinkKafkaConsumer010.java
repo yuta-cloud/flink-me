@@ -187,7 +187,7 @@ public class FlinkKafkaConsumer010<T> extends FlinkKafkaConsumer09<T> {
 		StreamingRuntimeContext runtimeContext,
 		OffsetCommitMode offsetCommitMode,
 		MetricGroup consumerMetricGroup,
-		boolean useMetrics, IRecoveryManager recoveryManager) throws Exception {
+		boolean useMetrics) throws Exception {
 
 		// make sure that auto commit is disabled when our offset commit mode is ON_CHECKPOINTS;
 		// this overwrites whatever setting the user configured in the properties

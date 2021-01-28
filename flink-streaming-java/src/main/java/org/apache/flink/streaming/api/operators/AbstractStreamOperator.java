@@ -21,6 +21,9 @@ package org.apache.flink.streaming.api.operators;
 import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.ExecutionConfig;
+import org.apache.flink.api.common.services.RandomService;
+import org.apache.flink.api.common.services.SerializableServiceFactory;
+import org.apache.flink.api.common.services.TimeService;
 import org.apache.flink.api.common.state.KeyedStateStore;
 import org.apache.flink.api.common.state.State;
 import org.apache.flink.api.common.state.StateDescriptor;
@@ -266,14 +269,20 @@ public abstract class AbstractStreamOperator<OUT>
 		CloseableIterable<KeyGroupStatePartitionStreamProvider> keyedStateInputs = context.rawKeyedStateInputs();
 		CloseableIterable<StatePartitionStreamProvider> operatorStateInputs = context.rawOperatorStateInputs();
 
+		RandomService randomService = this.container.getRandomService();
+		TimeService timestampService = this.container.getTimeService();
+		SerializableServiceFactory serializableServiceFactory= this.container.getSerializableServiceFactory();
 		try {
 			StateInitializationContext initializationContext = new StateInitializationContextImpl(
 				context.isRestored(), // information whether we restore or start for the first time
-                    containingTask.getRecoveryManager().isRecovering(),
+                containingTask.getRecoveryManager().isRecovering(),
 				operatorStateBackend, // access to operator state backend
 				keyedStateStore, // access to keyed state backend
 				keyedStateInputs, // access to keyed state stream
-				operatorStateInputs); // access to operator state stream
+				operatorStateInputs, // access to operator state stream
+				randomService,
+				timestampService,
+				serializableServiceFactory);
 
 			initializeState(initializationContext);
 		} finally {

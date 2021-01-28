@@ -30,10 +30,7 @@ import org.apache.flink.api.common.accumulators.Histogram;
 import org.apache.flink.api.common.accumulators.IntCounter;
 import org.apache.flink.api.common.accumulators.LongCounter;
 import org.apache.flink.api.common.cache.DistributedCache;
-import org.apache.flink.api.common.services.RandomService;
-import org.apache.flink.api.common.services.SimpleRandomService;
-import org.apache.flink.api.common.services.SimpleTimeService;
-import org.apache.flink.api.common.services.TimeService;
+import org.apache.flink.api.common.services.*;
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.api.common.state.AggregatingState;
 import org.apache.flink.api.common.state.AggregatingStateDescriptor;
@@ -54,6 +51,7 @@ import java.io.Serializable;
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.Future;
+import java.util.function.Function;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
@@ -77,6 +75,7 @@ public abstract class AbstractRuntimeUDFContext implements RuntimeContext {
 
 	private final RandomService randomService;
 	private final TimeService timeService;
+	private final SerializableServiceFactory serializableServiceFactory;
 
 
 	public AbstractRuntimeUDFContext(TaskInfo taskInfo,
@@ -86,7 +85,7 @@ public abstract class AbstractRuntimeUDFContext implements RuntimeContext {
 									 Map<String, Future<Path>> cpTasks,
 									 MetricGroup metrics) {
 		this(taskInfo, userCodeClassLoader, executionConfig, accumulators, cpTasks, metrics, new SimpleTimeService(),
-			new SimpleRandomService());
+			new SimpleRandomService(), new SimpleSerializableServiceFactory());
 	}
 
 	public AbstractRuntimeUDFContext(TaskInfo taskInfo,
@@ -94,7 +93,7 @@ public abstract class AbstractRuntimeUDFContext implements RuntimeContext {
 									 ExecutionConfig executionConfig,
 									 Map<String, Accumulator<?, ?>> accumulators,
 									 Map<String, Future<Path>> cpTasks,
-									 MetricGroup metrics, TimeService timeService, RandomService randomService) {
+									 MetricGroup metrics, TimeService timeService, RandomService randomService, SerializableServiceFactory factory) {
 		this.taskInfo = checkNotNull(taskInfo);
 		this.userCodeClassLoader = userCodeClassLoader;
 		this.executionConfig = executionConfig;
@@ -103,6 +102,7 @@ public abstract class AbstractRuntimeUDFContext implements RuntimeContext {
 		this.metrics = metrics;
 		this.randomService = randomService;
 		this.timeService = timeService;
+		this.serializableServiceFactory = factory;
 	}
 
 	@Override
@@ -205,6 +205,10 @@ public abstract class AbstractRuntimeUDFContext implements RuntimeContext {
 		return randomService;
 	}
 
+	@Override
+	public <I,O extends Serializable> SerializableService<I,O> getSerializableService(Function<I,O> function){
+		return serializableServiceFactory.build(function);
+	}
 	// --------------------------------------------------------------------------------------------
 
 	@SuppressWarnings("unchecked")

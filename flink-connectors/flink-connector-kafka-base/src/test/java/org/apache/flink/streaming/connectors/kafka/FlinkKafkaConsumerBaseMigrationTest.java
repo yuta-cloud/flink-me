@@ -399,7 +399,7 @@ public class FlinkKafkaConsumerBaseMigrationTest {
 			StreamingRuntimeContext runtimeContext,
 			OffsetCommitMode offsetCommitMode,
 			MetricGroup consumerMetricGroup,
-			boolean useMetrics, IRecoveryManager recoveryManager) throws Exception {
+			boolean useMetrics) throws Exception {
 			return fetcher;
 		}
 

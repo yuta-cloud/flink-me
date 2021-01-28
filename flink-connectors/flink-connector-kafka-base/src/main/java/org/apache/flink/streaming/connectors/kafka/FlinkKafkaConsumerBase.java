@@ -659,7 +659,7 @@ public abstract class FlinkKafkaConsumerBase<T> extends RichParallelSourceFuncti
 			(StreamingRuntimeContext) getRuntimeContext(),
 			offsetCommitMode,
 			getRuntimeContext().getMetricGroup().addGroup(KAFKA_CONSUMER_METRICS_GROUP),
-			useMetrics, ((StreamingRuntimeContext)getRuntimeContext()).getRecoveryManager());
+			useMetrics);
 	}
 
 	@Override
@@ -971,7 +971,7 @@ public abstract class FlinkKafkaConsumerBase<T> extends RichParallelSourceFuncti
 			StreamingRuntimeContext runtimeContext,
 			OffsetCommitMode offsetCommitMode,
 			MetricGroup kafkaMetricGroup,
-			boolean useMetrics, IRecoveryManager recoveryManager) throws Exception;
+			boolean useMetrics) throws Exception;
 
 	/**
 	 * Creates the partition discoverer that is used to find new partitions for this subtask.

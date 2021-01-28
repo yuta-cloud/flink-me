@@ -18,6 +18,9 @@
 
 package org.apache.flink.streaming.connectors.kafka;
 
+import org.apache.flink.api.common.services.RandomService;
+import org.apache.flink.api.common.services.SerializableServiceFactory;
+import org.apache.flink.api.common.services.TimeService;
 import org.apache.flink.api.common.state.BroadcastState;
 import org.apache.flink.api.common.state.KeyedStateStore;
 import org.apache.flink.api.common.state.ListState;
@@ -109,12 +112,14 @@ public class FlinkKafkaConsumerBaseTest extends TestLogger {
 		try {
 			new DummyFlinkKafkaConsumer<String>().assignTimestampsAndWatermarks((AssignerWithPeriodicWatermarks<String>) null);
 			fail();
-		} catch (NullPointerException ignored) {}
+		} catch (NullPointerException ignored) {
+		}
 
 		try {
 			new DummyFlinkKafkaConsumer<String>().assignTimestampsAndWatermarks((AssignerWithPunctuatedWatermarks<String>) null);
 			fail();
-		} catch (NullPointerException ignored) {}
+		} catch (NullPointerException ignored) {
+		}
 
 		final AssignerWithPeriodicWatermarks<String> periodicAssigner = mock(AssignerWithPeriodicWatermarks.class);
 		final AssignerWithPunctuatedWatermarks<String> punctuatedAssigner = mock(AssignerWithPunctuatedWatermarks.class);
@@ -124,14 +129,16 @@ public class FlinkKafkaConsumerBaseTest extends TestLogger {
 		try {
 			c1.assignTimestampsAndWatermarks(punctuatedAssigner);
 			fail();
-		} catch (IllegalStateException ignored) {}
+		} catch (IllegalStateException ignored) {
+		}
 
 		DummyFlinkKafkaConsumer<String> c2 = new DummyFlinkKafkaConsumer<>();
 		c2.assignTimestampsAndWatermarks(punctuatedAssigner);
 		try {
 			c2.assignTimestampsAndWatermarks(periodicAssigner);
 			fail();
-		} catch (IllegalStateException ignored) {}
+		} catch (IllegalStateException ignored) {
+		}
 	}
 
 	/**
@@ -139,12 +146,11 @@ public class FlinkKafkaConsumerBaseTest extends TestLogger {
 	 */
 	@Test
 	public void ignoreCheckpointWhenNotRunning() throws Exception {
-		@SuppressWarnings("unchecked")
-		final MockFetcher<String> fetcher = new MockFetcher<>();
+		@SuppressWarnings("unchecked") final MockFetcher<String> fetcher = new MockFetcher<>();
 		final FlinkKafkaConsumerBase<String> consumer = new DummyFlinkKafkaConsumer<>(
-				fetcher,
-				mock(AbstractPartitionDiscoverer.class),
-				false);
+			fetcher,
+			mock(AbstractPartitionDiscoverer.class),
+			false);
 
 		final TestingListState<Tuple2<KafkaTopicPartition, Long>> listState = new TestingListState<>();
 		setupConsumer(consumer, false, listState, true, 0, 1);
@@ -167,8 +173,7 @@ public class FlinkKafkaConsumerBaseTest extends TestLogger {
 	 */
 	@Test
 	public void checkRestoredCheckpointWhenFetcherNotReady() throws Exception {
-		@SuppressWarnings("unchecked")
-		final FlinkKafkaConsumerBase<String> consumer = new DummyFlinkKafkaConsumer<>();
+		@SuppressWarnings("unchecked") final FlinkKafkaConsumerBase<String> consumer = new DummyFlinkKafkaConsumer<>();
 
 		final TestingListState<Tuple2<KafkaTopicPartition, Long>> restoredListState = new TestingListState<>();
 		setupConsumer(consumer, true, restoredListState, true, 0, 1);
@@ -215,8 +220,7 @@ public class FlinkKafkaConsumerBaseTest extends TestLogger {
 
 	@Test
 	public void testConfigureAutoCommitMode() throws Exception {
-		@SuppressWarnings("unchecked")
-		final DummyFlinkKafkaConsumer<String> consumer = new DummyFlinkKafkaConsumer<>(true);
+		@SuppressWarnings("unchecked") final DummyFlinkKafkaConsumer<String> consumer = new DummyFlinkKafkaConsumer<>(true);
 
 		setupConsumer(consumer);
 
@@ -243,8 +247,7 @@ public class FlinkKafkaConsumerBaseTest extends TestLogger {
 
 	@Test
 	public void testConfigureDisableOffsetCommitWithoutCheckpointing() throws Exception {
-		@SuppressWarnings("unchecked")
-		final DummyFlinkKafkaConsumer<String> consumer = new DummyFlinkKafkaConsumer<>(false);
+		@SuppressWarnings("unchecked") final DummyFlinkKafkaConsumer<String> consumer = new DummyFlinkKafkaConsumer<>(false);
 
 		setupConsumer(consumer);
 
@@ -276,9 +279,9 @@ public class FlinkKafkaConsumerBaseTest extends TestLogger {
 		final MockFetcher<String> fetcher = new MockFetcher<>(state1, state2, state3);
 
 		final FlinkKafkaConsumerBase<String> consumer = new DummyFlinkKafkaConsumer<>(
-				fetcher,
-				mock(AbstractPartitionDiscoverer.class),
-				false);
+			fetcher,
+			mock(AbstractPartitionDiscoverer.class),
+			false);
 
 		final TestingListState<Serializable> listState = new TestingListState<>();
 
@@ -384,9 +387,9 @@ public class FlinkKafkaConsumerBaseTest extends TestLogger {
 		final MockFetcher<String> fetcher = new MockFetcher<>(state1, state2, state3);
 
 		final FlinkKafkaConsumerBase<String> consumer = new DummyFlinkKafkaConsumer<>(
-				fetcher,
-				mock(AbstractPartitionDiscoverer.class),
-				false);
+			fetcher,
+			mock(AbstractPartitionDiscoverer.class),
+			false);
 		consumer.setCommitOffsetsOnCheckpoints(false); // disable offset committing
 
 		final TestingListState<Serializable> listState = new TestingListState<>();
@@ -731,7 +734,8 @@ public class FlinkKafkaConsumerBaseTest extends TestLogger {
 			return null;
 		}
 
-		@Override public List<KafkaTopicPartition> discoverPartitions() throws WakeupException, ClosedException {
+		@Override
+		public List<KafkaTopicPartition> discoverPartitions() throws WakeupException, ClosedException {
 			throw failureCause;
 		}
 
@@ -872,9 +876,9 @@ public class FlinkKafkaConsumerBaseTest extends TestLogger {
 
 		@SuppressWarnings("unchecked")
 		DummyFlinkKafkaConsumer(
-				AbstractFetcher<T, ?> testFetcher,
-				AbstractPartitionDiscoverer testPartitionDiscoverer,
-				boolean isAutoCommitEnabled) {
+			AbstractFetcher<T, ?> testFetcher,
+			AbstractPartitionDiscoverer testPartitionDiscoverer,
+			boolean isAutoCommitEnabled) {
 			this(
 				testFetcher,
 				testPartitionDiscoverer,
@@ -884,10 +888,10 @@ public class FlinkKafkaConsumerBaseTest extends TestLogger {
 
 		@SuppressWarnings("unchecked")
 		DummyFlinkKafkaConsumer(
-				AbstractFetcher<T, ?> testFetcher,
-				AbstractPartitionDiscoverer testPartitionDiscoverer,
-				boolean isAutoCommitEnabled,
-				long discoveryIntervalMillis) {
+			AbstractFetcher<T, ?> testFetcher,
+			AbstractPartitionDiscoverer testPartitionDiscoverer,
+			boolean isAutoCommitEnabled,
+			long discoveryIntervalMillis) {
 			this(
 				() -> testFetcher,
 				testPartitionDiscoverer,
@@ -897,17 +901,17 @@ public class FlinkKafkaConsumerBaseTest extends TestLogger {
 
 		@SuppressWarnings("unchecked")
 		DummyFlinkKafkaConsumer(
-				SupplierWithException<AbstractFetcher<T, ?>, Exception> testFetcherSupplier,
-				AbstractPartitionDiscoverer testPartitionDiscoverer,
-				boolean isAutoCommitEnabled,
-				long discoveryIntervalMillis) {
+			SupplierWithException<AbstractFetcher<T, ?>, Exception> testFetcherSupplier,
+			AbstractPartitionDiscoverer testPartitionDiscoverer,
+			boolean isAutoCommitEnabled,
+			long discoveryIntervalMillis) {
 
 			super(
-					Collections.singletonList("dummy-topic"),
-					null,
-					(KeyedDeserializationSchema < T >) mock(KeyedDeserializationSchema.class),
-					discoveryIntervalMillis,
-					false);
+				Collections.singletonList("dummy-topic"),
+				null,
+				(KeyedDeserializationSchema<T>) mock(KeyedDeserializationSchema.class),
+				discoveryIntervalMillis,
+				false);
 
 			this.testFetcherSupplier = testFetcherSupplier;
 			this.testPartitionDiscoverer = testPartitionDiscoverer;
@@ -917,15 +921,15 @@ public class FlinkKafkaConsumerBaseTest extends TestLogger {
 
 		@Override
 		protected AbstractFetcher<T, ?> createFetcher(SourceContext<T> sourceContext,
-													  Map<KafkaTopicPartition, Long> subscribedPartitionsToStartOffsets, SerializedValue<AssignerWithPeriodicWatermarks<T>> watermarksPeriodic, SerializedValue<AssignerWithPunctuatedWatermarks<T>> watermarksPunctuated, StreamingRuntimeContext runtimeContext, OffsetCommitMode offsetCommitMode, MetricGroup kafkaMetricGroup, boolean useMetrics, IRecoveryManager recoveryManager) throws Exception {
+													  Map<KafkaTopicPartition, Long> subscribedPartitionsToStartOffsets, SerializedValue<AssignerWithPeriodicWatermarks<T>> watermarksPeriodic, SerializedValue<AssignerWithPunctuatedWatermarks<T>> watermarksPunctuated, StreamingRuntimeContext runtimeContext, OffsetCommitMode offsetCommitMode, MetricGroup kafkaMetricGroup, boolean useMetrics) throws Exception {
 			return null;
 		}
 
 		@Override
 		protected AbstractPartitionDiscoverer createPartitionDiscoverer(
-				KafkaTopicsDescriptor topicsDescriptor,
-				int indexOfThisSubtask,
-				int numParallelSubtasks) {
+			KafkaTopicsDescriptor topicsDescriptor,
+			int indexOfThisSubtask,
+			int numParallelSubtasks) {
 			return this.testPartitionDiscoverer;
 		}
 
@@ -936,8 +940,8 @@ public class FlinkKafkaConsumerBaseTest extends TestLogger {
 
 		@Override
 		protected Map<KafkaTopicPartition, Long> fetchOffsetsWithTimestamp(
-				Collection<KafkaTopicPartition> partitions,
-				long timestamp) {
+			Collection<KafkaTopicPartition> partitions,
+			long timestamp) {
 			throw new UnsupportedOperationException();
 		}
 	}
@@ -951,7 +955,7 @@ public class FlinkKafkaConsumerBaseTest extends TestLogger {
 		TestingFlinkKafkaConsumer(final AbstractPartitionDiscoverer partitionDiscoverer, long discoveryIntervalMillis) {
 			super(Collections.singletonList("dummy-topic"),
 				null,
-				(KeyedDeserializationSchema < T >) mock(KeyedDeserializationSchema.class),
+				(KeyedDeserializationSchema<T>) mock(KeyedDeserializationSchema.class),
 				discoveryIntervalMillis,
 				false);
 			this.partitionDiscoverer = partitionDiscoverer;
@@ -959,7 +963,7 @@ public class FlinkKafkaConsumerBaseTest extends TestLogger {
 
 		@Override
 		protected AbstractFetcher<T, ?> createFetcher(SourceContext<T> sourceContext,
-													  Map<KafkaTopicPartition, Long> subscribedPartitionsToStartOffsets, SerializedValue<AssignerWithPeriodicWatermarks<T>> watermarksPeriodic, SerializedValue<AssignerWithPunctuatedWatermarks<T>> watermarksPunctuated, StreamingRuntimeContext runtimeContext, OffsetCommitMode offsetCommitMode, MetricGroup kafkaMetricGroup, boolean useMetrics, IRecoveryManager recoveryManager) throws Exception {
+													  Map<KafkaTopicPartition, Long> subscribedPartitionsToStartOffsets, SerializedValue<AssignerWithPeriodicWatermarks<T>> watermarksPeriodic, SerializedValue<AssignerWithPunctuatedWatermarks<T>> watermarksPunctuated, StreamingRuntimeContext runtimeContext, OffsetCommitMode offsetCommitMode, MetricGroup kafkaMetricGroup, boolean useMetrics) throws Exception {
 			return null;
 		}
 
@@ -1028,12 +1032,12 @@ public class FlinkKafkaConsumerBaseTest extends TestLogger {
 
 	@SuppressWarnings("unchecked")
 	private static <T, S> void setupConsumer(
-			FlinkKafkaConsumerBase<T> consumer,
-			boolean isRestored,
-			ListState<S> restoredListState,
-			boolean isCheckpointingEnabled,
-			int subtaskIndex,
-			int totalNumSubtasks) throws Exception {
+		FlinkKafkaConsumerBase<T> consumer,
+		boolean isRestored,
+		ListState<S> restoredListState,
+		boolean isCheckpointingEnabled,
+		int subtaskIndex,
+		int totalNumSubtasks) throws Exception {
 
 		// run setup procedure in operator life cycle
 		consumer.setRuntimeContext(new MockStreamingRuntimeContext(isCheckpointingEnabled, totalNumSubtasks, subtaskIndex));
@@ -1054,23 +1058,23 @@ public class FlinkKafkaConsumerBaseTest extends TestLogger {
 		@SafeVarargs
 		private MockFetcher(HashMap<KafkaTopicPartition, Long>... stateSnapshotsToReturn) throws Exception {
 			super(
-					new TestSourceContext<>(),
-					new HashMap<>(),
-					null,
-					null,
-					new TestProcessingTimeService(),
-					0,
-					MockFetcher.class.getClassLoader(),
-					new UnregisteredMetricsGroup(),
-					false);
+				new TestSourceContext<>(),
+				new HashMap<>(),
+				null,
+				null,
+				new TestProcessingTimeService(),
+				0,
+				MockFetcher.class.getClassLoader(),
+				new UnregisteredMetricsGroup(),
+				false);
 
 			this.stateSnapshotsToReturn.addAll(Arrays.asList(stateSnapshotsToReturn));
 		}
 
 		@Override
 		protected void doCommitInternalOffsetsToKafka(
-				Map<KafkaTopicPartition, Long> offsets,
-				@Nonnull KafkaCommitCallback commitCallback) throws Exception {
+			Map<KafkaTopicPartition, Long> offsets,
+			@Nonnull KafkaCommitCallback commitCallback) throws Exception {
 			this.lastCommittedOffsets = offsets;
 			this.commitCount++;
 			commitCallback.onSuccess();
@@ -1189,6 +1193,21 @@ public class FlinkKafkaConsumerBaseTest extends TestLogger {
 		@Override
 		public KeyedStateStore getKeyedStateStore() {
 			throw new UnsupportedOperationException();
+		}
+
+		@Override
+		public RandomService getRandomService() {
+			return null;
+		}
+
+		@Override
+		public TimeService getTimeService() {
+			return null;
+		}
+
+		@Override
+		public SerializableServiceFactory getSerializableServiceFactory() {
+			return null;
 		}
 	}
 }

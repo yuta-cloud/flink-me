@@ -37,11 +37,11 @@ import java.util.Timer;
 public class DeterminantPool {
 
 
-	private static final int NUM_BASE_DETERMINANTS = 10;
+	private static final int NUM_BASE_DETERMINANTS = 2;
 	Queue<Determinant>[] determinantCache;
 
 	public DeterminantPool(){
-		determinantCache = new Queue[7];
+		determinantCache = new Queue[8];
 
 		determinantCache[OrderDeterminant.getTypeTag()] = new ArrayDeque<>();
 		for(int i = 0; i < NUM_BASE_DETERMINANTS; i++)
@@ -54,6 +54,10 @@ public class DeterminantPool {
 		determinantCache[RNGDeterminant.getTypeTag()] = new ArrayDeque<>();
 		for(int i = 0; i < NUM_BASE_DETERMINANTS; i++)
 			determinantCache[RNGDeterminant.getTypeTag()].add(new RNGDeterminant());
+
+		determinantCache[SerializableDeterminant.getTypeTag()] = new ArrayDeque<>();
+		for(int i = 0; i < NUM_BASE_DETERMINANTS; i++)
+			determinantCache[SerializableDeterminant.getTypeTag()].add(new SerializableDeterminant());
 
 		determinantCache[TimerTriggerDeterminant.getTypeTag()] = new ArrayDeque<>();
 		for(int i = 0; i < NUM_BASE_DETERMINANTS; i++)
@@ -126,5 +130,12 @@ public class DeterminantPool {
 		if(q.isEmpty())
 			q.add(new BufferBuiltDeterminant());
 		return (BufferBuiltDeterminant) q.poll();
+	}
+
+	public SerializableDeterminant getSerializableDeterminant() {
+		Queue<Determinant> q = determinantCache[Determinant.SERIALIZABLE_DETERMINANT_TAG];
+		if(q.isEmpty())
+			q.add(new SerializableDeterminant());
+		return (SerializableDeterminant) q.poll();
 	}
 }

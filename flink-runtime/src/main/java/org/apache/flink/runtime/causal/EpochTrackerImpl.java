@@ -84,7 +84,8 @@ public final class EpochTrackerImpl implements EpochTracker {
 	public final void incRecordCount() {
 		recordCount++;
 
-		LOG.debug("incRecordCount: current={}, target={}", recordCount, recordCountTarget);
+		if (LOG.isDebugEnabled())
+			LOG.debug("incRecordCount: current={}, target={}", recordCount, recordCountTarget);
 		//Before returning control to the caller, check if we first should execute async nondeterministic event
 		fireAnyAsyncEvent();
 	}
@@ -93,7 +94,8 @@ public final class EpochTrackerImpl implements EpochTracker {
 	public final void startNewEpoch(long epochID) {
 		recordCount = 0;
 		currentEpoch = epochID;
-		LOG.debug("resetRecordCount: current={}, target={}", recordCount, recordCountTarget);
+		if (LOG.isDebugEnabled())
+			LOG.debug("resetRecordCount: current={}, target={}", recordCount, recordCountTarget);
 		for (EpochStartListener listener : epochStartListeners)
 			listener.notifyEpochStart(epochID);
 		//check if async event is first event of the epoch
@@ -103,13 +105,15 @@ public final class EpochTrackerImpl implements EpochTracker {
 	@Override
 	public void setRecordCountTarget(int target) {
 		this.recordCountTarget = target;
-		LOG.debug("setRecordCountTarget: current={}, target={}", recordCount, recordCountTarget);
+		if (LOG.isDebugEnabled())
+			LOG.debug("setRecordCountTarget: current={}, target={}", recordCount, recordCountTarget);
 		fireAnyAsyncEvent();
 	}
 
 	private void fireAnyAsyncEvent() {
 		while (recordCountTarget == recordCount) {
-			LOG.debug("Hit target of {}!", recordCountTarget);
+			if (LOG.isDebugEnabled())
+				LOG.debug("Hit target of {}!", recordCountTarget);
 			recordCountTarget = NO_RECORD_COUNT_TARGET;
 			recoveryManager.getLogReplayer().triggerAsyncEvent();
 		}
@@ -127,6 +131,7 @@ public final class EpochTrackerImpl implements EpochTracker {
 
 	@Override
 	public void notifyCheckpointComplete(long checkpointId) {
+		LOG.info("Notified of checkpoint complete {}", checkpointId);
 		for (CheckpointListener c : checkpointCompleteListeners) {
 			try {
 				c.notifyCheckpointComplete(checkpointId);

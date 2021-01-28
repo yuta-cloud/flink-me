@@ -20,6 +20,8 @@ package org.apache.flink.streaming.runtime.tasks;
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.accumulators.Accumulator;
+import org.apache.flink.api.common.services.SerializableService;
+import org.apache.flink.api.common.services.SerializableServiceFactory;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.core.fs.CloseableRegistry;
 import org.apache.flink.core.fs.FileSystemSafetyNet;
@@ -35,6 +37,7 @@ import org.apache.flink.runtime.causal.recovery.RecoveryManager;
 import org.apache.flink.runtime.causal.recovery.RecoveryManagerContext;
 import org.apache.flink.api.common.services.RandomService;
 import org.apache.flink.api.common.services.TimeService;
+import org.apache.flink.runtime.causal.services.CausalSerializableServiceFactory;
 import org.apache.flink.runtime.causal.services.DeterministicCausalRandomService;
 import org.apache.flink.runtime.causal.services.PeriodicCausalTimeService;
 import org.apache.flink.runtime.checkpoint.CheckpointMetaData;
@@ -232,6 +235,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 	private final TimeService timeService;
 	private final RandomService randomService;
+	private final SerializableServiceFactory serializableServiceFactory;
 	private final EpochTracker epochTracker;
 
 	private final SourceCheckpointDeterminant reuseSourceCheckpointDeterminant;
@@ -301,6 +305,8 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 		this.timeService = new PeriodicCausalTimeService(causalLog, recoveryManager,
 			getExecutionConfig().getAutoTimeSetterInterval());
 		this.randomService = new DeterministicCausalRandomService(causalLog, recoveryManager);
+		this.serializableServiceFactory = new CausalSerializableServiceFactory(recoveryManager, causalLog);
+
 
 		this.streamRecordWriters = createStreamRecordWriters(configuration, environment, randomService, epochTracker);
 		for (StreamRecordWriter<SerializationDelegate<StreamRecord<OUT>>> streamRecordWriter : streamRecordWriters)
@@ -1084,6 +1090,9 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 		return timeService;
 	}
 
+	public SerializableServiceFactory getSerializableServiceFactory() {
+		return serializableServiceFactory;
+	}
 
 	// ------------------------------------------------------------------------
 

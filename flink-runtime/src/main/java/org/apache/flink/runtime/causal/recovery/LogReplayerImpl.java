@@ -31,6 +31,8 @@ import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.Serializable;
+
 public class LogReplayerImpl implements LogReplayer {
 
 	private static final Logger LOG = LoggerFactory.getLogger(LogReplayer.class);
@@ -83,6 +85,17 @@ public class LogReplayerImpl implements LogReplayer {
 	}
 
 	@Override
+	public Object replaySerializableDeterminant() {
+		assert nextDeterminant instanceof SerializableDeterminant;
+		final SerializableDeterminant serializableDeterminant = (SerializableDeterminant) nextDeterminant;
+		deserializeNext();
+		Object toReturn = serializableDeterminant.getDeterminant();
+		postHook(serializableDeterminant);
+		return toReturn;
+	}
+
+
+	@Override
 	public void triggerAsyncEvent() {
 		assert nextDeterminant instanceof AsyncDeterminant;
 		AsyncDeterminant asyncDeterminant = (AsyncDeterminant) nextDeterminant;
@@ -114,6 +127,7 @@ public class LogReplayerImpl implements LogReplayer {
 			context.owner.setState(new RunningState(context.owner, context));
 		}
 	}
+
 
 	private void deserializeNext() {
 		nextDeterminant = null;

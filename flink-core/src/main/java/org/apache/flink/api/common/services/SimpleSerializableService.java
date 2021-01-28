@@ -23,19 +23,21 @@
  *
  */
 
-package org.apache.flink.runtime.causal.recovery;
+package org.apache.flink.api.common.services;
 
-public interface LogReplayer {
+import java.io.Serializable;
+import java.util.function.Function;
 
-	void triggerAsyncEvent();
+public class SimpleSerializableService<I,O extends Serializable> implements SerializableService<I,O> {
 
-	int replayRandomInt();
+	private final Function<I, O> f;
 
-	byte replayNextChannel();
+	public SimpleSerializableService(Function<I, O> f) {
+		this.f = f;
+	}
 
-	long replayNextTimestamp();
-
-	void checkFinished();
-
-    Object replaySerializableDeterminant();
+	@Override
+	public O apply(I i) {
+		return f.apply(i);
+	}
 }

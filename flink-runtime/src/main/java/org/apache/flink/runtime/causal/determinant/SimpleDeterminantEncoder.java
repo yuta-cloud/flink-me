@@ -21,7 +21,13 @@ package org.apache.flink.runtime.causal.determinant;
 import org.apache.flink.runtime.causal.recovery.DeterminantPool;
 import org.apache.flink.runtime.checkpoint.CheckpointType;
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
+import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBufInputStream;
+import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBufOutputStream;
 import org.apache.flink.shaded.netty4.io.netty.buffer.Unpooled;
+
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 
 public class SimpleDeterminantEncoder implements DeterminantEncoder {
 
@@ -33,6 +39,8 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 			return encodeTimestampDeterminant(determinant.asTimestampDeterminant());
 		if (determinant.isRNGDeterminant())
 			return encodeRNGDeterminant(determinant.asRNGDeterminant());
+		if (determinant.isSerializableDeterminant())
+			return encodeSerializableDeterminant(determinant.asSerializableDeterminant());
 		if (determinant.isBufferBuiltDeterminant())
 			return encodeBufferBuiltDeterminant(determinant.asBufferBuiltDeterminant());
 		if (determinant.isTimerTriggerDeterminant())
@@ -48,18 +56,22 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 	public void encodeTo(Determinant determinant, ByteBuf targetBuf) {
 		if (determinant.isOrderDeterminant())
 			encodeOrderDeterminant(determinant.asOrderDeterminant(), targetBuf);
-		if (determinant.isTimestampDeterminant())
+		else if (determinant.isTimestampDeterminant())
 			encodeTimestampDeterminant(determinant.asTimestampDeterminant(), targetBuf);
-		if (determinant.isRNGDeterminant())
+		else if (determinant.isRNGDeterminant())
 			encodeRNGDeterminant(determinant.asRNGDeterminant(), targetBuf);
-		if (determinant.isBufferBuiltDeterminant())
+		else if (determinant.isSerializableDeterminant())
+			encodeSerializableDeterminant(determinant.asSerializableDeterminant(), targetBuf);
+		else if (determinant.isBufferBuiltDeterminant())
 			encodeBufferBuiltDeterminant(determinant.asBufferBuiltDeterminant(), targetBuf);
-		if (determinant.isTimerTriggerDeterminant())
+		else if (determinant.isTimerTriggerDeterminant())
 			encodeTimerTriggerDeterminant(determinant.asTimerTriggerDeterminant(), targetBuf);
-		if (determinant.isSourceCheckpointDeterminant())
+		else if (determinant.isSourceCheckpointDeterminant())
 			encodeSourceCheckpointDeterminant(determinant.asSourceCheckpointDeterminant(), targetBuf);
-		if (determinant.isIgnoreCheckpointDeterminant())
+		else if (determinant.isIgnoreCheckpointDeterminant())
 			encodeIgnoreCheckpointDeterminant(determinant.asIgnoreCheckpointDeterminant(), targetBuf);
+		else
+			throw new UnknownDeterminantTypeException();
 	}
 
 	@Override
@@ -72,12 +84,14 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 		if (tag == Determinant.ORDER_DETERMINANT_TAG) return decodeOrderDeterminant(b);
 		if (tag == Determinant.TIMESTAMP_DETERMINANT_TAG) return decodeTimestampDeterminant(b);
 		if (tag == Determinant.RNG_DETERMINANT_TAG) return decodeRNGDeterminant(b);
+		if (tag == Determinant.SERIALIZABLE_DETERMINANT_TAG) return decodeSerializableDeterminant(b);
 		if (tag == Determinant.BUFFER_BUILT_TAG) return decodeBufferBuiltDeterminant(b);
 		if (tag == Determinant.TIMER_TRIGGER_DETERMINANT) return decodeTimerTriggerDeterminant(b);
 		if (tag == Determinant.SOURCE_CHECKPOINT_DETERMINANT) return decodeSourceCheckpointDeterminant(b);
 		if (tag == Determinant.IGNORE_CHECKPOINT_DETERMINANT) return decodeIgnoreCheckpointDeterminant(b);
 		throw new CorruptDeterminantArrayException(tag);
 	}
+
 
 	@Override
 	public Determinant decodeNext(ByteBuf b, DeterminantPool determinantCache) {
@@ -89,12 +103,14 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 		if (tag == Determinant.ORDER_DETERMINANT_TAG) return decodeOrderDeterminant(b, determinantCache.getOrderDeterminant());
 		if (tag == Determinant.TIMESTAMP_DETERMINANT_TAG) return decodeTimestampDeterminant(b, determinantCache.getTimestampDeterminant());
 		if (tag == Determinant.RNG_DETERMINANT_TAG) return decodeRNGDeterminant(b, determinantCache.getRNGDeterminant());
+		if (tag == Determinant.SERIALIZABLE_DETERMINANT_TAG) return decodeSerializableDeterminant(b, determinantCache.getSerializableDeterminant());
 		if (tag == Determinant.BUFFER_BUILT_TAG) return decodeBufferBuiltDeterminant(b, determinantCache.getBufferBuiltDeterminant());
 		if (tag == Determinant.TIMER_TRIGGER_DETERMINANT) return decodeTimerTriggerDeterminant(b, determinantCache.getTimerTriggerDeterminant());
 		if (tag == Determinant.SOURCE_CHECKPOINT_DETERMINANT) return decodeSourceCheckpointDeterminant(b, determinantCache.getSourceCheckpointDeterminant());
 		if (tag == Determinant.IGNORE_CHECKPOINT_DETERMINANT) return decodeIgnoreCheckpointDeterminant(b, determinantCache.getIgnoreCheckpointDeterminant());
 		throw new CorruptDeterminantArrayException(tag);
 	}
+
 
 	@Override
 	public Determinant decodeOrderDeterminant(ByteBuf b) {
@@ -295,5 +311,32 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 		long checkpoint = b.readLong();
 		return reuse.replace(recCount, checkpoint);
 
+	}
+
+	private void encodeSerializableDeterminant(SerializableDeterminant serializableDeterminant, ByteBuf buf) {
+		try {
+			buf.writeByte(Determinant.SERIALIZABLE_DETERMINANT_TAG);
+			ByteBufOutputStream bbos = new ByteBufOutputStream(buf);
+			ObjectOutputStream oos = new ObjectOutputStream(bbos);
+			oos.writeObject(serializableDeterminant.getDeterminant());
+		}catch (Exception e){e.printStackTrace();}
+	}
+	private byte[] encodeSerializableDeterminant(SerializableDeterminant serializableDeterminant) {
+		byte[] bytes = new byte[serializableDeterminant.getEncodedSizeInBytes()];
+		ByteBuf buf = Unpooled.wrappedBuffer(bytes);
+		encodeSerializableDeterminant(serializableDeterminant, buf);
+		return bytes;
+	}
+	private Determinant decodeSerializableDeterminant(ByteBuf b) {
+		return decodeSerializableDeterminant(b, new SerializableDeterminant());
+	}
+	private Determinant decodeSerializableDeterminant(ByteBuf b, SerializableDeterminant reuse) {
+
+		try {
+			ByteBufInputStream bbis = new ByteBufInputStream(b);
+			ObjectInputStream ois = new ObjectInputStream(bbis);
+			reuse.replace(ois.readObject());
+		}catch (Exception e) {e.printStackTrace();}
+		return reuse;
 	}
 }

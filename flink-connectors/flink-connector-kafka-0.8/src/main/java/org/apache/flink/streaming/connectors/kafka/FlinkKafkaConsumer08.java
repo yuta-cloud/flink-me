@@ -242,7 +242,7 @@ public class FlinkKafkaConsumer08<T> extends FlinkKafkaConsumerBase<T> {
 		StreamingRuntimeContext runtimeContext,
 		OffsetCommitMode offsetCommitMode,
 		MetricGroup consumerMetricGroup,
-		boolean useMetrics, IRecoveryManager recoveryManager) throws Exception {
+		boolean useMetrics) throws Exception {
 
 		long autoCommitInterval = (offsetCommitMode == OffsetCommitMode.KAFKA_PERIODIC)
 				? PropertiesUtil.getLong(kafkaProperties, "auto.commit.interval.ms", 60000)

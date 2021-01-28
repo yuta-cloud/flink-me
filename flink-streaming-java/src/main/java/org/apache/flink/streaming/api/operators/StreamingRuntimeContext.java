@@ -37,6 +37,7 @@ import org.apache.flink.api.common.state.StateDescriptor;
 import org.apache.flink.api.common.state.ValueState;
 import org.apache.flink.api.common.state.ValueStateDescriptor;
 import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
+import org.apache.flink.runtime.causal.services.CausalSerializableServiceFactory;
 import org.apache.flink.runtime.execution.Environment;
 import org.apache.flink.runtime.jobgraph.tasks.InputSplitProvider;
 import org.apache.flink.streaming.api.CheckpointingMode;
@@ -54,32 +55,34 @@ import java.util.Map;
 @Internal
 public class StreamingRuntimeContext extends AbstractRuntimeUDFContext {
 
-	/** The operator to which this function belongs. */
+	/**
+	 * The operator to which this function belongs.
+	 */
 	private final AbstractStreamOperator<?> operator;
 
-	/** The task environment running the operator. */
+	/**
+	 * The task environment running the operator.
+	 */
 	private final Environment taskEnvironment;
 
 	private final StreamConfig streamConfig;
 
 	private final String operatorUniqueID;
 
-
-	private final IRecoveryManager recoveryManager;
-
 	public StreamingRuntimeContext(AbstractStreamOperator<?> operator,
-								   Environment env, Map<String, Accumulator<?, ?>> accumulators){
+								   Environment env, Map<String, Accumulator<?, ?>> accumulators) {
 		super(env.getTaskInfo(),
-				env.getUserClassLoader(),
-				operator.getExecutionConfig(),
-				accumulators,
-				env.getDistributedCacheEntries(),
-				operator.getMetricGroup(),operator.getContainingTask().getTimeService(),operator.getContainingTask().getRandomService());
+			env.getUserClassLoader(),
+			operator.getExecutionConfig(),
+			accumulators,
+			env.getDistributedCacheEntries(),
+			operator.getMetricGroup(), operator.getContainingTask().getTimeService(),
+			operator.getContainingTask().getRandomService(),
+			operator.getContainingTask().getSerializableServiceFactory());
 		this.operator = operator;
 		this.taskEnvironment = env;
 		this.streamConfig = new StreamConfig(env.getTaskConfiguration());
 		this.operatorUniqueID = operator.getOperatorID().toString();
-		this.recoveryManager = operator.getContainingTask().getRecoveryManager();
 	}
 
 	// ------------------------------------------------------------------------
@@ -107,15 +110,6 @@ public class StreamingRuntimeContext extends AbstractRuntimeUDFContext {
 	 */
 	public String getOperatorUniqueID() {
 		return operatorUniqueID;
-	}
-
-	/**
-	 * Returns the task's recovery manager.
-	 * Certain special functions may need to use the recovery manager.
-	 * One example is the Kafka consumer, who needs it to ensure that watermarks are emitted at the correct points.
-	 */
-	public IRecoveryManager getRecoveryManager(){
-		return recoveryManager;
 	}
 
 	// ------------------------------------------------------------------------

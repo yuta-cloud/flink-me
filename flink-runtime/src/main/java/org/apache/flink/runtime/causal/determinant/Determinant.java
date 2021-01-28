@@ -19,13 +19,19 @@ package org.apache.flink.runtime.causal.determinant;
 
 public abstract class Determinant {
 
+	//Synchronous
 	public static final byte ORDER_DETERMINANT_TAG = 0;
 	public static final byte TIMESTAMP_DETERMINANT_TAG = 1;
 	public static final byte RNG_DETERMINANT_TAG = 2;
-	public static final byte TIMER_TRIGGER_DETERMINANT = 3;
-	public static final byte SOURCE_CHECKPOINT_DETERMINANT = 4;
-	public static final byte IGNORE_CHECKPOINT_DETERMINANT = 5;
-	public static final byte BUFFER_BUILT_TAG = 6;
+	public static final byte SERIALIZABLE_DETERMINANT_TAG = 3;
+
+	//Asynchronous
+	public static final byte TIMER_TRIGGER_DETERMINANT = 4;
+	public static final byte SOURCE_CHECKPOINT_DETERMINANT = 5;
+	public static final byte IGNORE_CHECKPOINT_DETERMINANT = 6;
+
+	//Output
+	public static final byte BUFFER_BUILT_TAG = 7;
 
 
 	public boolean isOrderDeterminant() {
@@ -50,6 +56,15 @@ public abstract class Determinant {
 
 	public RNGDeterminant asRNGDeterminant() {
 		return (RNGDeterminant) this;
+	}
+
+
+	public boolean isSerializableDeterminant() {
+		return this instanceof SerializableDeterminant;
+	}
+
+	public SerializableDeterminant asSerializableDeterminant() {
+		return (SerializableDeterminant) this;
 	}
 
 	public boolean isBufferBuiltDeterminant() {
@@ -82,26 +97,28 @@ public abstract class Determinant {
 		return getClass() == IgnoreCheckpointDeterminant.class;
 	}
 
-	public IgnoreCheckpointDeterminant asIgnoreCheckpointDeterminant(){
+	public IgnoreCheckpointDeterminant asIgnoreCheckpointDeterminant() {
 		return (IgnoreCheckpointDeterminant) this;
 	}
 
-	public int getEncodedSizeInBytes(){
+	public int getEncodedSizeInBytes() {
 		return Byte.BYTES;
 	}
 
-	public byte getTag(){
-		if(this instanceof OrderDeterminant)
+	public byte getTag() {
+		if (this instanceof OrderDeterminant)
 			return ORDER_DETERMINANT_TAG;
-		if(this instanceof TimestampDeterminant)
+		if (this instanceof TimestampDeterminant)
 			return TIMESTAMP_DETERMINANT_TAG;
-		if(this instanceof RNGDeterminant)
+		if (this instanceof RNGDeterminant)
 			return RNG_DETERMINANT_TAG;
-		if(this instanceof TimerTriggerDeterminant)
+		if (this instanceof SerializableDeterminant)
+			return SERIALIZABLE_DETERMINANT_TAG;
+		if (this instanceof TimerTriggerDeterminant)
 			return TIMER_TRIGGER_DETERMINANT;
-		if(this instanceof SourceCheckpointDeterminant)
+		if (this instanceof SourceCheckpointDeterminant)
 			return SOURCE_CHECKPOINT_DETERMINANT;
-		if(this instanceof IgnoreCheckpointDeterminant)
+		if (this instanceof IgnoreCheckpointDeterminant)
 			return IGNORE_CHECKPOINT_DETERMINANT;
 		return BUFFER_BUILT_TAG;
 	}

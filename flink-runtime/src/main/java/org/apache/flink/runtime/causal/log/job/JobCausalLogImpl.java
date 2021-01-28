@@ -229,10 +229,16 @@ public class JobCausalLogImpl implements JobCausalLog {
 	@Override
 	public void notifyCheckpointComplete(long checkpointID) {
 		long current = latestCompletedCheckpoint.get();
+		if(LOG.isDebugEnabled())
+			LOG.debug("Notified of checkpoint {} completion, current latest is {}", checkpointID, current);
 		if (current >= checkpointID)
 			return;
 
+		//Using an atomic because multiple tasks of the same job, on the same node can concurrently try to update this.
 		if (latestCompletedCheckpoint.compareAndSet(current, checkpointID)) {
+			if(LOG.isDebugEnabled())
+				LOG.debug("Notified of checkpoint {} completion, current latest is {}", checkpointID, current);
+			LOG.debug("Checkpoint completion {} is a new event, notifying threadCausalLogs", checkpointID);
 			for (ThreadCausalLog threadCausalLog : flatThreadCausalLogs.values()) {
 				threadCausalLog.notifyCheckpointComplete(checkpointID);
 			}

@@ -518,11 +518,13 @@ public class ResultPartition implements ResultPartitionWriter, BufferPoolOwner {
 
 	public boolean isPoolAvailabilityLow() {
 		float availability = computePoolAvailability();
-		LOG.info("In-Flight Availability: {} < {} ", availability, availabilityFillFactor);
+		if(LOG.isDebugEnabled())
+			LOG.debug("In-Flight buffer pool: {}% available. Trigger spill if below {}% ", availability * 100, availabilityFillFactor *100);
 
 		return availability <= availabilityFillFactor;
 	}
 
+	//Returns 1 if no buffers are used. Returns 0 if all buffers are used.
 	private float computePoolAvailability() {
 		if (inFlightBufferPool == null || inFlightBufferPool.isDestroyed())
 			return 1;

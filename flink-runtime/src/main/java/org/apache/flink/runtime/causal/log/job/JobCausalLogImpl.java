@@ -281,13 +281,13 @@ public class JobCausalLogImpl implements JobCausalLog {
 		public void run() {
 			while(!shutdown){
 				try {
-					Thread.sleep(100);
+					Thread.sleep(1000);
 				} catch (InterruptedException e) {
 					e.printStackTrace();
 				}
 				if(!bufferPool.isDestroyed()) {
 					int used = bufferPool.bestEffortGetNumOfUsedBuffers();
-					LOG.info("Determinant availability {}/{}={}", used, total, used / total);
+					LOG.info("Determinant availability {} used/{} total={}% used", used, total, used / total * 100);
 				}
 			}
 		}

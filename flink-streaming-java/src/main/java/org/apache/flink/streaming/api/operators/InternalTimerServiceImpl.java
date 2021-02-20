@@ -121,7 +121,7 @@ public class InternalTimerServiceImpl<K, N> implements InternalTimerService<N>, 
 			startIdx = Math.min(keyGroupIdx, startIdx);
 		}
 		this.localKeyGroupRangeStartIdx = startIdx;
-		this.processingTimeCallbackID = new ProcessingTimeCallbackID(name);
+		this.processingTimeCallbackID = new ProcessingTimeCallbackID("" + name.hashCode() % 1000);
 	}
 
 	/**

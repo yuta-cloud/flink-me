@@ -322,7 +322,7 @@ class PartitionRequestQueue extends ChannelInboundHandlerAdapter {
 				"In producer side: Connection unexpectedly closed by remote task manager '" + remoteAddr + "'. "
 					+ "This might indicate that the remote task manager was lost.", remoteAddr);
 		LOG.error("Channel {} inactive. Release all resources.", ctx.channel(), cause);
-		releaseAllResources(cause);
+		releaseAllResources();
 
 		ctx.fireChannelInactive();
 	}

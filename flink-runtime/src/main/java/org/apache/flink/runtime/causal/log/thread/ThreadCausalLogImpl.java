@@ -79,6 +79,7 @@ public class ThreadCausalLogImpl implements ThreadCausalLog {
 
 	private final int determinantSharingDepth;
 
+	private final int bufferComponentSize;
 	/**
 	 * This constructor is used for upstream logs as they do not require a determinant encoder
 	 */
@@ -107,6 +108,7 @@ public class ThreadCausalLogImpl implements ThreadCausalLog {
 		ReadWriteLock epochLock = new ReentrantReadWriteLock();
 		epochReadLock = epochLock.readLock();
 		epochWriteLock = epochLock.writeLock();
+		this.bufferComponentSize = bufferPool.getMemorySegmentSize();
 	}
 
 
@@ -162,11 +164,13 @@ public class ThreadCausalLogImpl implements ThreadCausalLog {
 				determinantEncodedSize);
 		epochReadLock.lock();
 		try {
-			epochStartOffsets.computeIfAbsent(epochID, k -> new EpochStartOffset(k, visibleWriterIndex.get()));
-			while (notEnoughSpaceFor(determinantEncodedSize))
-				addComponent();
-			determinantEncoder.encodeTo(determinant, buf);
-			visibleWriterIndex.addAndGet(determinantEncodedSize);
+			synchronized (buf) {
+				epochStartOffsets.computeIfAbsent(epochID, k -> new EpochStartOffset(k, visibleWriterIndex.get()));
+				while (notEnoughSpaceFor(determinantEncodedSize))
+					addComponent();
+				determinantEncoder.encodeTo(determinant, buf);
+				visibleWriterIndex.addAndGet(determinantEncodedSize);
+			}
 		} finally {
 			epochReadLock.unlock();
 		}
@@ -255,7 +259,9 @@ public class ThreadCausalLogImpl implements ThreadCausalLog {
 			if (numBytesToSend == 0)
 				update = Unpooled.EMPTY_BUFFER;
 			else
-				update = makeDeltaUnsafe(physicalConsumerOffset, numBytesToSend);
+				synchronized (buf) {
+					update = makeDeltaUnsafe(physicalConsumerOffset, numBytesToSend);
+				}
 
 			ByteBuf toReturn = update;
 			consumerOffset.setOffset(consumerOffset.getOffset() + numBytesToSend);
@@ -291,7 +297,9 @@ public class ThreadCausalLogImpl implements ThreadCausalLog {
 			int writerPos = visibleWriterIndex.get();
 			int numBytesToSend = writerPos - startIndex;
 
-			result = makeDeltaUnsafe(startIndex, numBytesToSend);
+			synchronized (buf) {
+				result = makeDeltaUnsafe(startIndex, numBytesToSend);
+			}
 
 		} finally {
 			epochReadLock.unlock();
@@ -354,12 +362,11 @@ public class ThreadCausalLogImpl implements ThreadCausalLog {
 
 		int currIndex = srcOffset;
 		int numBytesLeft = numBytesToSend;
-		int bufferComponentSizes = bufferPool.getMemorySegmentSize();
 		while (numBytesLeft != 0) {
-			int bufferIndex = currIndex / bufferComponentSizes;
-			int indexInBuffer = currIndex % bufferComponentSizes;
+			int bufferIndex = currIndex / bufferComponentSize;
+			int indexInBuffer = currIndex % bufferComponentSize;
 			ByteBuf component = buf.internalComponent(bufferIndex);
-			int numBytesFromBuf = Math.min(numBytesLeft, bufferComponentSizes - indexInBuffer);
+			int numBytesFromBuf = Math.min(numBytesLeft, bufferComponentSize - indexInBuffer);
 			if (numBytesFromBuf > 0)
 				result.addComponent(true, component.retainedSlice(indexInBuffer, numBytesFromBuf));
 

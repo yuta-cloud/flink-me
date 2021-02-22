@@ -131,7 +131,7 @@ public class LogReplayerImpl implements LogReplayer {
 
 	private void deserializeNext() {
 		nextDeterminant = null;
-		if (log.isReadable())
+		if (log!= null && log.isReadable())
 			nextDeterminant = determinantEncoder.decodeNext(log, determinantPool);
 	}
 

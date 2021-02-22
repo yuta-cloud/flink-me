@@ -134,12 +134,10 @@ public class ClientTransportErrorHandlingTest {
 		}).when(rich[1]).onError(isA(LocalTransportException.class));
 
 		// First request is successful
-		ChannelFuture f = requestClient.requestSubpartition(new ResultPartitionID(), 0, rich[0], 0);
-		assertTrue(f.await().isSuccess());
+		requestClient.requestSubpartition(new ResultPartitionID(), 0, rich[0], 0);
 
 		// Second request is *not* successful
-		f = requestClient.requestSubpartition(new ResultPartitionID(), 0, rich[1], 0);
-		assertFalse(f.await().isSuccess());
+		requestClient.requestSubpartition(new ResultPartitionID(), 0, rich[1], 0);
 
 		// Only the second channel should be notified about the error
 		verify(rich[0], times(0)).onError(any(LocalTransportException.class));

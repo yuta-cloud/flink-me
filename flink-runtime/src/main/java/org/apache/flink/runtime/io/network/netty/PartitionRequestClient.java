@@ -105,7 +105,7 @@ public class PartitionRequestClient {
 	 * <p>The request goes to the remote producer, for which this partition
 	 * request client instance has been created.
 	 */
-	public ChannelFuture requestSubpartition(
+	public void requestSubpartition(
 			final ResultPartitionID partitionId,
 			final int subpartitionIndex,
 			final RemoteInputChannel inputChannel,
@@ -140,7 +140,6 @@ public class PartitionRequestClient {
 		if (delayMs == 0) {
 			ChannelFuture f = tcpChannel.writeAndFlush(request);
 			f.addListener(listener);
-			return f;
 		} else {
 			final ChannelFuture[] f = new ChannelFuture[1];
 			tcpChannel.eventLoop().schedule(new Runnable() {
@@ -151,7 +150,6 @@ public class PartitionRequestClient {
 				}
 			}, delayMs, TimeUnit.MILLISECONDS);
 
-			return f[0];
 		}
 	}
 

@@ -31,6 +31,7 @@ import org.apache.flink.runtime.io.network.buffer.BufferProvider;
 import org.apache.flink.runtime.io.network.buffer.BufferRecycler;
 import org.apache.flink.runtime.io.network.buffer.NetworkBuffer;
 import org.apache.flink.runtime.io.network.netty.PartitionRequestClient;
+import org.apache.flink.runtime.io.network.netty.exception.LocalTransportException;
 import org.apache.flink.runtime.io.network.partition.PartitionNotFoundException;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionManager;
@@ -621,7 +622,11 @@ public class RemoteInputChannel extends InputChannel implements BufferRecycler, 
 	}
 
 	public void onError(Throwable cause) {
-		setError(cause);
+		if(cause instanceof LocalTransportException) {
+			this.partitionRequestClient = null;
+			inputGate.triggerPartitionStateCheck(partitionId);
+		}else
+			setError(cause);
 	}
 
 	private static class BufferReorderingException extends IOException {

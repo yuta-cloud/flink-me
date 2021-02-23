@@ -39,17 +39,19 @@ if [ "$1" = "help" ]; then
     echo "Usage: $(basename $0) (jobmanager|taskmanager)"
     exit 0
 elif [ "$1" = "jobmanager" ]; then
+		shift 1
     echo "Starting Job Manager"
     sed -i -e "s/jobmanager.rpc.address: localhost/jobmanager.rpc.address: ${JOB_MANAGER_RPC_ADDRESS}/g" $FLINK_HOME/conf/flink-conf.yaml
 
-    exec $(drop_privs_cmd) "$FLINK_HOME/bin/jobmanager.sh" start-foreground
+    exec $(drop_privs_cmd) "$FLINK_HOME/bin/jobmanager.sh" start-foreground "$@"
 elif [ "$1" = "taskmanager" ]; then
 
+		shift 1
     sed -i -e "s/jobmanager.rpc.address: localhost/jobmanager.rpc.address: ${JOB_MANAGER_RPC_ADDRESS}/g" $FLINK_HOME/conf/flink-conf.yaml
     #sed -i -e "s/taskmanager.numberOfTaskSlots: 1/taskmanager.numberOfTaskSlots: $(grep -c ^processor /proc/cpuinfo)/g" $FLINK_HOME/conf/flink-conf.yaml
 
     echo "Starting Task Manager"
-    exec $(drop_privs_cmd) "$FLINK_HOME/bin/taskmanager.sh" start-foreground
+    exec $(drop_privs_cmd) "$FLINK_HOME/bin/taskmanager.sh" start-foreground "$@"
 fi
 
 exec "$@"

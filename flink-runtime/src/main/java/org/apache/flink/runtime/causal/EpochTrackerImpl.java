@@ -95,11 +95,16 @@ public final class EpochTrackerImpl implements EpochTracker {
 		recordCount = 0;
 		currentEpoch = epochID;
 		if (LOG.isDebugEnabled())
-			LOG.debug("resetRecordCount: current={}, target={}", recordCount, recordCountTarget);
+			LOG.debug("startNewEpoch: epoch={}, current={}, target={}", epochID, recordCount, recordCountTarget);
 		for (EpochStartListener listener : epochStartListeners)
 			listener.notifyEpochStart(epochID);
 		//check if async event is first event of the epoch
 		fireAnyAsyncEvent();
+	}
+
+	@Override
+	public void setEpoch(long epochID) {
+		this.currentEpoch = epochID;
 	}
 
 	@Override

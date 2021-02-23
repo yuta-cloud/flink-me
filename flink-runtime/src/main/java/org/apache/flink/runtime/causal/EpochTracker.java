@@ -43,6 +43,8 @@ public interface EpochTracker {
 
 	void startNewEpoch(long epochID);
 
+	void setEpoch(long epochID);
+
 	void setRecordCountTarget(int target);
 
 	void setRecoveryManager(IRecoveryManager recoveryManager);

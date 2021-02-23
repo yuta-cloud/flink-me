@@ -99,6 +99,7 @@ public abstract class AbstractState implements State {
 	public void notifyStateRestorationComplete(long checkpointId) {
 		logInfoWithVertexID("Completed restoring state of checkpoint {}", checkpointId);
 		this.context.incompleteStateRestorations.remove(checkpointId);
+		this.context.epochTracker.setEpoch(checkpointId);
 	}
 
 	@Override

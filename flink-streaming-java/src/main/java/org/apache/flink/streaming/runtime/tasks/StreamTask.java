@@ -446,7 +446,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 			//This will restore the periodic timer timestamp, which may be needed in open...
 			//But the "open" timestamp requests did not happen prior to failure, so maybe nondeterministic.
 			//On the other hand, execution of the timers must come after the call to open.
-			epochTracker.startNewEpoch(getEnvironment().getTaskStateManager().getCurrentCheckpointRestoreID());
+			epochTracker.startNewEpoch(epochTracker.getCurrentEpoch());
 
 			// final check to exit early before starting to run
 			if (canceled) {

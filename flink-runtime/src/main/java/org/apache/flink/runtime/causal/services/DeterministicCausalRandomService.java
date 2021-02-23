@@ -71,12 +71,12 @@ public class DeterministicCausalRandomService extends AbstractCausalService impl
 				LOG.debug("nextInt(): (State: RECOVERING) Replayed seed is {}", seed);
 		} else {
 			seed = (int) System.currentTimeMillis();
-			threadCausalLog.appendDeterminant(reuseRNGDeterminant.replace(seed), epochTracker.getCurrentEpoch());
 			if (LOG.isDebugEnabled())
 				LOG.debug("nextInt(): (State: RUNNING) Fresh seed is {}", seed);
 		}
 
 		rng.setSeed(seed);
+		threadCausalLog.appendDeterminant(reuseRNGDeterminant.replace(seed), epochTracker.getCurrentEpoch());
 	}
 
 	@Override

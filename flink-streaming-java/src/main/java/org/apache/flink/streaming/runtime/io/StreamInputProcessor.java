@@ -230,6 +230,8 @@ public class StreamInputProcessor<IN> {
 		final BufferOrEvent bufferOrEvent = barrierHandler.getNextNonBlocked();
 		if (bufferOrEvent != null) {
 			if (bufferOrEvent.isBuffer()) {
+				if(LOG.isDebugEnabled())
+					LOG.debug("Input buffer size: {}", bufferOrEvent.getBuffer().getSize());
 				currentChannel = bufferOrEvent.getChannelIndex();
 				currentRecordDeserializer = recordDeserializers[currentChannel];
 				currentRecordDeserializer.setNextBuffer(bufferOrEvent.getBuffer());

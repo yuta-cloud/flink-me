@@ -76,7 +76,7 @@ public class WaitingConnectionsState extends AbstractState{
 		SingleInputGate singleInputGate = inputChannel.getInputGate();
 		int channelIndex = inputChannel.getChannelIndex();
 		inputChannelsReestablishmentStatus[context.inputGate.getAbsoluteChannelIndex(singleInputGate, channelIndex)] = Boolean.TRUE;
-		checkConnectionsComplete();
+		maybeGoToWaitingDeterminantsState();
 	}
 
 
@@ -84,18 +84,29 @@ public class WaitingConnectionsState extends AbstractState{
 	public void notifyNewOutputChannel(IntermediateResultPartitionID intermediateResultPartitionID, int subpartitionIndex){
 		logInfoWithVertexID("Got Notified of new output channel for intermediateResultPartition {} index {}.", intermediateResultPartitionID, subpartitionIndex);
 		outputChannelsReestablishmentStatus.get(intermediateResultPartitionID)[subpartitionIndex] = true;
-		checkConnectionsComplete();
+		maybeGoToWaitingDeterminantsState();
 	}
 
-	private void checkConnectionsComplete() {
+	@Override
+	public void notifyStateRestorationComplete(long checkpointId) {
+		super.notifyStateRestorationComplete(checkpointId);
+		maybeGoToWaitingDeterminantsState();
+	}
+
+	private void maybeGoToWaitingDeterminantsState() {
+		logInfoWithVertexID("Go to waiting determinants state? conn. state {}, restoring : {}", Arrays.toString(inputChannelsReestablishmentStatus), recoveryManager.isRestoringState());
+		if(checkConnectionsComplete() && !recoveryManager.isRestoringState()) {
+			logInfoWithVertexID("Got all connections set-up. Switching to WaitingDeterminantsState.");
+			State newState = new WaitingDeterminantsState(recoveryManager, context);
+			recoveryManager.setState(newState);
+		}
+	}
+
+	private boolean checkConnectionsComplete() {
 		Stream<Boolean> channelStatus = Arrays.stream(inputChannelsReestablishmentStatus);
 		for(Boolean[] booleans : outputChannelsReestablishmentStatus.values())
 			channelStatus = Stream.concat(channelStatus, Arrays.stream(booleans));
-		if(channelStatus.allMatch(x -> x)){
-			logInfoWithVertexID("Got all connections set-up. Switching to WaitingDeterminantsState.");
-			State newState = new WaitingDeterminantsState(recoveryManager,context);
-			recoveryManager.setState(newState);
-		}
+		return channelStatus.allMatch(x -> x);
 	}
 
 	@Override

@@ -216,6 +216,11 @@ public class ThreadCausalLogImpl implements ThreadCausalLog {
 					throw new RuntimeException("Consumer went backwards, current epoch " + currentConsumerEpochID +
 						" " +
 						"requested " + epochID);
+				else if (currentConsumerEpochID < epochID -1)
+					throw new RuntimeException("Consumer skipped an epoch, current epoch " + currentConsumerEpochID +
+						" " +
+						"requested " + epochID);
+
 				consumerOffset.epochStart = epochStartOffset;
 				consumerOffset.offset = 0;
 			}

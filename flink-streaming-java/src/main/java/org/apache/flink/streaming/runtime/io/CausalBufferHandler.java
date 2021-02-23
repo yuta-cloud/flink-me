@@ -20,8 +20,11 @@ package org.apache.flink.streaming.runtime.io;
 import org.apache.flink.runtime.causal.log.job.JobCausalLog;
 import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
 import org.apache.flink.runtime.causal.services.BufferOrderService;
+import org.apache.flink.runtime.io.network.partition.PipelinedSubpartition;
 import org.apache.flink.runtime.io.network.partition.consumer.BufferOrEvent;
 import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
@@ -35,6 +38,7 @@ import java.io.IOException;
  * Thus, there is no need to record them in the CausalLog.
  */
 public class CausalBufferHandler implements CheckpointBarrierHandler {
+	private static final Logger LOG = LoggerFactory.getLogger(CausalBufferHandler.class);
 
 	private final Object lock;
 

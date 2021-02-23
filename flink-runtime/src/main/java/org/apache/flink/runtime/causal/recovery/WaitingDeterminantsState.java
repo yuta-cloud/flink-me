@@ -136,11 +136,6 @@ public class WaitingDeterminantsState extends AbstractState {
 		}
 	}
 
-	@Override
-	public void notifyStateRestorationComplete(long checkpointId) {
-		super.notifyStateRestorationComplete(checkpointId);
-		maybeGoToReplayingState();
-	}
 
 	private void sendInFlightLogReplayRequests() {
 		try {
@@ -175,9 +170,9 @@ public class WaitingDeterminantsState extends AbstractState {
 	}
 
 	private void maybeGoToReplayingState() {
-		logDebugWithVertexID("Go to replaying? Received {}, Expected {}, Restoring {}", numResponsesReceived, numResponsesExpected
-			, recoveryManager.isRestoringState());
-		if (numResponsesReceived == numResponsesExpected && !recoveryManager.isRestoringState()) {
+		logDebugWithVertexID("Go to replaying? Received {}, Expected {}", numResponsesReceived, numResponsesExpected
+			);
+		if (numResponsesReceived == numResponsesExpected ) {
 			logInfoWithVertexID("Received all determinants, transitioning to Replaying state!");
 			recoveryManager.setState(new ReplayingState(recoveryManager, context, determinantAccumulator));
 		}

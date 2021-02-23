@@ -74,10 +74,10 @@ public class PeriodicCausalTimeService extends AbstractCausalService implements 
 			if (LOG.isDebugEnabled())
 				LOG.debug("readOrWriteTimestamp: (State: RECOVERING) restored {}", currentTime[0]);
 		} else {
-			threadCausalLog.appendDeterminant(reuseTimestampDeterminant.replace(currentTime[0]), epochTracker.getCurrentEpoch());
 			if (LOG.isDebugEnabled())
-				LOG.debug("readOrWriteTimestamp(): (State: RUNNING) recorded {}", currentTime[0]);
+				LOG.debug("readOrWriteTimestamp(): (State: RUNNING) record current time {}", currentTime[0]);
 		}
+		threadCausalLog.appendDeterminant(reuseTimestampDeterminant.replace(currentTime[0]), epochTracker.getCurrentEpoch());
 	}
 
 	@Override

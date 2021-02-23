@@ -42,7 +42,7 @@ import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
-public class RecoveryManagerContext {
+public class RecoveryManagerContext implements IRecoveryManagerContext {
 	RecoveryManager owner;
 
 	public final VertexGraphInformation vertexGraphInformation;
@@ -103,73 +103,51 @@ public class RecoveryManagerContext {
 		}
 	}
 
+	@Override
 	public void setOwner(RecoveryManager owner){
 		this.owner = owner;
 	}
 
+	@Override
 	public void setProcessingTimeService(ProcessingTimeForceable processingTimeForceable) {
 		this.processingTimeForceable = processingTimeForceable;
 	}
 
+	@Override
 	public ProcessingTimeForceable getProcessingTimeForceable() {
 		return processingTimeForceable;
 	}
 
+	@Override
 	public CheckpointForceable getCheckpointForceable() {
 		return checkpointForceable;
 	}
 
+	@Override
 	public short getTaskVertexID() {
 		return vertexID;
 	}
 
+	@Override
 	public EpochTracker getEpochTracker(){
 		return this.epochTracker;
 	}
 
+	@Override
 	public void setInputGate(InputGate inputGate) {
 		this.inputGate = inputGate;
 	}
 
+	@Override
 	public void appendRPCRequestDuringRecovery(AsyncDeterminant determinant){
 		this.unansweredRPCRequests.add(determinant);
 	}
 
 
+	@Override
 	public int getNumberOfDirectDownstreamNeighbourVertexes(){
 		return subpartitionTable.size();
 	}
 //=======================================================================
 
-	public static class UnansweredDeterminantRequest {
-		private int numResponsesReceived;
-		private final int requestingChannel;
-
-		private final DeterminantResponseEvent response;
-
-		public UnansweredDeterminantRequest(DeterminantRequestEvent event, int requestingChannel) {
-			this.numResponsesReceived = 0;
-			this.requestingChannel = requestingChannel;
-			this.response = new DeterminantResponseEvent(event);
-			this.response.setCorrelationID(event.getUpstreamCorrelationID());
-		}
-
-		public int getNumResponsesReceived() {
-			return numResponsesReceived;
-		}
-
-
-		public int getRequestingChannel() {
-			return requestingChannel;
-		}
-
-		public void incResponsesReceived() {
-			numResponsesReceived++;
-		}
-
-		public DeterminantResponseEvent getCurrentResponse() {
-			return response;
-		}
-
-	}
 }

@@ -62,7 +62,7 @@ public interface IRecoveryManager {
 
 	boolean isWaitingConnections();
 
-	RecoveryManagerContext getContext();
+	IRecoveryManagerContext getContext();
 
 	//====================================================
 

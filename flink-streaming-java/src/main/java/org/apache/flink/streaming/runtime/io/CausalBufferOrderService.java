@@ -53,7 +53,7 @@ public class CausalBufferOrderService extends AbstractCausalService implements B
 	private final CheckpointBarrierHandler bufferSource;
 
 	// We use this to buffer buffers from the incorrect channels in order to deliver them in correct order
-	private final ArrayDeque<BufferOrEvent>[] bufferedBuffersPerChannel;
+	private final Queue<BufferOrEvent>[] bufferedBuffersPerChannel;
 
 	// The determinant object we reuse to avoid object creation and thus large GC
 	private final OrderDeterminant reuseOrderDeterminant;
@@ -71,7 +71,7 @@ public class CausalBufferOrderService extends AbstractCausalService implements B
 		this.bufferSource = bufferSource;
 		this.bufferedBuffersPerChannel = new ArrayDeque[numInputChannels];
 		for (int i = 0; i < numInputChannels; i++)
-			bufferedBuffersPerChannel[i] = new ArrayDeque<>(10);
+			bufferedBuffersPerChannel[i] = new ArrayDeque<>(100);
 		this.numInputChannels = numInputChannels;
 		this.numBufferedBuffers = 0;
 		this.reuseOrderDeterminant = new OrderDeterminant();
@@ -83,64 +83,34 @@ public class CausalBufferOrderService extends AbstractCausalService implements B
 		//Simple case, when there is only one channel we do not need to store order determinants, nor
 		// do any special replay logic, because everything is deterministic.
 		if (numInputChannels == 1)
-			return getNextNonBlockedNew();
+			return getNewBuffer();
 
 		BufferOrEvent toReturn;
-		if (isRecovering())
+		if (isRecovering()) {
 			toReturn = getNextNonBlockedReplayed();
-		else
-			toReturn = getNextNonBlockedNew();
-
-		if(toReturn != null)
-			threadCausalLog.appendDeterminant(reuseOrderDeterminant.replace((byte) toReturn.getChannelIndex()),
-			epochTracker.getCurrentEpoch());
-
-		return toReturn;
-	}
-
-	private BufferOrEvent getNextNonBlockedNew() throws Exception {
-		BufferOrEvent toReturn;
-		while (true) {
-			if (numBufferedBuffers != 0)
+		} else {
+			if(numBufferedBuffers != 0)
 				toReturn = pickBufferedUnprocessedBuffer();
 			else
-				toReturn = bufferSource.getNextNonBlocked();
-
-			if(toReturn == null)
-				break;
-
-			if (toReturn.isEvent() && toReturn.getEvent().getClass() == DeterminantRequestEvent.class) {
-				LOG.debug("Buffer is DeterminantRequest, sending notification");
-				recoveryManager.notifyDeterminantRequestEvent((DeterminantRequestEvent) toReturn.getEvent(),
-					toReturn.getChannelIndex());
-				continue;
-			}
-			LOG.debug("Buffer is valid, forwarding");
-			break;
+				toReturn = getNewBuffer();
 		}
+
+		if (toReturn != null)
+			threadCausalLog.appendDeterminant(reuseOrderDeterminant.replace((byte) toReturn.getChannelIndex()),
+				epochTracker.getCurrentEpoch());
+
 		return toReturn;
 	}
 
 	private BufferOrEvent getNextNonBlockedReplayed() throws Exception {
 		BufferOrEvent toReturn;
-		byte nextChannel = recoveryManager.getLogReplayer().replayNextChannel();
-		LOG.debug("Determinant says next channel is {}!", nextChannel);
-		while (true) {
-			if (!bufferedBuffersPerChannel[nextChannel].isEmpty()) {
-				toReturn = bufferedBuffersPerChannel[nextChannel].poll();
-				numBufferedBuffers--;
-			} else {
-				toReturn = processUntilFindBufferForChannel(nextChannel);
-			}
-
-			if (toReturn.isEvent() && toReturn.getEvent().getClass() == DeterminantRequestEvent.class) {
-				LOG.debug("Buffer is DeterminantRequest, sending notification");
-				recoveryManager.notifyDeterminantRequestEvent((DeterminantRequestEvent) toReturn.getEvent(),
-					toReturn.getChannelIndex());
-				continue;
-			}
-			LOG.debug("Buffer is valid, forwarding");
-			break;
+		byte channel = recoveryManager.getLogReplayer().replayNextChannel();
+		LOG.debug("Determinant says next channel is {}!", channel);
+		if (bufferedBuffersPerChannel[channel].isEmpty()) {
+			toReturn = processUntilFindBufferForChannel(channel);
+		} else {
+			toReturn = bufferedBuffersPerChannel[channel].remove();
+			numBufferedBuffers--;
 		}
 		return toReturn;
 	}
@@ -150,7 +120,7 @@ public class CausalBufferOrderService extends AbstractCausalService implements B
 		for (Queue<BufferOrEvent> queue : bufferedBuffersPerChannel) {
 			if (!queue.isEmpty()) {
 				numBufferedBuffers--;
-				return queue.poll();
+				return queue.remove();
 			}
 		}
 		return null;//unrecheable
@@ -159,7 +129,28 @@ public class CausalBufferOrderService extends AbstractCausalService implements B
 	private BufferOrEvent processUntilFindBufferForChannel(byte channel) throws Exception {
 		LOG.debug("Found no buffered buffers for channel {}. Processing buffers until I find one", channel);
 		while (true) {
-			BufferOrEvent newBufferOrEvent = bufferSource.getNextNonBlocked();
+			BufferOrEvent newBufferOrEvent = getNewBuffer();
+			if(newBufferOrEvent == null)
+				return null;
+			//If this was a BoE for the channel we were looking for, return with it
+			if (newBufferOrEvent.getChannelIndex() == channel) {
+				LOG.debug("It is from the expected channel, returning");
+				return newBufferOrEvent;
+			}
+
+			LOG.debug("It is not from the expected channel,  buffering and continuing");
+			//Otherwise, append it to the correct queue and try again
+			bufferedBuffersPerChannel[newBufferOrEvent.getChannelIndex()].add(newBufferOrEvent);
+			numBufferedBuffers++;
+		}
+	}
+
+	private BufferOrEvent getNewBuffer() throws Exception {
+		BufferOrEvent newBufferOrEvent;
+		while (true) {
+			newBufferOrEvent = bufferSource.getNextNonBlocked();
+			if(newBufferOrEvent == null)
+				return null;
 			LOG.debug("Got a new buffer from channel {}", newBufferOrEvent.getChannelIndex());
 			if (newBufferOrEvent.isEvent() && newBufferOrEvent.getEvent().getClass() == DeterminantRequestEvent.class) {
 				LOG.debug("Buffer is DeterminantRequest, sending notification");
@@ -167,16 +158,8 @@ public class CausalBufferOrderService extends AbstractCausalService implements B
 					newBufferOrEvent.getChannelIndex());
 				continue;
 			}
-			//If this was a BoE for the channel we were looking for, return with it
-			if (newBufferOrEvent.getChannelIndex() == channel) {
-				LOG.debug("It is from the expected channel, returning");
-				return newBufferOrEvent;
-			}
-
-			LOG.debug("It is not from the expected channel, continuing");
-			//Otherwise, append it to the correct queue and try again
-			bufferedBuffersPerChannel[newBufferOrEvent.getChannelIndex()].add(newBufferOrEvent);
-			numBufferedBuffers++;
+			break;
 		}
+		return newBufferOrEvent;
 	}
 }

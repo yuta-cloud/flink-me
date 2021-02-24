@@ -1306,6 +1306,7 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 		long checkpointId = taskRestore.getRestoreCheckpointId();
 		invokable.notifyStartedRestoringCheckpoint(checkpointId);
 
+
 		// Invokable should be an instance of an operator class in the hierarchy of StreamTask.
 		executeAsyncCallRunnable(() -> {
 			try {

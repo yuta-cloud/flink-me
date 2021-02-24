@@ -88,17 +88,17 @@ public abstract class AbstractState implements State {
 	public void notifyStateRestorationStart(long checkpointId) {
 		logInfoWithVertexID("Started restoring state of checkpoint {}", checkpointId);
 		this.context.incompleteStateRestorations.add(checkpointId);
-		//if (checkpointId > context.epochTracker.getCurrentEpoch())
-		//	context.getEpochTracker().startNewEpoch(checkpointId); //TODO this will notify subscribers, which we dont want
-
-		//for (PipelinedSubpartition ps : context.subpartitionTable.values())
-		//	ps.setStartingEpoch(context.getEpochTracker().getCurrentEpoch());
 	}
 
 	@Override
 	public void notifyStateRestorationComplete(long checkpointId) {
 		logInfoWithVertexID("Completed restoring state of checkpoint {}", checkpointId);
-		this.context.incompleteStateRestorations.remove(checkpointId);
+		List<Long> restorationsToRemove = new ArrayList<>(5);
+		for (Long r : this.context.incompleteStateRestorations)
+			if (r <= checkpointId)
+				restorationsToRemove.add(r);
+		logInfoWithVertexID("Removed the followwing restoration ids: " + Arrays.toString(restorationsToRemove.toArray()));
+		this.context.incompleteStateRestorations.removeAll(restorationsToRemove);
 		this.context.epochTracker.setEpoch(checkpointId);
 	}
 
@@ -138,7 +138,7 @@ public abstract class AbstractState implements State {
 		} else {
 			context.unansweredDeterminantRequests.put(e.getFailedVertex(), e.getCorrelationID(),
 				new RecoveryManagerContext.UnansweredDeterminantRequest(e, channelRequestArrivedFrom));
-			if(LOG.isDebugEnabled())
+			if (LOG.isDebugEnabled())
 				logInfoWithVertexID("Recurring determinant request");
 			e.setUpstreamCorrelationID(e.getCorrelationID());
 			broadcastDeterminantRequest(e);
@@ -172,10 +172,10 @@ public abstract class AbstractState implements State {
 	 * Simple utility method for prepending vertex id to a log message
 	 */
 	protected void logDebugWithVertexID(String s, Object... a) {
-			List<Object> array = new ArrayList<>(a.length + 1);
-			array.add(context.getTaskVertexID());
-			array.addAll(Arrays.asList(a));
-			LOG.debug("Vertex {} - " + s, array.toArray());
+		List<Object> array = new ArrayList<>(a.length + 1);
+		array.add(context.getTaskVertexID());
+		array.addAll(Arrays.asList(a));
+		LOG.debug("Vertex {} - " + s, array.toArray());
 	}
 
 	/**

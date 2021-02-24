@@ -46,12 +46,15 @@ public class LogReplayerImpl implements LogReplayer {
 
 	Determinant nextDeterminant;
 
+	private boolean done;
+
 	public LogReplayerImpl(ByteBuf log, RecoveryManagerContext recoveryManagerContext) {
 		this.context = recoveryManagerContext;
 		this.determinantEncoder = context.causalLog.getDeterminantEncoder();
 		this.log = log;
 		this.determinantPool = new DeterminantPool();
 		deserializeNext();
+		done = false;
 	}
 
 	@Override
@@ -116,24 +119,27 @@ public class LogReplayerImpl implements LogReplayer {
 	}
 
 	public void checkFinished() {
-		if (isFinished()) {
-			if (log != null) {
-				//Safety check that recovery brought us to the exact same causal log state as pre-failure
-				assert log.capacity() ==
-					context.causalLog.threadLogLength(new CausalLogID(context.getTaskVertexID()));
-				log.release();
+		if (!done) {
+			if (isFinished()) {
+				if (log != null) {
+					done = true;
+					//Safety check that recovery brought us to the exact same causal log state as pre-failure
+					assert log.capacity() ==
+						context.causalLog.threadLogLength(new CausalLogID(context.getTaskVertexID()));
+					log.release();
+				}
+				LOG.info("Finished recovering main thread! Transitioning to RunningState!");
+				context.owner.setState(new RunningState(context.owner, context));
 			}
-			LOG.info("Finished recovering main thread! Transitioning to RunningState!");
-			context.owner.setState(new RunningState(context.owner, context));
 		}
 	}
 
 
 	private void deserializeNext() {
 		nextDeterminant = null;
-		if (log!= null && log.isReadable()) {
+		if (log != null && log.isReadable()) {
 			nextDeterminant = determinantEncoder.decodeNext(log, determinantPool);
-			if(LOG.isDebugEnabled())
+			if (LOG.isDebugEnabled())
 				LOG.debug("Deserialized nextDeterminant: {}", nextDeterminant);
 		}
 	}

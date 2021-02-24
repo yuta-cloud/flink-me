@@ -237,6 +237,8 @@ public class StreamInputProcessor<IN> {
 				currentRecordDeserializer.setNextBuffer(bufferOrEvent.getBuffer());
 			} else {// Event received
 				final AbstractEvent event = bufferOrEvent.getEvent();
+				if(LOG.isDebugEnabled())
+					LOG.debug("Buffer is an event: {}", event);
 				if (event.getClass() != EndOfPartitionEvent.class) {
 					throw new IOException("Unexpected event: " + event);
 				}

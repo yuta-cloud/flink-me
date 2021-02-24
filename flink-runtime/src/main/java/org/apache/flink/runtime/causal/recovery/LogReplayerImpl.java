@@ -58,7 +58,7 @@ public class LogReplayerImpl implements LogReplayer {
 	}
 
 	@Override
-	public int replayRandomInt() {
+	public synchronized int replayRandomInt() {
 		assert nextDeterminant instanceof RNGDeterminant;
 		final RNGDeterminant rngDeterminant = (RNGDeterminant) nextDeterminant;
 		deserializeNext();
@@ -68,7 +68,7 @@ public class LogReplayerImpl implements LogReplayer {
 	}
 
 	@Override
-	public byte replayNextChannel() {
+	public synchronized byte replayNextChannel() {
 		assert nextDeterminant instanceof OrderDeterminant;
 		final OrderDeterminant orderDeterminant = ((OrderDeterminant) nextDeterminant);
 		deserializeNext();
@@ -78,7 +78,7 @@ public class LogReplayerImpl implements LogReplayer {
 	}
 
 	@Override
-	public long replayNextTimestamp() {
+	public synchronized  long replayNextTimestamp() {
 		assert nextDeterminant instanceof TimestampDeterminant;
 		final TimestampDeterminant timestampDeterminant = ((TimestampDeterminant) nextDeterminant);
 		deserializeNext();
@@ -88,7 +88,7 @@ public class LogReplayerImpl implements LogReplayer {
 	}
 
 	@Override
-	public Object replaySerializableDeterminant() {
+	public synchronized Object replaySerializableDeterminant() {
 		assert nextDeterminant instanceof SerializableDeterminant;
 		final SerializableDeterminant serializableDeterminant = (SerializableDeterminant) nextDeterminant;
 		deserializeNext();
@@ -99,7 +99,7 @@ public class LogReplayerImpl implements LogReplayer {
 
 
 	@Override
-	public void triggerAsyncEvent() {
+	public synchronized void triggerAsyncEvent() {
 		assert nextDeterminant instanceof AsyncDeterminant;
 		AsyncDeterminant asyncDeterminant = (AsyncDeterminant) nextDeterminant;
 		int currentRecordCount = context.epochTracker.getRecordCount();
@@ -118,7 +118,7 @@ public class LogReplayerImpl implements LogReplayer {
 		postHook(asyncDeterminant);
 	}
 
-	public void checkFinished() {
+	public synchronized void checkFinished() {
 		if (!done) {
 			if (isFinished()) {
 				if (log != null) {

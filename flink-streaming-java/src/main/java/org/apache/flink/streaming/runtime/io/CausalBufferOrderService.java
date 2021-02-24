@@ -80,19 +80,32 @@ public class CausalBufferOrderService extends AbstractCausalService implements B
 	@Override
 	public BufferOrEvent getNextBuffer() throws Exception {
 
+
+		if(LOG.isDebugEnabled())
+			LOG.debug("Request next buffer");
 		//Simple case, when there is only one channel we do not need to store order determinants, nor
 		// do any special replay logic, because everything is deterministic.
-		if (numInputChannels == 1)
+		if (numInputChannels == 1) {
 			return getNewBuffer();
+		}
 
 		BufferOrEvent toReturn;
 		if (isRecovering()) {
+			if(LOG.isDebugEnabled())
+				LOG.debug("Get replayed buffer");
 			toReturn = getNextNonBlockedReplayed();
 		} else {
-			if(numBufferedBuffers != 0)
+			if(LOG.isDebugEnabled())
+				LOG.debug("Get new buffer");
+			if(numBufferedBuffers != 0) {
+				if(LOG.isDebugEnabled())
+					LOG.debug("Get buffered buffer");
 				toReturn = pickBufferedUnprocessedBuffer();
-			else
+			} else {
+				if(LOG.isDebugEnabled())
+					LOG.debug("Get actual new buffer");
 				toReturn = getNewBuffer();
+			}
 		}
 
 		if (toReturn != null)
@@ -131,7 +144,7 @@ public class CausalBufferOrderService extends AbstractCausalService implements B
 		while (true) {
 			BufferOrEvent newBufferOrEvent = getNewBuffer();
 			if(newBufferOrEvent == null)
-				return null;
+				continue;
 			//If this was a BoE for the channel we were looking for, return with it
 			if (newBufferOrEvent.getChannelIndex() == channel) {
 				LOG.debug("It is from the expected channel, returning");

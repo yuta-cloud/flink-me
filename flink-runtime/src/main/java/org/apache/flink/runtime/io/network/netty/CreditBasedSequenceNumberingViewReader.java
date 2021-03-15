@@ -220,7 +220,7 @@ class CreditBasedSequenceNumberingViewReader implements BufferAvailabilityListen
 	@Override
 	public void releaseAllResources() throws IOException {
 		LOG.info("Reader {} issues release resources call for subpartition view {}.", this, subpartitionView);
-		subpartitionView.releaseAllResources();
+		subpartitionView.sendFailConsumerTrigger(null);
 	}
 
 	@Override

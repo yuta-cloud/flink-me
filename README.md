@@ -47,17 +47,17 @@ case class WordWithCount(word: String, count: Long)
 
 class ExternalBannedWordList(serverLocation: String) extends FilterFunction[String] with CheckpointedFunction = {
 
-	var isBannedService: SerializableService[String, Boolean] = _	
+  var isBannedService: SerializableService[String, Boolean] = _	
 
   override def initializeState(context: FunctionInitializationContext): Unit = {
-		// Building a causal service, sends http requests and records the response
+    // Building a causal service, sends http requests and records the response
     this.isBannedService = context.getSerializableServiceFactory
-			.build((s: String) => { Http(serverLocation).param("word", s).asBoolean })
-	}
+      .build((s: String) => { Http(serverLocation).param("word", s).asBoolean })
+  }
 
-	override def filter(x: String): Boolean = {
-		isBannedService.apply(x) //Simply call the service, recovery is transparent
-	}
+  override def filter(x: String): Boolean = {
+    isBannedService.apply(x) //Simply call the service, recovery is transparent
+  }
 }
 
 val text = env.socketTextStream(host, port, '\n')
@@ -65,7 +65,7 @@ val text = env.socketTextStream(host, port, '\n')
 val windowCounts = text.flatMap { w => w.split("\\s") }
   .map { w => WordWithCount(w, 1) }
   .keyBy("word")
-	.filter(ExternalBannedWordList("host:port/api/"))
+  .filter(ExternalBannedWordList("host:port/api/"))
   .timeWindow(Time.seconds(5))
   .sum("count")
 

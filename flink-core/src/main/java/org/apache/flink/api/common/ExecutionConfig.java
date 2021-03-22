@@ -144,6 +144,7 @@ public class ExecutionConfig implements Serializable, Archiveable<ArchivedExecut
 	 */
 	private int determinantSharingDepth = -1;
 
+
 	/**
 	 * @deprecated Should no longer be used because it is subsumed by RestartStrategyConfiguration
 	 */

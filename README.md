@@ -17,7 +17,7 @@ To replay nondeterministic actions performed during the processing of those epoc
 But unlike the logs generally maintained in database systems, this log can be maintained fully in-memory, as long as it is replicated by other processes.
 This replication is continuously and transparently achieved through piggybacking on dataflow records.
 
-To find out more about causal logging see [https://ieeexplore.ieee.org/abstract/document/666828](Message logging: Pessimistic, optimistic, causal, and optimal.)
+To find out more about causal logging see [Message logging: Pessimistic, optimistic, causal, and optimal.](https://ieeexplore.ieee.org/abstract/document/666828)
 
 ### Features
 

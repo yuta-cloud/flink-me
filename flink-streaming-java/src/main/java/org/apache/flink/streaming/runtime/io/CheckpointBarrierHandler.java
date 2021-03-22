@@ -76,4 +76,8 @@ public interface CheckpointBarrierHandler {
 	 * @return The duration in nanoseconds
 	 */
 	long getAlignmentDurationNanos();
+
+	void ignoreCheckpoint(long checkpointID) throws IOException;
+
+    void unblockChannelIfBlocked(int absoluteChannelIndex);
 }

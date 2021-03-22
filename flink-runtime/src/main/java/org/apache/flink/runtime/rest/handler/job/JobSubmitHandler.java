@@ -96,6 +96,13 @@ public final class JobSubmitHandler extends AbstractRestHandler<DispatcherGatewa
 
 		final JobSubmitRequestBody requestBody = request.getRequestBody();
 
+		if (requestBody.jobGraphFileName == null) {
+			throw new RestHandlerException(
+				String.format("The %s field must not be omitted or be null.",
+					JobSubmitRequestBody.FIELD_NAME_JOB_GRAPH),
+				HttpResponseStatus.BAD_REQUEST);
+		}
+
 		CompletableFuture<JobGraph> jobGraphFuture = loadJobGraph(requestBody, nameToFile);
 
 		Collection<Path> jarFiles = getJarFilesToUpload(requestBody.jarFileNames, nameToFile);
@@ -107,10 +114,7 @@ public final class JobSubmitHandler extends AbstractRestHandler<DispatcherGatewa
 		CompletableFuture<Acknowledge> jobSubmissionFuture = finalizedJobGraphFuture.thenCompose(jobGraph -> gateway.submitJob(jobGraph, timeout));
 
 		return jobSubmissionFuture.thenCombine(jobGraphFuture,
-			(ack, jobGraph) -> new JobSubmitResponseBody("/jobs/" + jobGraph.getJobID()))
-			.exceptionally(exception -> {
-				throw new CompletionException(new RestHandlerException("Job submission failed.", HttpResponseStatus.INTERNAL_SERVER_ERROR, exception));
-			});
+			(ack, jobGraph) -> new JobSubmitResponseBody("/jobs/" + jobGraph.getJobID()));
 	}
 
 	private CompletableFuture<JobGraph> loadJobGraph(JobSubmitRequestBody requestBody, Map<String, Path> nameToFile) throws MissingFileException {

@@ -130,6 +130,7 @@ public class ContinuousFileReaderOperator<OUT> extends AbstractStreamOperator<OU
 		// set the reader context based on the time characteristic
 		final TimeCharacteristic timeCharacteristic = getOperatorConfig().getTimeCharacteristic();
 		final long watermarkInterval = getRuntimeContext().getExecutionConfig().getAutoWatermarkInterval();
+		final long timeSetterInterval = getRuntimeContext().getExecutionConfig().getAutoTimeSetterInterval();
 		this.readerContext = StreamSourceContexts.getSourceContext(
 			timeCharacteristic,
 			getProcessingTimeService(),
@@ -137,7 +138,8 @@ public class ContinuousFileReaderOperator<OUT> extends AbstractStreamOperator<OU
 			getContainingTask().getStreamStatusMaintainer(),
 			output,
 			watermarkInterval,
-			-1);
+			timeSetterInterval,
+			getContainingTask().getRecoveryManager());
 
 		// and initialize the split reading thread
 		this.reader = new SplitReader<>(format, serializer, readerContext, checkpointLock, restoredReaderState);

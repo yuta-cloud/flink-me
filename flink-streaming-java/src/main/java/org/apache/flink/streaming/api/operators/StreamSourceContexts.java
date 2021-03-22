@@ -17,6 +17,9 @@
 
 package org.apache.flink.streaming.api.operators;
 
+import org.apache.flink.runtime.causal.EpochTracker;
+import org.apache.flink.runtime.causal.determinant.ProcessingTimeCallbackID;
+import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.functions.source.SourceFunction;
 import org.apache.flink.streaming.api.watermark.Watermark;
@@ -44,13 +47,14 @@ public class StreamSourceContexts {
 	 * </ul>
 	 * */
 	public static <OUT> SourceFunction.SourceContext<OUT> getSourceContext(
-			TimeCharacteristic timeCharacteristic,
-			ProcessingTimeService processingTimeService,
-			Object checkpointLock,
-			StreamStatusMaintainer streamStatusMaintainer,
-			Output<StreamRecord<OUT>> output,
-			long watermarkInterval,
-			long idleTimeout) {
+		TimeCharacteristic timeCharacteristic,
+		ProcessingTimeService processingTimeService,
+		Object checkpointLock,
+		StreamStatusMaintainer streamStatusMaintainer,
+		Output<StreamRecord<OUT>> output,
+		long watermarkInterval,
+		long idleTimeout,
+		IRecoveryManager recoveryManager) {
 
 		final SourceFunction.SourceContext<OUT> ctx;
 		switch (timeCharacteristic) {
@@ -60,7 +64,8 @@ public class StreamSourceContexts {
 					processingTimeService,
 					checkpointLock,
 					streamStatusMaintainer,
-					idleTimeout);
+					idleTimeout,
+					recoveryManager);
 
 				break;
 			case IngestionTime:
@@ -70,11 +75,10 @@ public class StreamSourceContexts {
 					processingTimeService,
 					checkpointLock,
 					streamStatusMaintainer,
-					idleTimeout);
-
+					idleTimeout, recoveryManager);
 				break;
 			case ProcessingTime:
-				ctx = new NonTimestampContext<>(checkpointLock, output);
+				ctx = new NonTimestampContext<>(checkpointLock, output, recoveryManager);
 				break;
 			default:
 				throw new IllegalArgumentException(String.valueOf(timeCharacteristic));
@@ -92,16 +96,22 @@ public class StreamSourceContexts {
 		private final Output<StreamRecord<T>> output;
 		private final StreamRecord<T> reuse;
 
-		private NonTimestampContext(Object checkpointLock, Output<StreamRecord<T>> output) {
+		private final EpochTracker epochTracker;
+
+		private NonTimestampContext(Object checkpointLock, Output<StreamRecord<T>> output, IRecoveryManager recoveryManager) {
 			this.lock = Preconditions.checkNotNull(checkpointLock, "The checkpoint lock cannot be null.");
 			this.output = Preconditions.checkNotNull(output, "The output cannot be null.");
 			this.reuse = new StreamRecord<>(null);
+
+			this.epochTracker = recoveryManager.getContext().getEpochTracker();
 		}
 
 		@Override
 		public void collect(T element) {
+
 			synchronized (lock) {
 				output.collect(reuse.replace(element));
+				epochTracker.incRecordCount();
 			}
 		}
 
@@ -128,6 +138,7 @@ public class StreamSourceContexts {
 
 		@Override
 		public void close() {}
+
 	}
 
 	/**
@@ -136,25 +147,25 @@ public class StreamSourceContexts {
 	 */
 	private static class AutomaticWatermarkContext<T> extends WatermarkContext<T> {
 
-		private final Output<StreamRecord<T>> output;
-		private final StreamRecord<T> reuse;
+		protected final Output<StreamRecord<T>> output;
+		protected final StreamRecord<T> reuse;
 
-		private final long watermarkInterval;
+		protected final long watermarkInterval;
 
-		private volatile ScheduledFuture<?> nextWatermarkTimer;
-		private volatile long nextWatermarkTime;
+		protected volatile ScheduledFuture<?> nextWatermarkTimer;
+		protected volatile long nextWatermarkTime;
 
-		private long lastRecordTime;
+		protected long lastRecordTime;
 
 		private AutomaticWatermarkContext(
-				final Output<StreamRecord<T>> output,
-				final long watermarkInterval,
-				final ProcessingTimeService timeService,
-				final Object checkpointLock,
-				final StreamStatusMaintainer streamStatusMaintainer,
-				final long idleTimeout) {
+			final Output<StreamRecord<T>> output,
+			final long watermarkInterval,
+			final ProcessingTimeService timeService,
+			final Object checkpointLock,
+			final StreamStatusMaintainer streamStatusMaintainer,
+			final long idleTimeout, IRecoveryManager recoveryManager) {
 
-			super(timeService, checkpointLock, streamStatusMaintainer, idleTimeout);
+			super(timeService, checkpointLock, streamStatusMaintainer, -1, recoveryManager);
 
 			this.output = Preconditions.checkNotNull(output, "The output cannot be null.");
 
@@ -165,6 +176,7 @@ public class StreamSourceContexts {
 
 			this.lastRecordTime = Long.MIN_VALUE;
 
+
 			long now = this.timeService.getCurrentProcessingTime();
 			this.nextWatermarkTimer = this.timeService.registerTimer(now + watermarkInterval,
 				new WatermarkEmittingTask(this.timeService, checkpointLock, output));
@@ -172,7 +184,7 @@ public class StreamSourceContexts {
 
 		@Override
 		protected void processAndCollect(T element) {
-			lastRecordTime = this.timeService.getCurrentProcessingTime();
+			lastRecordTime = this.timeService.getCurrentProcessingTimeCausal();
 			output.collect(reuse.replace(element, lastRecordTime));
 
 			// this is to avoid lock contention in the lockingObject by
@@ -231,6 +243,8 @@ public class StreamSourceContexts {
 			private final Object lock;
 			private final Output<StreamRecord<T>> output;
 
+			private final ProcessingTimeCallbackID id = new ProcessingTimeCallbackID(ProcessingTimeCallbackID.Type.WATERMARK);
+
 			private WatermarkEmittingTask(
 					ProcessingTimeService timeService,
 					Object checkpointLock,
@@ -238,13 +252,15 @@ public class StreamSourceContexts {
 				this.timeService = timeService;
 				this.lock = checkpointLock;
 				this.output = output;
+				timeService.registerCallback(this);
 			}
 
 			@Override
 			public void onProcessingTime(long timestamp) {
-				final long currentTime = timeService.getCurrentProcessingTime();
 
+				final long currentTime;
 				synchronized (lock) {
+					currentTime = timeService.getCurrentProcessingTimeCausal();
 					// we should continue to automatically emit watermarks if we are active
 					if (streamStatusMaintainer.getStreamStatus().isActive()) {
 						if (idleTimeout != -1 && currentTime - lastRecordTime > idleTimeout) {
@@ -271,6 +287,11 @@ public class StreamSourceContexts {
 				nextWatermarkTimer = this.timeService.registerTimer(
 						nextWatermark, new WatermarkEmittingTask(this.timeService, lock, output));
 			}
+
+			@Override
+			public ProcessingTimeCallbackID getID() {
+				return id;
+			}
 		}
 	}
 
@@ -288,13 +309,13 @@ public class StreamSourceContexts {
 		private final StreamRecord<T> reuse;
 
 		private ManualWatermarkContext(
-				final Output<StreamRecord<T>> output,
-				final ProcessingTimeService timeService,
-				final Object checkpointLock,
-				final StreamStatusMaintainer streamStatusMaintainer,
-				final long idleTimeout) {
+			final Output<StreamRecord<T>> output,
+			final ProcessingTimeService timeService,
+			final Object checkpointLock,
+			final StreamStatusMaintainer streamStatusMaintainer,
+			final long idleTimeout, IRecoveryManager recoveryManager) {
 
-			super(timeService, checkpointLock, streamStatusMaintainer, idleTimeout);
+			super(timeService, checkpointLock, streamStatusMaintainer, -1, recoveryManager);
 
 			this.output = Preconditions.checkNotNull(output, "The output cannot be null.");
 			this.reuse = new StreamRecord<>(null);
@@ -354,23 +375,29 @@ public class StreamSourceContexts {
 		 */
 		private volatile boolean failOnNextCheck;
 
+		private final EpochTracker epochTracker;
+		protected final IRecoveryManager recoveryManager;
+
 		/**
 		 * Create a watermark context.
-		 *
-		 * @param timeService the time service to schedule idleness detection tasks
+		 *  @param timeService the time service to schedule idleness detection tasks
 		 * @param checkpointLock the checkpoint lock
 		 * @param streamStatusMaintainer the stream status maintainer to toggle and retrieve current status
 		 * @param idleTimeout (-1 if idleness checking is disabled)
 		 */
 		public WatermarkContext(
-				final ProcessingTimeService timeService,
-				final Object checkpointLock,
-				final StreamStatusMaintainer streamStatusMaintainer,
-				final long idleTimeout) {
+			final ProcessingTimeService timeService,
+			final Object checkpointLock,
+			final StreamStatusMaintainer streamStatusMaintainer,
+			final long idleTimeout, IRecoveryManager recoveryManager) {
 
 			this.timeService = Preconditions.checkNotNull(timeService, "Time Service cannot be null.");
 			this.checkpointLock = Preconditions.checkNotNull(checkpointLock, "Checkpoint Lock cannot be null.");
 			this.streamStatusMaintainer = Preconditions.checkNotNull(streamStatusMaintainer, "Stream Status Maintainer cannot be null.");
+
+			timeService.registerCallback(new IdlenessDetectionTask());
+			this.recoveryManager = recoveryManager;
+			this.epochTracker = recoveryManager.getContext().getEpochTracker();
 
 			if (idleTimeout != -1) {
 				Preconditions.checkArgument(idleTimeout >= 1, "The idle timeout cannot be smaller than 1 ms.");
@@ -392,6 +419,7 @@ public class StreamSourceContexts {
 				}
 
 				processAndCollect(element);
+				epochTracker.incRecordCount();
 			}
 		}
 
@@ -407,6 +435,7 @@ public class StreamSourceContexts {
 				}
 
 				processAndCollectWithTimestamp(element, timestamp);
+				epochTracker.incRecordCount();
 			}
 		}
 
@@ -423,6 +452,7 @@ public class StreamSourceContexts {
 					}
 
 					processAndEmitWatermark(mark);
+					epochTracker.incRecordCount();
 				}
 			}
 		}
@@ -438,13 +468,16 @@ public class StreamSourceContexts {
 		public Object getCheckpointLock() {
 			return checkpointLock;
 		}
-
+		
 		@Override
 		public void close() {
 			cancelNextIdleDetectionTask();
 		}
 
 		private class IdlenessDetectionTask implements ProcessingTimeCallback {
+
+			private final ProcessingTimeCallbackID id = new ProcessingTimeCallbackID(ProcessingTimeCallbackID.Type.IDLE);
+
 			@Override
 			public void onProcessingTime(long timestamp) throws Exception {
 				synchronized (checkpointLock) {
@@ -459,6 +492,11 @@ public class StreamSourceContexts {
 						scheduleNextIdleDetectionTask();
 					}
 				}
+			}
+
+			@Override
+			public ProcessingTimeCallbackID getID() {
+				return id;
 			}
 		}
 

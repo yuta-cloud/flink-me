@@ -622,34 +622,6 @@ An example for such a list would be `host=localhost,job_name=MyJob,task_name=MyT
 
 The domain thus identifies a metric class, while the key-property list identifies one (or multiple) instances of that metric.
 
-### Ganglia (org.apache.flink.metrics.ganglia.GangliaReporter)
-
-In order to use this reporter you must copy `/opt/flink-metrics-ganglia-{{site.version}}.jar` into the `/lib` folder
-of your Flink distribution.
-
-Parameters:
-
-- `host` - the gmond host address configured under `udp_recv_channel.bind` in `gmond.conf`
-- `port` - the gmond port configured under `udp_recv_channel.port` in `gmond.conf`
-- `tmax` - soft limit for how long an old metric should be retained
-- `dmax` - hard limit for how long an old metric should be retained
-- `ttl` - time-to-live for transmitted UDP packets
-- `addressingMode` - UDP addressing mode to use (UNICAST/MULTICAST)
-
-Example configuration:
-
-{% highlight yaml %}
-
-metrics.reporter.gang.class: org.apache.flink.metrics.ganglia.GangliaReporter
-metrics.reporter.gang.host: localhost
-metrics.reporter.gang.port: 8649
-metrics.reporter.gang.tmax: 60
-metrics.reporter.gang.dmax: 0
-metrics.reporter.gang.ttl: 1
-metrics.reporter.gang.addressingMode: MULTICAST
-
-{% endhighlight %}
-
 ### Graphite (org.apache.flink.metrics.graphite.GraphiteReporter)
 
 In order to use this reporter you must copy `/opt/flink-metrics-graphite-{{site.version}}.jar` into the `/lib` folder
@@ -674,7 +646,7 @@ metrics.reporter.grph.protocol: TCP
 
 ### Prometheus (org.apache.flink.metrics.prometheus.PrometheusReporter)
 
-In order to use this reporter you must copy `/opt/flink-metrics-prometheus-{{site.version}}.jar` into the `/lib` folder
+In order to use this reporter you must copy `/opt/flink-metrics-prometheus{{site.scala_version_suffix}}-{{site.version}}.jar` into the `/lib` folder
 of your Flink distribution.
 
 Parameters:
@@ -1133,7 +1105,7 @@ Thus, in order to infer the metric identifier:
     </tr>
     <tr>
       <td>fullRestarts</td>
-      <td>The total number of full restarts since this job was submitted (in milliseconds).</td>
+      <td>The total number of full restarts since this job was submitted.</td>
       <td>Gauge</td>
     </tr>
   </tbody>
@@ -1205,6 +1177,9 @@ Thus, in order to infer the metric identifier:
   </tbody>
 </table>
 
+### RocksDB
+Certain RocksDB native metrics are available but disabled by default, you can find full documentation [here]({{ site.baseurl }}/ops/config.html#rocksdb-native-metrics)
+
 ### IO
 <table class="table table-bordered">
   <thead>
@@ -1223,7 +1198,7 @@ Thus, in order to infer the metric identifier:
       <td>Histogram</td>
     </tr>
     <tr>
-      <th rowspan="6"><strong>Task</strong></th>
+      <th rowspan="12"><strong>Task</strong></th>
       <td>numBytesInLocal</td>
       <td>The total number of bytes this task has read from a local source.</td>
       <td>Counter</td>
@@ -1244,6 +1219,26 @@ Thus, in order to infer the metric identifier:
       <td>Meter</td>
     </tr>
     <tr>
+      <td>numBuffersInLocal</td>
+      <td>The total number of network buffers this task has read from a local source.</td>
+      <td>Counter</td>
+    </tr>
+    <tr>
+      <td>numBuffersInLocalPerSecond</td>
+      <td>The number of network buffers this task reads from a local source per second.</td>
+      <td>Meter</td>
+    </tr>
+    <tr>
+      <td>numBuffersInRemote</td>
+      <td>The total number of network buffers this task has read from a remote source.</td>
+      <td>Counter</td>
+    </tr>
+    <tr>
+      <td>numBuffersInRemotePerSecond</td>
+      <td>The number of network buffers this task reads from a remote source per second.</td>
+      <td>Meter</td>
+    </tr>
+    <tr>
       <td>numBytesOut</td>
       <td>The total number of bytes this task has emitted.</td>
       <td>Counter</td>
@@ -1251,6 +1246,16 @@ Thus, in order to infer the metric identifier:
     <tr>
       <td>numBytesOutPerSecond</td>
       <td>The number of bytes this task emits per second.</td>
+      <td>Meter</td>
+    </tr>
+    <tr>
+      <td>numBuffersOut</td>
+      <td>The total number of network buffers this task has emitted.</td>
+      <td>Counter</td>
+    </tr>
+    <tr>
+      <td>numBuffersOutPerSecond</td>
+      <td>The number of network buffers this task emits per second.</td>
       <td>Meter</td>
     </tr>
     <tr>
@@ -1393,13 +1398,224 @@ Thus, in order to infer the metric identifier:
       </td>
       <td>Gauge</td>
     </tr>
+    <tr>
+      <th rowspan="1">Operator</th>
+      <td>sleepTimeMillis</td>
+      <td>stream, shardId</td>
+      <td>The number of milliseconds the consumer spends sleeping before fetching records from Kinesis.
+      A particular shard's metric can be specified by stream name and shard id.
+      </td>
+      <td>Gauge</td>
+    </tr>
+    <tr>
+      <th rowspan="1">Operator</th>
+      <td>maxNumberOfRecordsPerFetch</td>
+      <td>stream, shardId</td>
+      <td>The maximum number of records requested by the consumer in a single getRecords call to Kinesis. If ConsumerConfigConstants.SHARD_USE_ADAPTIVE_READS
+      is set to true, this value is adaptively calculated to maximize the 2 Mbps read limits from Kinesis.
+      </td>
+      <td>Gauge</td>
+    </tr>
+    <tr>
+      <th rowspan="1">Operator</th>
+      <td>numberOfAggregatedRecordsPerFetch</td>
+      <td>stream, shardId</td>
+      <td>The number of aggregated Kinesis records fetched by the consumer in a single getRecords call to Kinesis.
+      </td>
+      <td>Gauge</td>
+    </tr>
+    <tr>
+      <th rowspan="1">Operator</th>
+      <td>numberOfDeggregatedRecordsPerFetch</td>
+      <td>stream, shardId</td>
+      <td>The number of deaggregated Kinesis records fetched by the consumer in a single getRecords call to Kinesis.
+      </td>
+      <td>Gauge</td>
+    </tr>
+    <tr>
+      <th rowspan="1">Operator</th>
+      <td>averageRecordSizeBytes</td>
+      <td>stream, shardId</td>
+      <td>The average size of a Kinesis record in bytes, fetched by the consumer in a single getRecords call.
+      </td>
+      <td>Gauge</td>
+    </tr>
+    <tr>
+      <th rowspan="1">Operator</th>
+      <td>runLoopTimeNanos</td>
+      <td>stream, shardId</td>
+      <td>The actual time taken, in nanoseconds, by the consumer in the run loop.
+      </td>
+      <td>Gauge</td>
+    </tr>
+    <tr>
+      <th rowspan="1">Operator</th>
+      <td>loopFrequencyHz</td>
+      <td>stream, shardId</td>
+      <td>The number of calls to getRecords in one second. 
+      </td>
+      <td>Gauge</td>
+    </tr>
+    <tr>
+      <th rowspan="1">Operator</th>
+      <td>bytesRequestedPerFetch</td>
+      <td>stream, shardId</td>
+      <td>The bytes requested (2 Mbps / loopFrequencyHz) in a single call to getRecords.
+      </td>
+      <td>Gauge</td>
+    </tr>
+  </tbody>
+</table>
+
+### System resources
+
+System resources reporting is disabled by default. When `metrics.system-resource`
+is enabled additional metrics listed below will be available on Job- and TaskManager.
+System resources metrics are updated periodically and they present average values for a
+configured interval (`metrics.system-resource-probing-interval`).
+
+System resources reporting requires an optional dependency to be present on the
+classpath (for example placed in Flink's `lib` directory):
+
+  - `com.github.oshi:oshi-core:3.4.0` (licensed under EPL 1.0 license)
+
+Including it's transitive dependencies:
+
+  - `net.java.dev.jna:jna-platform:jar:4.2.2`
+  - `net.java.dev.jna:jna:jar:4.2.2`
+
+Failures in this regard will be reported as warning messages like `NoClassDefFoundError`
+logged by `SystemResourcesMetricsInitializer` during the startup.
+
+#### System CPU
+
+<table class="table table-bordered">
+  <thead>
+    <tr>
+      <th class="text-left" style="width: 20%">Scope</th>
+      <th class="text-left" style="width: 25%">Infix</th>
+      <th class="text-left" style="width: 23%">Metrics</th>
+      <th class="text-left" style="width: 32%">Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th rowspan="12"><strong>Job-/TaskManager</strong></th>
+      <td rowspan="12">System.CPU</td>
+      <td>Usage</td>
+      <td>Overall % of CPU usage on the machine.</td>
+    </tr>
+    <tr>
+      <td>Idle</td>
+      <td>% of CPU Idle usage on the machine.</td>
+    </tr>
+    <tr>
+      <td>Sys</td>
+      <td>% of System CPU usage on the machine.</td>
+    </tr>
+    <tr>
+      <td>User</td>
+      <td>% of User CPU usage on the machine.</td>
+    </tr>
+    <tr>
+      <td>IOWait</td>
+      <td>% of IOWait CPU usage on the machine.</td>
+    </tr>
+    <tr>
+      <td>Irq</td>
+      <td>% of Irq CPU usage on the machine.</td>
+    </tr>
+    <tr>
+      <td>SoftIrq</td>
+      <td>% of SoftIrq CPU usage on the machine.</td>
+    </tr>
+    <tr>
+      <td>Nice</td>
+      <td>% of Nice Idle usage on the machine.</td>
+    </tr>
+    <tr>
+      <td>Load1min</td>
+      <td>Average CPU load over 1 minute</td>
+    </tr>
+    <tr>
+      <td>Load5min</td>
+      <td>Average CPU load over 5 minute</td>
+    </tr>
+    <tr>
+      <td>Load15min</td>
+      <td>Average CPU load over 15 minute</td>
+    </tr>
+    <tr>
+      <td>UsageCPU*</td>
+      <td>% of CPU usage per each processor</td>
+    </tr>
+  </tbody>
+</table>
+
+#### System memory
+
+<table class="table table-bordered">
+  <thead>
+    <tr>
+      <th class="text-left" style="width: 20%">Scope</th>
+      <th class="text-left" style="width: 25%">Infix</th>
+      <th class="text-left" style="width: 23%">Metrics</th>
+      <th class="text-left" style="width: 32%">Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th rowspan="4"><strong>Job-/TaskManager</strong></th>
+      <td rowspan="2">System.Memory</td>
+      <td>Available</td>
+      <td>Available memory in bytes</td>
+    </tr>
+    <tr>
+      <td>Total</td>
+      <td>Total memory in bytes</td>
+    </tr>
+    <tr>
+      <td rowspan="2">System.Swap</td>
+      <td>Used</td>
+      <td>Used swap bytes</td>
+    </tr>
+    <tr>
+      <td>Total</td>
+      <td>Total swap in bytes</td>
+    </tr>
+  </tbody>
+</table>
+
+#### System network
+
+<table class="table table-bordered">
+  <thead>
+    <tr>
+      <th class="text-left" style="width: 20%">Scope</th>
+      <th class="text-left" style="width: 25%">Infix</th>
+      <th class="text-left" style="width: 23%">Metrics</th>
+      <th class="text-left" style="width: 32%">Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th rowspan="2"><strong>Job-/TaskManager</strong></th>
+      <td rowspan="2">System.Network.INTERFACE_NAME</td>
+      <td>ReceiveRate</td>
+      <td>Average receive rate in bytes per second</td>
+    </tr>
+    <tr>
+      <td>SendRate</td>
+      <td>Average send rate in bytes per second</td>
+    </tr>
   </tbody>
 </table>
 
 ## Latency tracking
 
-Flink allows to track the latency of records traveling through the system. To enable the latency tracking
-a `latencyTrackingInterval` (in milliseconds) has to be set to a positive value in the `ExecutionConfig`.
+Flink allows to track the latency of records traveling through the system. This feature is disabled by default.
+To enable the latency tracking you must set the `latencyTrackingInterval` to a positive number in either the
+[Flink configuration]({{ site.baseurl }}/ops/config.html#metrics-latency-interval) or `ExecutionConfig`.
 
 At the `latencyTrackingInterval`, the sources will periodically emit a special record, called a `LatencyMarker`.
 The marker contains a timestamp from the time when the record has been emitted at the sources.
@@ -1411,13 +1627,18 @@ bypassing them. In particular the markers are not accounting for the time record
 Only if operators are not able to accept new records, thus they are queuing up, the latency measured using
 the markers will reflect that.
 
-All intermediate operators keep a list of the last `n` latencies from each source to compute 
-a latency distribution.
-The sink operators keep a list from each source, and each parallel source instance to allow detecting 
-latency issues caused by individual machines.
+The `LatencyMarker`s are used to derive a distribution of the latency between the sources of the topology and each 
+downstream operator. These distributions are reported as histogram metrics. The granularity of these distributions can 
+be controlled in the [Flink configuration]({{ site.baseurl }}/ops/config.html#metrics-latency-interval. For the highest 
+granularity `subtask` Flink will derive the latency distribution between every source subtask and every downstream 
+subtask, which results in quadratic (in the terms of the parallelism) number of histograms. 
 
 Currently, Flink assumes that the clocks of all machines in the cluster are in sync. We recommend setting
 up an automated clock synchronisation service (like NTP) to avoid false latency results.
+
+<span class="label label-danger">Warning</span> Enabling latency metrics can significantly impact the performance
+of the cluster (in particular for `subtask` granularity). It is highly recommended to only use them for debugging 
+purposes.
 
 ## REST API integration
 

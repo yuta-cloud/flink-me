@@ -25,6 +25,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.accumulators.AccumulatorRegistry;
 import org.apache.flink.runtime.broadcast.BroadcastVariableManager;
+import org.apache.flink.runtime.causal.log.CausalLogManager;
 import org.apache.flink.runtime.checkpoint.CheckpointMetrics;
 import org.apache.flink.runtime.checkpoint.TaskStateSnapshot;
 import org.apache.flink.runtime.execution.Environment;
@@ -32,7 +33,8 @@ import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.network.TaskEventDispatcher;
 import org.apache.flink.runtime.io.network.api.writer.ResultPartitionWriter;
-import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
+import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGate;
+import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.tasks.InputSplitProvider;
 import org.apache.flink.runtime.memory.MemoryManager;
@@ -40,6 +42,7 @@ import org.apache.flink.runtime.metrics.groups.TaskMetricGroup;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
 import org.apache.flink.runtime.state.TaskStateManager;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
 
@@ -53,9 +56,9 @@ public class RuntimeEnvironment implements Environment {
 	private final JobID jobId;
 	private final JobVertexID jobVertexId;
 	private final ExecutionAttemptID executionId;
-	
+
 	private final TaskInfo taskInfo;
-	
+
 	private final Configuration jobConfiguration;
 	private final Configuration taskConfiguration;
 	private final ExecutionConfig executionConfig;
@@ -71,7 +74,7 @@ public class RuntimeEnvironment implements Environment {
 	private final Map<String, Future<Path>> distCacheEntries;
 
 	private final ResultPartitionWriter[] writers;
-	private final InputGate[] inputGates;
+	private final SingleInputGate[] inputGates;
 
 	private final TaskEventDispatcher taskEventDispatcher;
 	
@@ -86,32 +89,38 @@ public class RuntimeEnvironment implements Environment {
 
 	private final Task containingTask;
 
+	private final List<JobVertex> topologicallySortedJobVertexes;
+
+	private final CausalLogManager causalLogManager;
+
 	// ------------------------------------------------------------------------
 
 	public RuntimeEnvironment(
-			JobID jobId,
-			JobVertexID jobVertexId,
-			ExecutionAttemptID executionId,
-			ExecutionConfig executionConfig,
-			TaskInfo taskInfo,
-			Configuration jobConfiguration,
-			Configuration taskConfiguration,
-			ClassLoader userCodeClassLoader,
-			MemoryManager memManager,
-			IOManager ioManager,
-			BroadcastVariableManager bcVarManager,
-			TaskStateManager taskStateManager,
-			AccumulatorRegistry accumulatorRegistry,
-			TaskKvStateRegistry kvStateRegistry,
-			InputSplitProvider splitProvider,
-			Map<String, Future<Path>> distCacheEntries,
-			ResultPartitionWriter[] writers,
-			InputGate[] inputGates,
-			TaskEventDispatcher taskEventDispatcher,
-			CheckpointResponder checkpointResponder,
-			TaskManagerRuntimeInfo taskManagerInfo,
-			TaskMetricGroup metrics,
-			Task containingTask) {
+		JobID jobId,
+		JobVertexID jobVertexId,
+		List<JobVertex> topologicallySortedJobVertexes,
+		ExecutionAttemptID executionId,
+		ExecutionConfig executionConfig,
+		TaskInfo taskInfo,
+		Configuration jobConfiguration,
+		Configuration taskConfiguration,
+		ClassLoader userCodeClassLoader,
+		MemoryManager memManager,
+		IOManager ioManager,
+		BroadcastVariableManager bcVarManager,
+		TaskStateManager taskStateManager,
+		AccumulatorRegistry accumulatorRegistry,
+		TaskKvStateRegistry kvStateRegistry,
+		InputSplitProvider splitProvider,
+		Map<String, Future<Path>> distCacheEntries,
+		ResultPartitionWriter[] writers,
+		SingleInputGate[] inputGates,
+		TaskEventDispatcher taskEventDispatcher,
+		CausalLogManager causalLogManager,
+		CheckpointResponder checkpointResponder,
+		TaskManagerRuntimeInfo taskManagerInfo,
+		TaskMetricGroup metrics,
+		Task containingTask) {
 
 		this.jobId = checkNotNull(jobId);
 		this.jobVertexId = checkNotNull(jobVertexId);
@@ -132,10 +141,12 @@ public class RuntimeEnvironment implements Environment {
 		this.writers = checkNotNull(writers);
 		this.inputGates = checkNotNull(inputGates);
 		this.taskEventDispatcher = checkNotNull(taskEventDispatcher);
+		this.causalLogManager = checkNotNull(causalLogManager);
 		this.checkpointResponder = checkNotNull(checkpointResponder);
 		this.taskManagerInfo = checkNotNull(taskManagerInfo);
 		this.containingTask = containingTask;
 		this.metrics = metrics;
+		this.topologicallySortedJobVertexes = topologicallySortedJobVertexes;
 	}
 
 	// ------------------------------------------------------------------------
@@ -241,18 +252,32 @@ public class RuntimeEnvironment implements Environment {
 	}
 
 	@Override
-	public InputGate getInputGate(int index) {
+	public SingleInputGate getInputGate(int index) {
 		return inputGates[index];
 	}
 
 	@Override
-	public InputGate[] getAllInputGates() {
+	public SingleInputGate[] getAllInputGates() {
 		return inputGates;
 	}
 
 	@Override
 	public TaskEventDispatcher getTaskEventDispatcher() {
 		return taskEventDispatcher;
+	}
+
+	@Override
+	public CausalLogManager getCausalLogManager(){
+		return causalLogManager;
+	}
+
+	public List<JobVertex> getTopologicallySortedJobVertexes() {
+		return topologicallySortedJobVertexes;
+	}
+
+	@Override
+	public Task getContainingTask() {
+		return containingTask;
 	}
 
 	@Override

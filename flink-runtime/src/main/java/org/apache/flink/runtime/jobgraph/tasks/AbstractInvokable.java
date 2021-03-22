@@ -27,6 +27,10 @@ import org.apache.flink.runtime.execution.Environment;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
+import java.util.concurrent.CompletableFuture;
+import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
+
 /**
  * This is the abstract base class for every task that can be executed by a TaskManager.
  * Concrete tasks extend this class, for example the streaming and batch tasks.
@@ -89,6 +93,21 @@ public abstract class AbstractInvokable {
 	 *         Tasks may forward their exceptions for the TaskManager to handle through failure/recovery.
 	 */
 	public abstract void invoke() throws Exception;
+
+	public void initializeState() throws Exception {
+
+	}
+
+	public void switchStandbyToRunning() throws Exception {
+
+	}
+
+	public void notifyStartedRestoringCheckpoint(long checkpointId){
+
+	}
+	public void notifyCompletedRestoringCheckpoint(long checkpointId){
+
+	}
 
 	/**
 	 * This method is called when a task is canceled either as a result of a user abort or an execution failure. It can
@@ -188,6 +207,11 @@ public abstract class AbstractInvokable {
 		return this.environment.getExecutionConfig();
 	}
 
+	@VisibleForTesting
+	public CompletableFuture<Void> getStandbyFuture() {
+		return null;
+	}
+
 	// ------------------------------------------------------------------------
 	//  Checkpointing Methods
 	// ------------------------------------------------------------------------
@@ -247,5 +271,13 @@ public abstract class AbstractInvokable {
 	 */
 	public void notifyCheckpointComplete(long checkpointId) throws Exception {
 		throw new UnsupportedOperationException(String.format("notifyCheckpointComplete not supported by %s", this.getClass().getName()));
+	}
+
+	public void ignoreCheckpoint(long checkpointId){
+		throw new UnsupportedOperationException(String.format("ignoreCheckpoint not supported by %s", this.getClass().getName()));
+	}
+
+	public void resetInputChannelDeserializer(InputGate gate, int channelIndex){
+		throw new UnsupportedOperationException(String.format("resetInputChannelDeserializer not supported by %s", this.getClass().getName()));
 	}
 }

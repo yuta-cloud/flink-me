@@ -19,11 +19,18 @@ package org.apache.flink.streaming.runtime.io;
 
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.core.io.IOReadableWritable;
+import org.apache.flink.api.common.services.RandomService;
+import org.apache.flink.api.common.services.SimpleRandomService;
+import org.apache.flink.runtime.causal.EpochTracker;
+import org.apache.flink.runtime.causal.EpochTrackerImpl;
 import org.apache.flink.runtime.io.network.api.writer.ChannelSelector;
 import org.apache.flink.runtime.io.network.api.writer.RecordWriter;
 import org.apache.flink.runtime.io.network.api.writer.ResultPartitionWriter;
 
 import java.io.IOException;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.apache.flink.util.Preconditions.checkArgument;
 
@@ -36,6 +43,8 @@ import static org.apache.flink.util.Preconditions.checkArgument;
 @Internal
 public class StreamRecordWriter<T extends IOReadableWritable> extends RecordWriter<T> {
 
+	private static final Logger LOG = LoggerFactory.getLogger(StreamRecordWriter.class);
+
 	/** Default name for teh output flush thread, if no name with a task reference is given. */
 	private static final String DEFAULT_OUTPUT_FLUSH_THREAD_NAME = "OutputFlusher";
 
@@ -47,15 +56,15 @@ public class StreamRecordWriter<T extends IOReadableWritable> extends RecordWrit
 	private Throwable flusherException;
 
 	public StreamRecordWriter(ResultPartitionWriter writer, ChannelSelector<T> channelSelector, long timeout) {
-		this(writer, channelSelector, timeout, null);
+		this(writer, channelSelector, timeout, null, new SimpleRandomService(), new EpochTrackerImpl());
 	}
 
 	public StreamRecordWriter(
-			ResultPartitionWriter writer,
-			ChannelSelector<T> channelSelector,
-			long timeout,
-			String taskName) {
-		super(writer, channelSelector, timeout == 0);
+		ResultPartitionWriter writer,
+		ChannelSelector<T> channelSelector,
+		long timeout,
+		String taskName, RandomService randomService, EpochTracker epochTracker) {
+		super(writer, channelSelector, timeout == 0, randomService, epochTracker);
 
 		checkArgument(timeout >= -1);
 
@@ -96,7 +105,8 @@ public class StreamRecordWriter<T extends IOReadableWritable> extends RecordWrit
 	/**
 	 * Closes the writer. This stops the flushing thread (if there is one).
 	 */
-	public void close() {
+	public void close() throws IOException, InterruptedException {
+		LOG.info("Close writer {}.", this);
 		clearBuffers();
 		// make sure we terminate the thread in any case
 		if (outputFlusher != null) {

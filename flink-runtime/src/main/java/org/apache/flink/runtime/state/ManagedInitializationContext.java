@@ -18,6 +18,9 @@
 
 package org.apache.flink.runtime.state;
 
+import org.apache.flink.api.common.services.RandomService;
+import org.apache.flink.api.common.services.SerializableServiceFactory;
+import org.apache.flink.api.common.services.TimeService;
 import org.apache.flink.api.common.state.KeyedStateStore;
 import org.apache.flink.api.common.state.OperatorStateStore;
 
@@ -42,6 +45,12 @@ public interface ManagedInitializationContext {
 	boolean isRestored();
 
 	/**
+	 * Returns true, if the task is only loading a state snapshot for a standby task.
+	 */
+	boolean isStandby();
+
+
+	/**
 	 * Returns an interface that allows for registering operator state with the backend.
 	 */
 	OperatorStateStore getOperatorStateStore();
@@ -50,5 +59,12 @@ public interface ManagedInitializationContext {
 	 * Returns an interface that allows for registering keyed state with the backend.
 	 */
 	KeyedStateStore getKeyedStateStore();
+
+
+	RandomService getRandomService();
+
+	TimeService getTimeService();
+
+	SerializableServiceFactory getSerializableServiceFactory();
 
 }

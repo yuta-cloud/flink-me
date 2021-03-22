@@ -20,7 +20,7 @@ package org.apache.flink.streaming.tests.verify;
 
 import org.apache.flink.api.common.state.State;
 import org.apache.flink.api.common.state.StateDescriptor;
-import org.apache.flink.api.common.state.StateTtlConfiguration;
+import org.apache.flink.api.common.state.StateTtlConfig;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.runtime.state.FunctionInitializationContext;
 import org.apache.flink.util.StringUtils;
@@ -52,7 +52,7 @@ abstract class AbstractTtlStateVerifier<D extends StateDescriptor<S, SV>, S exte
 	@SuppressWarnings("unchecked")
 	@Override
 	@Nonnull
-	public State createState(@Nonnull FunctionInitializationContext context, @Nonnull StateTtlConfiguration ttlConfig) {
+	public State createState(@Nonnull FunctionInitializationContext context, @Nonnull StateTtlConfig ttlConfig) {
 		stateDesc.enableTimeToLive(ttlConfig);
 		return createState(context);
 	}
@@ -86,15 +86,18 @@ abstract class AbstractTtlStateVerifier<D extends StateDescriptor<S, SV>, S exte
 	@Override
 	public boolean verify(@Nonnull TtlVerificationContext<?, ?> verificationContextRaw) {
 		TtlVerificationContext<UV, GV> verificationContext = (TtlVerificationContext<UV, GV>) verificationContextRaw;
-		List<ValueWithTs<UV>> updates = new ArrayList<>(verificationContext.getPrevUpdates());
-		long currentTimestamp = verificationContext.getUpdateContext().getTimestampBeforeUpdate();
-		GV prevValue = expected(updates, currentTimestamp);
+		long currentTimestamp = verificationContext.getUpdateContext().getTimestamp();
+
 		GV valueBeforeUpdate = verificationContext.getUpdateContext().getValueBeforeUpdate();
+		List<ValueWithTs<UV>> updates = new ArrayList<>(verificationContext.getPrevUpdates());
+		GV expectedValueBeforeUpdate = expected(updates, currentTimestamp);
+
+		GV valueAfterUpdate = verificationContext.getUpdateContext().getValueAfterUpdate();
 		ValueWithTs<UV> update = verificationContext.getUpdateContext().getUpdateWithTs();
-		GV updatedValue = verificationContext.getUpdateContext().getUpdatedValue();
 		updates.add(update);
-		GV expectedValue = expected(updates, currentTimestamp);
-		return Objects.equals(valueBeforeUpdate, prevValue) && Objects.equals(updatedValue, expectedValue);
+		GV expectedValueAfterUpdate = expected(updates, currentTimestamp);
+
+		return Objects.equals(valueBeforeUpdate, expectedValueBeforeUpdate) && Objects.equals(valueAfterUpdate, expectedValueAfterUpdate);
 	}
 
 	abstract GV expected(@Nonnull List<ValueWithTs<UV>> updates, long currentTimestamp);

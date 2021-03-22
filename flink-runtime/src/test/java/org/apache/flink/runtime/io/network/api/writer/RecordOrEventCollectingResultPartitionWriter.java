@@ -25,6 +25,7 @@ import org.apache.flink.runtime.io.network.api.serialization.RecordDeserializer;
 import org.apache.flink.runtime.io.network.api.serialization.SpillingAdaptiveSpanningRecordDeserializer;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.buffer.BufferProvider;
+import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.plugable.DeserializationDelegate;
 import org.apache.flink.runtime.plugable.NonReusingDeserializationDelegate;
 
@@ -75,4 +76,10 @@ public class RecordOrEventCollectingResultPartitionWriter<T> extends AbstractCol
 			output.add(event);
 		}
 	}
+
+	@Override
+	public String getTaskName() {
+		return null;
+	}
+
 }

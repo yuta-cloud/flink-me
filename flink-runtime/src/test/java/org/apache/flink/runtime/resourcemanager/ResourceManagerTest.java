@@ -18,13 +18,13 @@
 
 package org.apache.flink.runtime.resourcemanager;
 
-import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.heartbeat.HeartbeatServices;
 import org.apache.flink.runtime.highavailability.TestingHighAvailabilityServices;
 import org.apache.flink.runtime.instance.HardwareDescription;
 import org.apache.flink.runtime.leaderelection.TestingLeaderElectionService;
 import org.apache.flink.runtime.metrics.NoOpMetricRegistry;
+import org.apache.flink.runtime.metrics.groups.UnregisteredMetricGroups;
 import org.apache.flink.runtime.registration.RegistrationResponse;
 import org.apache.flink.runtime.resourcemanager.slotmanager.SlotManager;
 import org.apache.flink.runtime.rest.messages.taskmanager.TaskManagerInfo;
@@ -67,7 +67,6 @@ public class ResourceManagerTest extends TestLogger {
 	 */
 	@Test
 	public void testRequestTaskManagerInfo() throws Exception {
-		final Configuration configuration = new Configuration();
 		final TestingHighAvailabilityServices highAvailabilityServices = new TestingHighAvailabilityServices();
 		final SlotManager slotManager = new SlotManager(
 			rpcService.getScheduledExecutor(),
@@ -92,7 +91,8 @@ public class ResourceManagerTest extends TestLogger {
 			slotManager,
 			NoOpMetricRegistry.INSTANCE,
 			jobLeaderIdService,
-			testingFatalErrorHandler);
+			testingFatalErrorHandler,
+			UnregisteredMetricGroups.createUnregisteredJobManagerMetricGroup());
 
 		resourceManager.start();
 

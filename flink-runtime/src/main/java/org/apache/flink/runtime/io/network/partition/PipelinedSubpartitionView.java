@@ -18,11 +18,16 @@
 
 package org.apache.flink.runtime.io.network.partition;
 
+import org.apache.flink.api.common.JobID;
+import org.apache.flink.runtime.causal.VertexID;
 import org.apache.flink.runtime.io.network.partition.ResultSubpartition.BufferAndBacklog;
 
 import javax.annotation.Nullable;
 
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
@@ -31,10 +36,12 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  */
 class PipelinedSubpartitionView implements ResultSubpartitionView {
 
+	private static final Logger LOG = LoggerFactory.getLogger(PipelinedSubpartitionView.class);
+
 	/** The subpartition this view belongs to. */
 	private final PipelinedSubpartition parent;
 
-	private final BufferAvailabilityListener availabilityListener;
+	private BufferAvailabilityListener availabilityListener;
 
 	/** Flag indicating whether this view has been released. */
 	private final AtomicBoolean isReleased;
@@ -43,6 +50,10 @@ class PipelinedSubpartitionView implements ResultSubpartitionView {
 		this.parent = checkNotNull(parent);
 		this.availabilityListener = checkNotNull(listener);
 		this.isReleased = new AtomicBoolean();
+	}
+
+	public void setAvailabilityListener(BufferAvailabilityListener availabilityListener) {
+		this.availabilityListener = availabilityListener;
 	}
 
 	@Nullable
@@ -58,16 +69,23 @@ class PipelinedSubpartitionView implements ResultSubpartitionView {
 
 	@Override
 	public void notifySubpartitionConsumed() {
+		LOG.debug("Notify that {} is consumed.", this);
 		releaseAllResources();
 	}
 
 	@Override
 	public void releaseAllResources() {
+		LOG.debug("Release all resources of {}.", this);
 		if (isReleased.compareAndSet(false, true)) {
 			// The view doesn't hold any resources and the parent cannot be restarted. Therefore,
 			// it's OK to notify about consumption as well.
 			parent.onConsumedSubpartition();
 		}
+	}
+
+	@Override
+	public void sendFailConsumerTrigger(Throwable cause) {
+		parent.sendFailConsumerTrigger(cause);
 	}
 
 	@Override
@@ -83,6 +101,16 @@ class PipelinedSubpartitionView implements ResultSubpartitionView {
 	@Override
 	public boolean isAvailable() {
 		return parent.isAvailable();
+	}
+
+	@Override
+	public JobID getJobID() {
+		return this.parent.getJobID();
+	}
+
+	@Override
+	public short getVertexID() {
+		return this.parent.getVertexID();
 	}
 
 	@Override

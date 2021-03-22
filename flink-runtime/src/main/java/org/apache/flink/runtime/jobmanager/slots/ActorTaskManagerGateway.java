@@ -22,6 +22,7 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.time.Time;
 import org.apache.flink.runtime.blob.TransientBlobKey;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
+import org.apache.flink.runtime.checkpoint.JobManagerTaskRestore;
 import org.apache.flink.runtime.clusterframework.ApplicationStatus;
 import org.apache.flink.runtime.clusterframework.messages.StopCluster;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
@@ -31,6 +32,8 @@ import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.executiongraph.PartitionInfo;
 import org.apache.flink.runtime.instance.ActorGateway;
 import org.apache.flink.runtime.instance.InstanceID;
+import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
+import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.messages.Messages;
 import org.apache.flink.runtime.messages.StackTrace;
@@ -40,6 +43,7 @@ import org.apache.flink.runtime.messages.TaskManagerMessages;
 import org.apache.flink.runtime.messages.TaskMessages;
 import org.apache.flink.runtime.messages.checkpoint.NotifyCheckpointComplete;
 import org.apache.flink.runtime.messages.checkpoint.TriggerCheckpoint;
+import org.apache.flink.util.FutureUtil;
 import org.apache.flink.util.Preconditions;
 
 import java.util.concurrent.CompletableFuture;
@@ -159,6 +163,43 @@ public class ActorTaskManagerGateway implements TaskManagerGateway {
 	}
 
 	@Override
+	public CompletableFuture<Acknowledge> failTask(
+		ExecutionAttemptID executionAttemptID,
+		Throwable t,
+		Time timeout) {
+
+		// TODO revisit the following: hard-coded input
+		return FutureUtils.toJava(null);
+	}
+
+	@Override
+	public CompletableFuture<Acknowledge> dispatchStateToStandbyTask(ExecutionAttemptID executionAttemptID, JobManagerTaskRestore taskRestore, Time timeout) {
+		Preconditions.checkNotNull(executionAttemptID);
+		Preconditions.checkNotNull(taskRestore);
+		Preconditions.checkNotNull(timeout);
+
+		scala.concurrent.Future<Acknowledge> dispatchStateToStandbyTaskResult = actorGateway.ask(
+			new TaskMessages.dispatchStateToStandbyTask(executionAttemptID, taskRestore),
+			new FiniteDuration(timeout.getSize(), timeout.getUnit()))
+			.mapTo(ClassTag$.MODULE$.<Acknowledge>apply(Acknowledge.class));
+
+		return FutureUtils.toJava(dispatchStateToStandbyTaskResult);
+	}
+
+	@Override
+	public CompletableFuture<Acknowledge> switchStandbyTaskToRunning(ExecutionAttemptID executionAttemptID, Time timeout) {
+		Preconditions.checkNotNull(executionAttemptID);
+		Preconditions.checkNotNull(timeout);
+
+		scala.concurrent.Future<Acknowledge> switchStandbyTaskToRunningResult = actorGateway.ask(
+			new TaskMessages.switchStandbyTaskToRunning(executionAttemptID),
+			new FiniteDuration(timeout.getSize(), timeout.getUnit()))
+			.mapTo(ClassTag$.MODULE$.<Acknowledge>apply(Acknowledge.class));
+
+		return FutureUtils.toJava(switchStandbyTaskToRunningResult);
+	}
+
+	@Override
 	public CompletableFuture<Acknowledge> updatePartitions(ExecutionAttemptID executionAttemptID, Iterable<PartitionInfo> partitionInfos, Time timeout) {
 		Preconditions.checkNotNull(executionAttemptID);
 		Preconditions.checkNotNull(partitionInfos);
@@ -222,6 +263,20 @@ public class ActorTaskManagerGateway implements TaskManagerGateway {
 	@Override
 	public CompletableFuture<Acknowledge> freeSlot(AllocationID allocationId, Throwable cause, Time timeout) {
 		throw new UnsupportedOperationException("The old TaskManager does not support freeing slots");
+	}
+
+	@Override
+	public CompletableFuture<Acknowledge> ignoreCheckpoint(ExecutionAttemptID attemptId, long checkpointId,
+													 Time rpcTimeout) {
+		TaskMessages.IgnoreCheckpoint ignoreMessage = new TaskMessages.IgnoreCheckpoint(
+			attemptId,
+			checkpointId);
+
+		scala.concurrent.Future<Acknowledge> ignoreFuture = actorGateway
+			.ask(ignoreMessage, new FiniteDuration(rpcTimeout.getSize(), rpcTimeout.getUnit()))
+			.mapTo(ClassTag$.MODULE$.<Acknowledge>apply(Acknowledge.class));
+
+			return FutureUtils.toJava(ignoreFuture);
 	}
 
 	private CompletableFuture<TransientBlobKey> requestTaskManagerLog(TaskManagerMessages.RequestTaskManagerLog request, Time timeout) {

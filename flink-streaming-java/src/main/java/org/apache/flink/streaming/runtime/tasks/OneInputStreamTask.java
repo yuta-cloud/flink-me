@@ -23,11 +23,15 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.runtime.execution.Environment;
 import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
+import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGate;
 import org.apache.flink.runtime.metrics.MetricNames;
 import org.apache.flink.streaming.api.graph.StreamConfig;
 import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
+import org.apache.flink.streaming.runtime.io.CheckpointBarrierHandler;
 import org.apache.flink.streaming.runtime.io.StreamInputProcessor;
 import org.apache.flink.streaming.runtime.metrics.WatermarkGauge;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
@@ -37,6 +41,7 @@ import javax.annotation.Nullable;
 @Internal
 public class OneInputStreamTask<IN, OUT> extends StreamTask<OUT, OneInputStreamOperator<IN, OUT>> {
 
+	private static final Logger LOG = LoggerFactory.getLogger(OneInputStreamTask.class);
 	private StreamInputProcessor<IN> inputProcessor;
 
 	private volatile boolean running = true;
@@ -59,13 +64,13 @@ public class OneInputStreamTask<IN, OUT> extends StreamTask<OUT, OneInputStreamO
 	 * null is passes for the time provider) a {@link SystemProcessingTimeService DefaultTimerService}
 	 * will be used.
 	 *
-	 * @param env The task environment for this task.
+	 * @param env          The task environment for this task.
 	 * @param timeProvider Optionally, a specific time provider to use.
 	 */
 	@VisibleForTesting
 	public OneInputStreamTask(
-			Environment env,
-			@Nullable ProcessingTimeService timeProvider) {
+		Environment env,
+		@Nullable ProcessingTimeService timeProvider) {
 		super(env, timeProvider);
 	}
 
@@ -77,20 +82,20 @@ public class OneInputStreamTask<IN, OUT> extends StreamTask<OUT, OneInputStreamO
 		int numberOfInputs = configuration.getNumberOfInputs();
 
 		if (numberOfInputs > 0) {
-			InputGate[] inputGates = getEnvironment().getAllInputGates();
+			SingleInputGate[] inputGates = getEnvironment().getAllInputGates();
 
 			inputProcessor = new StreamInputProcessor<>(
-					inputGates,
-					inSerializer,
-					this,
-					configuration.getCheckpointMode(),
-					getCheckpointLock(),
-					getEnvironment().getIOManager(),
-					getEnvironment().getTaskManagerInfo().getConfiguration(),
-					getStreamStatusMaintainer(),
-					this.headOperator,
-					getEnvironment().getMetricGroup().getIOMetricGroup(),
-					inputWatermarkGauge);
+				inputGates,
+				inSerializer,
+				this,
+				configuration.getCheckpointMode(),
+				getCheckpointLock(),
+				getEnvironment().getIOManager(),
+				getEnvironment().getTaskManagerInfo().getConfiguration(),
+				getStreamStatusMaintainer(),
+				this.headOperator,
+				getEnvironment().getMetricGroup().getIOMetricGroup(),
+				inputWatermarkGauge);
 		}
 		headOperator.getMetricGroup().gauge(MetricNames.IO_CURRENT_INPUT_WATERMARK, this.inputWatermarkGauge);
 		// wrap watermark gauge since registered metrics must be unique
@@ -99,6 +104,7 @@ public class OneInputStreamTask<IN, OUT> extends StreamTask<OUT, OneInputStreamO
 
 	@Override
 	protected void run() throws Exception {
+
 		// cache processor reference on the stack, to make the code more JIT friendly
 		final StreamInputProcessor<IN> inputProcessor = this.inputProcessor;
 
@@ -106,6 +112,7 @@ public class OneInputStreamTask<IN, OUT> extends StreamTask<OUT, OneInputStreamO
 			// all the work happens in the "processInput" method
 		}
 	}
+
 
 	@Override
 	protected void cleanup() throws Exception {
@@ -117,5 +124,15 @@ public class OneInputStreamTask<IN, OUT> extends StreamTask<OUT, OneInputStreamO
 	@Override
 	protected void cancelTask() {
 		running = false;
+	}
+
+	@Override
+	protected CheckpointBarrierHandler getCheckpointBarrierHandler() {
+		return inputProcessor.getCheckpointBarrierHandlers();
+	}
+
+	@Override
+	public void resetInputChannelDeserializer(InputGate gate, int channelIndex){
+		 inputProcessor.resetInputChannelDeserializer(gate, channelIndex);
 	}
 }

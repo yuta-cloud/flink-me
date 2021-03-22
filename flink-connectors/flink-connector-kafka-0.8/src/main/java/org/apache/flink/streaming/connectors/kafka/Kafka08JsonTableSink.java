@@ -26,10 +26,11 @@ import org.apache.flink.streaming.connectors.kafka.partitioner.KafkaPartitioner;
 import org.apache.flink.table.descriptors.ConnectorDescriptor;
 import org.apache.flink.types.Row;
 
+import java.util.Optional;
 import java.util.Properties;
 
 /**
- * Kafka 0.8 {@link KafkaTableSink} that serializes data in JSON format.
+ * Kafka 0.8 {@link KafkaTableSinkBase} that serializes data in JSON format.
  *
  * @deprecated Use the {@link org.apache.flink.table.descriptors.Kafka} descriptor together
  *             with descriptors for schema and format instead. Descriptors allow for
@@ -40,7 +41,7 @@ import java.util.Properties;
 public class Kafka08JsonTableSink extends KafkaJsonTableSink {
 
 	/**
-	 * Creates {@link KafkaTableSink} to write table rows as JSON-encoded records to a Kafka 0.8
+	 * Creates {@link KafkaTableSinkBase} to write table rows as JSON-encoded records to a Kafka 0.8
 	 * topic with fixed partition assignment.
 	 *
 	 * <p>Each parallel TableSink instance will write its rows to a single Kafka partition.</p>
@@ -61,7 +62,7 @@ public class Kafka08JsonTableSink extends KafkaJsonTableSink {
 	}
 
 	/**
-	 * Creates {@link KafkaTableSink} to write table rows as JSON-encoded records to a Kafka 0.8
+	 * Creates {@link KafkaTableSinkBase} to write table rows as JSON-encoded records to a Kafka 0.8
 	 * topic with custom partition assignment.
 	 *
 	 * @param topic topic in Kafka to which table is written
@@ -75,7 +76,7 @@ public class Kafka08JsonTableSink extends KafkaJsonTableSink {
 	}
 
 	/**
-	 * Creates {@link KafkaTableSink} to write table rows as JSON-encoded records to a Kafka 0.8
+	 * Creates {@link KafkaTableSinkBase} to write table rows as JSON-encoded records to a Kafka 0.8
 	 * topic with custom partition assignment.
 	 *
 	 * @param topic topic in Kafka to which table is written
@@ -92,17 +93,24 @@ public class Kafka08JsonTableSink extends KafkaJsonTableSink {
 	}
 
 	@Override
-	protected FlinkKafkaProducerBase<Row> createKafkaProducer(String topic, Properties properties, SerializationSchema<Row> serializationSchema, FlinkKafkaPartitioner<Row> partitioner) {
+	protected FlinkKafkaProducerBase<Row> createKafkaProducer(
+			String topic,
+			Properties properties,
+			SerializationSchema<Row> serializationSchema,
+			Optional<FlinkKafkaPartitioner<Row>> partitioner) {
 		return new FlinkKafkaProducer08<>(
 			topic,
 			serializationSchema,
 			properties,
-			partitioner);
+			partitioner.orElse(new FlinkFixedPartitioner<>()));
 	}
 
 	@Override
 	protected Kafka08JsonTableSink createCopy() {
-		return new Kafka08JsonTableSink(topic, properties, partitioner);
+		return new Kafka08JsonTableSink(
+			topic,
+			properties,
+			partitioner.orElse(new FlinkFixedPartitioner<>()));
 	}
 }
 

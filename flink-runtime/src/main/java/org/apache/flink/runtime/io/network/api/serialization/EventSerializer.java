@@ -206,7 +206,7 @@ public class EventSerializer {
 		final byte[] locationBytes = checkpointOptions.getTargetLocation().isDefaultReference() ?
 				null : checkpointOptions.getTargetLocation().getReferenceBytes();
 
-		final ByteBuffer buf = ByteBuffer.allocate(28 + (locationBytes == null ? 0 : locationBytes.length));
+		final ByteBuffer buf = ByteBuffer.allocate(28 + (locationBytes == null ? 0 : locationBytes.length) );
 
 		// we do not use checkpointType.ordinal() here to make the serialization robust
 		// against changes in the enum (such as changes in the order of the values)
@@ -278,12 +278,12 @@ public class EventSerializer {
 		return buffer;
 	}
 
-	public static BufferConsumer toBufferConsumer(AbstractEvent event) throws IOException {
+	public static BufferConsumer toBufferConsumer(AbstractEvent event, long epochID) throws IOException {
 		final ByteBuffer serializedEvent = EventSerializer.toSerializedEvent(event);
 
 		MemorySegment data = MemorySegmentFactory.wrap(serializedEvent.array());
 
-		return new BufferConsumer(data, FreeingBufferRecycler.INSTANCE, false);
+		return new BufferConsumer(data, FreeingBufferRecycler.INSTANCE, false, epochID);
 	}
 
 	public static AbstractEvent fromBuffer(Buffer buffer, ClassLoader classLoader) throws IOException {

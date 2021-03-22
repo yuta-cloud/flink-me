@@ -36,6 +36,8 @@ import org.apache.flink.api.common.state.ReducingStateDescriptor;
 import org.apache.flink.api.common.state.StateDescriptor;
 import org.apache.flink.api.common.state.ValueState;
 import org.apache.flink.api.common.state.ValueStateDescriptor;
+import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
+import org.apache.flink.runtime.causal.services.CausalSerializableServiceFactory;
 import org.apache.flink.runtime.execution.Environment;
 import org.apache.flink.runtime.jobgraph.tasks.InputSplitProvider;
 import org.apache.flink.streaming.api.CheckpointingMode;
@@ -53,10 +55,14 @@ import java.util.Map;
 @Internal
 public class StreamingRuntimeContext extends AbstractRuntimeUDFContext {
 
-	/** The operator to which this function belongs. */
+	/**
+	 * The operator to which this function belongs.
+	 */
 	private final AbstractStreamOperator<?> operator;
 
-	/** The task environment running the operator. */
+	/**
+	 * The task environment running the operator.
+	 */
 	private final Environment taskEnvironment;
 
 	private final StreamConfig streamConfig;
@@ -64,14 +70,15 @@ public class StreamingRuntimeContext extends AbstractRuntimeUDFContext {
 	private final String operatorUniqueID;
 
 	public StreamingRuntimeContext(AbstractStreamOperator<?> operator,
-									Environment env, Map<String, Accumulator<?, ?>> accumulators) {
+								   Environment env, Map<String, Accumulator<?, ?>> accumulators) {
 		super(env.getTaskInfo(),
-				env.getUserClassLoader(),
-				operator.getExecutionConfig(),
-				accumulators,
-				env.getDistributedCacheEntries(),
-				operator.getMetricGroup());
-
+			env.getUserClassLoader(),
+			operator.getExecutionConfig(),
+			accumulators,
+			env.getDistributedCacheEntries(),
+			operator.getMetricGroup(), operator.getContainingTask().getTimeService(),
+			operator.getContainingTask().getRandomService(),
+			operator.getContainingTask().getSerializableServiceFactory());
 		this.operator = operator;
 		this.taskEnvironment = env;
 		this.streamConfig = new StreamConfig(env.getTaskConfiguration());

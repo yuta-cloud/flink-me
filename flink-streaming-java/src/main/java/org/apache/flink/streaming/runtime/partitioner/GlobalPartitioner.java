@@ -47,4 +47,5 @@ public class GlobalPartitioner<T> extends StreamPartitioner<T> {
 	public String toString() {
 		return "GLOBAL";
 	}
+
 }

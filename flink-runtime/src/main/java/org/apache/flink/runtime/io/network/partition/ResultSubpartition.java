@@ -19,8 +19,12 @@
 package org.apache.flink.runtime.io.network.partition;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.api.common.JobID;
+import org.apache.flink.runtime.causal.EpochStartListener;
+import org.apache.flink.runtime.causal.EpochTracker;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.buffer.BufferConsumer;
+import org.apache.flink.runtime.state.CheckpointListener;
 
 import javax.annotation.concurrent.GuardedBy;
 
@@ -43,16 +47,16 @@ public abstract class ResultSubpartition {
 	/** All buffers of this subpartition. Access to the buffers is synchronized on this object. */
 	protected final ArrayDeque<BufferConsumer> buffers = new ArrayDeque<>();
 
-	/** The number of non-event buffers currently in this subpartition */
+	/** The number of non-event buffers currently in this subpartition. */
 	@GuardedBy("buffers")
 	private int buffersInBacklog;
 
 	// - Statistics ----------------------------------------------------------
 
-	/** The total number of buffers (both data and event buffers) */
+	/** The total number of buffers (both data and event buffers). */
 	private long totalNumberOfBuffers;
 
-	/** The total number of bytes (both data and event buffers) */
+	/** The total number of bytes (both data and event buffers). */
 	private long totalNumberOfBytes;
 
 	public ResultSubpartition(int index, ResultPartition parent) {
@@ -87,6 +91,7 @@ public abstract class ResultSubpartition {
 		return parent.getFailureCause();
 	}
 
+
 	/**
 	 * Adds the given buffer.
 	 *
@@ -102,19 +107,20 @@ public abstract class ResultSubpartition {
 	 * @throws IOException
 	 * 		thrown in case of errors while adding the buffer
 	 */
-	abstract public boolean add(BufferConsumer bufferConsumer) throws IOException;
+	public abstract boolean add(BufferConsumer bufferConsumer) throws IOException;
 
-	abstract public void flush();
+	public abstract void flush();
 
-	abstract public void finish() throws IOException;
+	public abstract void finish() throws IOException;
 
-	abstract public void release() throws IOException;
+	public abstract void release() throws IOException;
 
-	abstract public ResultSubpartitionView createReadView(BufferAvailabilityListener availabilityListener) throws IOException;
+	public abstract ResultSubpartitionView createReadView(BufferAvailabilityListener availabilityListener) throws IOException;
 
 	abstract int releaseMemory() throws IOException;
 
-	abstract public boolean isReleased();
+	public abstract boolean isReleased();
+
 
 	/**
 	 * Gets the number of non-event buffers in this subpartition.
@@ -132,7 +138,7 @@ public abstract class ResultSubpartition {
 	 * This method must not acquire locks or interfere with the task and network threads in
 	 * any way.
 	 */
-	abstract public int unsynchronizedGetNumberOfQueuedBuffers();
+	public abstract int unsynchronizedGetNumberOfQueuedBuffers();
 
 	/**
 	 * Decreases the number of non-event buffers by one after fetching a non-event
@@ -144,6 +150,12 @@ public abstract class ResultSubpartition {
 		synchronized (buffers) {
 			return decreaseBuffersInBacklogUnsafe(buffer != null && buffer.isBuffer());
 		}
+	}
+
+	protected int resetBuffersInBacklog() {
+		assert Thread.holdsLock(buffers);
+		buffersInBacklog = 0;
+		return buffersInBacklog;
 	}
 
 	protected int decreaseBuffersInBacklogUnsafe(boolean isBuffer) {
@@ -166,7 +178,23 @@ public abstract class ResultSubpartition {
 		}
 	}
 
-	// ------------------------------------------------------------------------
+    public JobID getJobID() {
+		return this.parent.getJobId();
+    }
+
+	public ResultPartition getParent() {
+		return parent;
+	}
+
+    public short getVertexID(){
+		return -1;
+	}
+
+	public int getIndex(){
+		return index;
+	}
+
+    // ------------------------------------------------------------------------
 
 	/**
 	 * A combination of a {@link Buffer} and the backlog length indicating
@@ -178,12 +206,17 @@ public abstract class ResultSubpartition {
 		private final boolean isMoreAvailable;
 		private final int buffersInBacklog;
 		private final boolean nextBufferIsEvent;
+		private final long epochID;
 
 		public BufferAndBacklog(Buffer buffer, boolean isMoreAvailable, int buffersInBacklog, boolean nextBufferIsEvent) {
+			this(buffer,isMoreAvailable,buffersInBacklog,nextBufferIsEvent,-1L);
+		}
+		public BufferAndBacklog(Buffer buffer, boolean isMoreAvailable, int buffersInBacklog, boolean nextBufferIsEvent, long epochID) {
 			this.buffer = checkNotNull(buffer);
 			this.buffersInBacklog = buffersInBacklog;
 			this.isMoreAvailable = isMoreAvailable;
 			this.nextBufferIsEvent = nextBufferIsEvent;
+			this.epochID = epochID;
 		}
 
 		public Buffer buffer() {
@@ -198,9 +231,12 @@ public abstract class ResultSubpartition {
 			return buffersInBacklog;
 		}
 
-
 		public boolean nextBufferIsEvent() {
 			return nextBufferIsEvent;
+		}
+
+		public long getEpochID(){
+			return epochID;
 		}
 	}
 

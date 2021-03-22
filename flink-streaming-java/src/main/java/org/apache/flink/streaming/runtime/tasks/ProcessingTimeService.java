@@ -45,6 +45,7 @@ public abstract class ProcessingTimeService {
 	 */
 	public abstract long getCurrentProcessingTime();
 
+	public abstract long getCurrentProcessingTimeCausal();
 	/**
 	 * Registers a task to be executed when (processing) time is {@code timestamp}.
 	 *
@@ -66,7 +67,9 @@ public abstract class ProcessingTimeService {
 	 */
 	public abstract ScheduledFuture<?> scheduleAtFixedRate(ProcessingTimeCallback callback, long initialDelay, long period);
 
-	/**
+    public abstract void registerCallback(ProcessingTimeCallback callback);
+
+    /**
 	 * Returns <tt>true</tt> if the service has been shut down, <tt>false</tt> otherwise.
 	 */
 	public abstract boolean isTerminated();
@@ -116,4 +119,5 @@ public abstract class ProcessingTimeService {
 	 *         {@code false} if the timeout elapsed before this happened.
 	 */
 	public abstract boolean shutdownAndAwaitPending(long time, TimeUnit timeUnit) throws InterruptedException;
+
 }

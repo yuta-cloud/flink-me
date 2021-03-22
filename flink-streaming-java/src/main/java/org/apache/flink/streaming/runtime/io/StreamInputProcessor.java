@@ -23,6 +23,7 @@ import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.SimpleCounter;
+import org.apache.flink.runtime.causal.EpochTracker;
 import org.apache.flink.runtime.event.AbstractEvent;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.network.api.EndOfPartitionEvent;
@@ -32,6 +33,7 @@ import org.apache.flink.runtime.io.network.api.serialization.SpillingAdaptiveSpa
 import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.partition.consumer.BufferOrEvent;
 import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
+import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGate;
 import org.apache.flink.runtime.metrics.groups.OperatorMetricGroup;
 import org.apache.flink.runtime.metrics.groups.TaskIOMetricGroup;
 import org.apache.flink.runtime.plugable.DeserializationDelegate;
@@ -86,11 +88,12 @@ public class StreamInputProcessor<IN> {
 
 	// ---------------- Status and Watermark Valve ------------------
 
-	/** Valve that controls how watermarks and stream statuses are forwarded. */
+	/**
+	 * Valve that controls how watermarks and stream statuses are forwarded.
+	 */
 	private StatusWatermarkValve statusWatermarkValve;
 
-	/** Number of input channels the valve needs to handle. */
-	private final int numInputChannels;
+	private final InputGate inputGate;
 
 	/**
 	 * The channel from which a buffer came, tracked so that we can appropriately map
@@ -109,21 +112,27 @@ public class StreamInputProcessor<IN> {
 
 	private boolean isFinished;
 
+	private final EpochTracker epochTracker;
+
+
 	@SuppressWarnings("unchecked")
 	public StreamInputProcessor(
-			InputGate[] inputGates,
-			TypeSerializer<IN> inputSerializer,
-			StreamTask<?, ?> checkpointedTask,
-			CheckpointingMode checkpointMode,
-			Object lock,
-			IOManager ioManager,
-			Configuration taskManagerConfig,
-			StreamStatusMaintainer streamStatusMaintainer,
-			OneInputStreamOperator<IN, ?> streamOperator,
-			TaskIOMetricGroup metrics,
-			WatermarkGauge watermarkGauge) throws IOException {
+		SingleInputGate[] inputGates,
+		TypeSerializer<IN> inputSerializer,
+		StreamTask<?, ?> checkpointedTask,
+		CheckpointingMode checkpointMode,
+		Object lock,
+		IOManager ioManager,
+		Configuration taskManagerConfig,
+		StreamStatusMaintainer streamStatusMaintainer,
+		OneInputStreamOperator<IN, ?> streamOperator,
+		TaskIOMetricGroup metrics,
+		WatermarkGauge watermarkGauge) throws IOException {
 
-		InputGate inputGate = InputGateUtil.createInputGate(inputGates);
+
+		this.epochTracker = checkpointedTask.getRecordCounter();
+		inputGate = InputGateUtil.createInputGate(inputGates);
+		checkpointedTask.getRecoveryManager().getContext().setInputGate(inputGate);
 
 		this.barrierHandler = InputProcessorUtil.createCheckpointBarrierHandler(
 			checkpointedTask, checkpointMode, ioManager, inputGate, taskManagerConfig);
@@ -134,100 +143,113 @@ public class StreamInputProcessor<IN> {
 		this.deserializationDelegate = new NonReusingDeserializationDelegate<>(ser);
 
 		// Initialize one deserializer per input channel
-		this.recordDeserializers = new SpillingAdaptiveSpanningRecordDeserializer[inputGate.getNumberOfInputChannels()];
+		this.recordDeserializers =
+			new SpillingAdaptiveSpanningRecordDeserializer[inputGate.getNumberOfInputChannels()];
 
 		for (int i = 0; i < recordDeserializers.length; i++) {
 			recordDeserializers[i] = new SpillingAdaptiveSpanningRecordDeserializer<>(
 				ioManager.getSpillingDirectoriesPaths());
 		}
 
-		this.numInputChannels = inputGate.getNumberOfInputChannels();
+		/**
+		 * Number of input channels the valve needs to handle.
+		 */
+		int numInputChannels = inputGate.getNumberOfInputChannels();
 
 		this.streamStatusMaintainer = checkNotNull(streamStatusMaintainer);
 		this.streamOperator = checkNotNull(streamOperator);
 
 		this.statusWatermarkValve = new StatusWatermarkValve(
-				numInputChannels,
-				new ForwardingValveOutputHandler(streamOperator, lock));
+			numInputChannels,
+			new ForwardingValveOutputHandler(streamOperator, lock));
 
 		this.watermarkGauge = watermarkGauge;
 		metrics.gauge("checkpointAlignmentTime", barrierHandler::getAlignmentDurationNanos);
 	}
 
 	public boolean processInput() throws Exception {
-		if (isFinished) {
+		if (isFinished)
 			return false;
-		}
+
 		if (numRecordsIn == null) {
 			try {
-				numRecordsIn = ((OperatorMetricGroup) streamOperator.getMetricGroup()).getIOMetricGroup().getNumRecordsInCounter();
+				numRecordsIn =
+					((OperatorMetricGroup) streamOperator.getMetricGroup()).getIOMetricGroup().getNumRecordsInCounter();
 			} catch (Exception e) {
 				LOG.warn("An exception occurred during the metrics setup.", e);
 				numRecordsIn = new SimpleCounter();
 			}
 		}
 
-		while (true) {
-			if (currentRecordDeserializer != null) {
-				DeserializationResult result = currentRecordDeserializer.getNextRecord(deserializationDelegate);
+		if (currentRecordDeserializer != null) {
+			DeserializationResult result = currentRecordDeserializer.getNextRecord(deserializationDelegate);
 
-				if (result.isBufferConsumed()) {
-					currentRecordDeserializer.getCurrentBuffer().recycleBuffer();
-					currentRecordDeserializer = null;
-				}
+			if (result.isBufferConsumed()) {
+				currentRecordDeserializer.getCurrentBuffer().recycleBuffer();
+				currentRecordDeserializer = null;
+			}
 
-				if (result.isFullRecord()) {
-					StreamElement recordOrMark = deserializationDelegate.getInstance();
+			if (result.isFullRecord()) {
+				StreamElement recordOrMark = deserializationDelegate.getInstance();
 
-					if (recordOrMark.isWatermark()) {
+				if (recordOrMark.isWatermark()) {
+					synchronized (lock) {
 						// handle watermark
 						statusWatermarkValve.inputWatermark(recordOrMark.asWatermark(), currentChannel);
-						continue;
-					} else if (recordOrMark.isStreamStatus()) {
+						epochTracker.incRecordCount();
+					}
+					return true;
+				} else if (recordOrMark.isStreamStatus()) {
+					synchronized (lock) {
 						// handle stream status
 						statusWatermarkValve.inputStreamStatus(recordOrMark.asStreamStatus(), currentChannel);
-						continue;
-					} else if (recordOrMark.isLatencyMarker()) {
+						epochTracker.incRecordCount();
+					}
+					return true;
+				} else if (recordOrMark.isLatencyMarker()) {
+					synchronized (lock) {
 						// handle latency marker
-						synchronized (lock) {
-							streamOperator.processLatencyMarker(recordOrMark.asLatencyMarker());
-						}
-						continue;
-					} else {
-						// now we can do the actual processing
-						StreamRecord<IN> record = recordOrMark.asRecord();
-						synchronized (lock) {
-							numRecordsIn.inc();
-							streamOperator.setKeyContextElement1(record);
-							streamOperator.processElement(record);
-						}
-						return true;
+						streamOperator.processLatencyMarker(recordOrMark.asLatencyMarker());
+						epochTracker.incRecordCount();
 					}
+					return true;
+				} else {
+					// now we can do the actual processing
+					StreamRecord<IN> record = recordOrMark.asRecord();
+					synchronized (lock) {
+						numRecordsIn.inc();
+						streamOperator.setKeyContextElement1(record);
+						streamOperator.processElement(record);
+						epochTracker.incRecordCount();
+					}
+					return true;
 				}
 			}
+		}
 
-			final BufferOrEvent bufferOrEvent = barrierHandler.getNextNonBlocked();
-			if (bufferOrEvent != null) {
-				if (bufferOrEvent.isBuffer()) {
-					currentChannel = bufferOrEvent.getChannelIndex();
-					currentRecordDeserializer = recordDeserializers[currentChannel];
-					currentRecordDeserializer.setNextBuffer(bufferOrEvent.getBuffer());
-				}
-				else {
-					// Event received
-					final AbstractEvent event = bufferOrEvent.getEvent();
-					if (event.getClass() != EndOfPartitionEvent.class) {
-						throw new IOException("Unexpected event: " + event);
-					}
+		final BufferOrEvent bufferOrEvent = barrierHandler.getNextNonBlocked();
+		if (bufferOrEvent != null) {
+			if (bufferOrEvent.isBuffer()) {
+				if(LOG.isDebugEnabled())
+					LOG.debug("Input buffer size: {}", bufferOrEvent.getBuffer().getSize());
+				currentChannel = bufferOrEvent.getChannelIndex();
+				currentRecordDeserializer = recordDeserializers[currentChannel];
+				currentRecordDeserializer.setNextBuffer(bufferOrEvent.getBuffer());
+			} else {// Event received
+				final AbstractEvent event = bufferOrEvent.getEvent();
+				if(LOG.isDebugEnabled())
+					LOG.debug("Buffer is an event: {}", event);
+				if (event.getClass() != EndOfPartitionEvent.class) {
+					throw new IOException("Unexpected event: " + event);
 				}
 			}
-			else {
-				isFinished = true;
-				if (!barrierHandler.isEmpty()) {
-					throw new IllegalStateException("Trailing data in checkpoint barrier handler.");
-				}
-				return false;
+			return true;
+		} else {
+			isFinished = true;
+			if (!barrierHandler.isEmpty()) {
+				throw new IllegalStateException("Trailing data in checkpoint barrier handler.");
 			}
+			return false;
 		}
 	}
 
@@ -244,6 +266,12 @@ public class StreamInputProcessor<IN> {
 		// cleanup the barrier handler resources
 		barrierHandler.cleanup();
 	}
+
+
+	public CheckpointBarrierHandler getCheckpointBarrierHandlers() {
+		return this.barrierHandler;
+	}
+
 
 	private class ForwardingValveOutputHandler implements StatusWatermarkValve.ValveOutputHandler {
 		private final OneInputStreamOperator<IN, ?> operator;
@@ -279,4 +307,11 @@ public class StreamInputProcessor<IN> {
 		}
 	}
 
+	public void resetInputChannelDeserializer(InputGate gate, int channelIndex) {
+		int absoluteChannelIndex = this.inputGate.getAbsoluteChannelIndex(gate, channelIndex);
+
+		recordDeserializers[absoluteChannelIndex].clear();
+		barrierHandler.unblockChannelIfBlocked(absoluteChannelIndex);
+
+	}
 }

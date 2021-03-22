@@ -23,7 +23,6 @@ import org.apache.flink.api.common.serialization.BulkWriter;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.core.fs.RecoverableFsDataOutputStream;
 import org.apache.flink.core.fs.RecoverableWriter;
-import org.apache.flink.streaming.api.functions.sink.filesystem.bucketers.Bucketer;
 import org.apache.flink.util.Preconditions;
 
 import java.io.IOException;
@@ -67,7 +66,7 @@ final class BulkPartWriter<IN, BucketID> extends PartFileWriter<IN, BucketID> {
 	/**
 	 * A factory that creates {@link BulkPartWriter BulkPartWriters}.
 	 * @param <IN> The type of input elements.
-	 * @param <BucketID> The type of ids for the buckets, as returned by the {@link Bucketer}.
+	 * @param <BucketID> The type of ids for the buckets, as returned by the {@link BucketAssigner}.
 	 */
 	static class Factory<IN, BucketID> implements PartFileWriter.PartFileFactory<IN, BucketID> {
 
@@ -80,14 +79,13 @@ final class BulkPartWriter<IN, BucketID> extends PartFileWriter<IN, BucketID> {
 		@Override
 		public PartFileWriter<IN, BucketID> resumeFrom(
 				final BucketID bucketId,
-				final RecoverableWriter fileSystemWriter,
+				final RecoverableFsDataOutputStream stream,
 				final RecoverableWriter.ResumeRecoverable resumable,
 				final long creationTime) throws IOException {
 
-			Preconditions.checkNotNull(fileSystemWriter);
+			Preconditions.checkNotNull(stream);
 			Preconditions.checkNotNull(resumable);
 
-			final RecoverableFsDataOutputStream stream = fileSystemWriter.recover(resumable);
 			final BulkWriter<IN> writer = writerFactory.create(stream);
 			return new BulkPartWriter<>(bucketId, stream, writer, creationTime);
 		}
@@ -95,14 +93,13 @@ final class BulkPartWriter<IN, BucketID> extends PartFileWriter<IN, BucketID> {
 		@Override
 		public PartFileWriter<IN, BucketID> openNew(
 				final BucketID bucketId,
-				final RecoverableWriter fileSystemWriter,
+				final RecoverableFsDataOutputStream stream,
 				final Path path,
 				final long creationTime) throws IOException {
 
-			Preconditions.checkNotNull(fileSystemWriter);
+			Preconditions.checkNotNull(stream);
 			Preconditions.checkNotNull(path);
 
-			final RecoverableFsDataOutputStream stream = fileSystemWriter.open(path);
 			final BulkWriter<IN> writer = writerFactory.create(stream);
 			return new BulkPartWriter<>(bucketId, stream, writer, creationTime);
 		}

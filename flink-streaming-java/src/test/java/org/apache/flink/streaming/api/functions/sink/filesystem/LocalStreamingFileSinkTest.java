@@ -18,12 +18,8 @@
 
 package org.apache.flink.streaming.api.functions.sink.filesystem;
 
-import org.apache.flink.api.common.serialization.SimpleStringEncoder;
 import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.core.fs.Path;
-import org.apache.flink.core.fs.RecoverableWriter;
 import org.apache.flink.runtime.checkpoint.OperatorSubtaskState;
-import org.apache.flink.streaming.api.functions.sink.filesystem.rolling.policies.DefaultRollingPolicy;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import org.apache.flink.streaming.util.AbstractStreamOperatorTestHarness;
 import org.apache.flink.streaming.util.OneInputStreamOperatorTestHarness;
@@ -35,7 +31,6 @@ import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.Map;
 
 /**
@@ -56,6 +51,16 @@ public class LocalStreamingFileSinkTest extends TestLogger {
 		) {
 			testHarness.setup();
 			testHarness.open();
+		}
+	}
+
+	@Test
+	public void testClosingWithoutInitializingStateShouldNotFail() throws Exception {
+		final File outDir = TEMP_FOLDER.newFolder();
+
+		try (OneInputStreamOperatorTestHarness<Tuple2<String, Integer>, Object> testHarness =
+					TestUtils.createRescalingTestSink(outDir, 1, 0, 100L, 124L)) {
+			testHarness.setup();
 		}
 	}
 
@@ -323,7 +328,7 @@ public class LocalStreamingFileSinkTest extends TestLogger {
 					Assert.assertEquals("test1@1\n", fileContents.getValue());
 				} else if (fileContents.getKey().getParentFile().getName().equals("test2")) {
 					bucketCounter++;
-					Assert.assertEquals("part-0-0", fileContents.getKey().getName());
+					Assert.assertEquals("part-0-1", fileContents.getKey().getName());
 					Assert.assertEquals("test2@1\n", fileContents.getValue());
 				} else if (fileContents.getKey().getParentFile().getName().equals("test3")) {
 					bucketCounter++;
@@ -346,11 +351,11 @@ public class LocalStreamingFileSinkTest extends TestLogger {
 					Assert.assertEquals("test2@1\n", fileContents.getValue());
 				} else if (fileContents.getKey().getParentFile().getName().equals("test3")) {
 					bucketCounter++;
-					Assert.assertEquals("part-0-0", fileContents.getKey().getName());
+					Assert.assertEquals("part-0-2", fileContents.getKey().getName());
 					Assert.assertEquals("test3@1\n", fileContents.getValue());
 				} else if (fileContents.getKey().getParentFile().getName().equals("test4")) {
 					bucketCounter++;
-					Assert.assertEquals("part-0-0", fileContents.getKey().getName());
+					Assert.assertEquals("part-0-3", fileContents.getKey().getName());
 					Assert.assertEquals("test4@1\n", fileContents.getValue());
 				}
 			}
@@ -437,8 +442,8 @@ public class LocalStreamingFileSinkTest extends TestLogger {
 							inProgressFilename.contains(".part-1-0.inprogress")
 						)
 				) {
-						counter++;
-				} else if (parentFilename.equals("test2") && inProgressFilename.contains(".part-1-0.inprogress")) {
+					counter++;
+				} else if (parentFilename.equals("test2") && inProgressFilename.contains(".part-1-1.inprogress")) {
 					counter++;
 				}
 			}
@@ -476,135 +481,12 @@ public class LocalStreamingFileSinkTest extends TestLogger {
 						counter++;
 						Assert.assertTrue(fileContents.getValue().equals("test1@1\n") || fileContents.getValue().equals("test1@0\n"));
 					}
-				} else if (parentFilename.equals("test2") && filename.contains(".part-1-0.inprogress")) {
+				} else if (parentFilename.equals("test2") && filename.contains(".part-1-1.inprogress")) {
 					counter++;
 					Assert.assertEquals("test2@1\n", fileContents.getValue());
 				}
 			}
 			Assert.assertEquals(3L, counter);
-		}
-	}
-
-	@Test
-	public void testMaxCounterUponRecovery() throws Exception {
-		final File outDir = TEMP_FOLDER.newFolder();
-
-		OperatorSubtaskState mergedSnapshot;
-
-		final TestBucketFactory first = new TestBucketFactory();
-		final TestBucketFactory second = new TestBucketFactory();
-
-		final RollingPolicy<Tuple2<String, Integer>, String> rollingPolicy = DefaultRollingPolicy
-				.create()
-				.withMaxPartSize(2L)
-				.withRolloverInterval(100L)
-				.withInactivityInterval(100L)
-				.build();
-
-		try (
-				OneInputStreamOperatorTestHarness<Tuple2<String, Integer>, Object> testHarness1 = TestUtils.createCustomRescalingTestSink(
-						outDir, 2, 0, 10L, new TestUtils.TupleToStringBucketer(), new SimpleStringEncoder<>(), rollingPolicy, first);
-				OneInputStreamOperatorTestHarness<Tuple2<String, Integer>, Object> testHarness2 = TestUtils.createCustomRescalingTestSink(
-						outDir, 2, 1, 10L, new TestUtils.TupleToStringBucketer(), new SimpleStringEncoder<>(), rollingPolicy, second)
-		) {
-			testHarness1.setup();
-			testHarness1.open();
-
-			testHarness2.setup();
-			testHarness2.open();
-
-			// we only put elements in one task.
-			testHarness1.processElement(new StreamRecord<>(Tuple2.of("test1", 0), 0L));
-			testHarness1.processElement(new StreamRecord<>(Tuple2.of("test1", 0), 0L));
-			testHarness1.processElement(new StreamRecord<>(Tuple2.of("test1", 0), 0L));
-			TestUtils.checkLocalFs(outDir, 3, 0);
-
-			// intentionally we snapshot them in the reverse order so that the states are shuffled
-			mergedSnapshot = AbstractStreamOperatorTestHarness.repackageState(
-					testHarness2.snapshot(0L, 0L),
-					testHarness1.snapshot(0L, 0L)
-			);
-		}
-
-		final TestBucketFactory firstRecovered = new TestBucketFactory();
-		final TestBucketFactory secondRecovered = new TestBucketFactory();
-
-		try (
-				OneInputStreamOperatorTestHarness<Tuple2<String, Integer>, Object> testHarness1 = TestUtils.createCustomRescalingTestSink(
-						outDir, 2, 0, 10L, new TestUtils.TupleToStringBucketer(), new SimpleStringEncoder<>(), rollingPolicy, firstRecovered);
-				OneInputStreamOperatorTestHarness<Tuple2<String, Integer>, Object> testHarness2 = TestUtils.createCustomRescalingTestSink(
-						outDir, 2, 1, 10L, new TestUtils.TupleToStringBucketer(), new SimpleStringEncoder<>(), rollingPolicy, secondRecovered)
-		) {
-			testHarness1.setup();
-			testHarness1.initializeState(mergedSnapshot);
-			testHarness1.open();
-
-			// we have to send an element so that the factory updates its counter.
-			testHarness1.processElement(new StreamRecord<>(Tuple2.of("test4", 0), 0L));
-
-			Assert.assertEquals(3L, firstRecovered.getInitialCounter());
-			TestUtils.checkLocalFs(outDir, 1, 3);
-
-			testHarness2.setup();
-			testHarness2.initializeState(mergedSnapshot);
-			testHarness2.open();
-
-			// we have to send an element so that the factory updates its counter.
-			testHarness2.processElement(new StreamRecord<>(Tuple2.of("test2", 0), 0L));
-
-			Assert.assertEquals(3L, secondRecovered.getInitialCounter());
-			TestUtils.checkLocalFs(outDir, 2, 3);
-		}
-	}
-
-	//////////////////////			Helper Methods			//////////////////////
-
-	static class TestBucketFactory extends DefaultBucketFactory<Tuple2<String, Integer>, String> {
-
-		private static final long serialVersionUID = 2794824980604027930L;
-
-		private long initialCounter = -1L;
-
-		@Override
-		public Bucket<Tuple2<String, Integer>, String> getNewBucket(
-				final RecoverableWriter fsWriter,
-				final int subtaskIndex,
-				final String bucketId,
-				final Path bucketPath,
-				final long initialPartCounter,
-				final PartFileWriter.PartFileFactory<Tuple2<String, Integer>, String> partFileWriterFactory) {
-
-			this.initialCounter = initialPartCounter;
-
-			return super.getNewBucket(
-					fsWriter,
-					subtaskIndex,
-					bucketId,
-					bucketPath,
-					initialPartCounter,
-					partFileWriterFactory);
-		}
-
-		@Override
-		public Bucket<Tuple2<String, Integer>, String> restoreBucket(
-				final RecoverableWriter fsWriter,
-				final int subtaskIndex,
-				final long initialPartCounter,
-				final PartFileWriter.PartFileFactory<Tuple2<String, Integer>, String> partFileWriterFactory,
-				final BucketState<String> bucketState) throws IOException {
-
-			this.initialCounter = initialPartCounter;
-
-			return super.restoreBucket(
-					fsWriter,
-					subtaskIndex,
-					initialPartCounter,
-					partFileWriterFactory,
-					bucketState);
-		}
-
-		public long getInitialCounter() {
-			return initialCounter;
 		}
 	}
 }

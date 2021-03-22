@@ -129,8 +129,9 @@ public class ConfigOption<T> {
 	 */
 	@Deprecated
 	public ConfigOption<T> withDescription(final String description) {
-		return new ConfigOption<>(key, description, defaultValue, deprecatedKeys);
+		return withDescription(Description.builder().text(description).build());
 	}
+
 
 	/**
 	 * Creates a new config option, using this option's key and default value, and

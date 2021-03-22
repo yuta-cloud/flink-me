@@ -48,7 +48,7 @@ import java.util.Random;
  */
 public class IterateExample {
 
-	private static final int BOUND = 100;
+	private static final int BOUND = 1000000000;
 
 	// *************************************************************************
 	// PROGRAM
@@ -115,7 +115,7 @@ public class IterateExample {
 	// *************************************************************************
 
 	/**
-	 * Generate BOUND number of random integer pairs from the range from 0 to BOUND/2.
+	 * Generate BOUND number of random integer pairs from the range from 1 to BOUND/2.
 	 */
 	private static class RandomFibonacciSource implements SourceFunction<Tuple2<Integer, Integer>> {
 		private static final long serialVersionUID = 1L;

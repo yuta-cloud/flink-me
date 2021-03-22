@@ -22,12 +22,15 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.time.Time;
 import org.apache.flink.runtime.blob.TransientBlobKey;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
+import org.apache.flink.runtime.checkpoint.JobManagerTaskRestore;
 import org.apache.flink.runtime.clusterframework.ApplicationStatus;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.deployment.TaskDeploymentDescriptor;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.executiongraph.PartitionInfo;
 import org.apache.flink.runtime.instance.InstanceID;
+import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
+import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.messages.StackTrace;
 import org.apache.flink.runtime.messages.StackTraceSampleResponse;
@@ -102,6 +105,19 @@ public interface TaskManagerGateway {
 		Time timeout);
 
 	/**
+	 * Fail the given task.
+	 *
+	 * @param executionAttemptID identifying the task
+	 * @param t cause of failure
+	 * @param timeout of the fail operation
+	 * @return Future acknowledge if the task is successfully failed
+	 */
+	CompletableFuture<Acknowledge> failTask(
+		ExecutionAttemptID executionAttemptID,
+		Throwable t,
+		Time timeout);
+
+	/**
 	 * Stop the given task.
 	 *
 	 * @param executionAttemptID identifying the task
@@ -122,6 +138,30 @@ public interface TaskManagerGateway {
 	CompletableFuture<Acknowledge> cancelTask(
 		ExecutionAttemptID executionAttemptID,
 		Time timeout);
+
+	/**
+	 * Dispatch the latest checkpointed state of running task to its standby.
+	 *
+	 * @param executionAttemptID identifying the standby task
+	 * @param taskRestore identifying the task state snapshot
+	 * @param timeout for the cancel operation
+	 * @return Future acknowledge if the task is successfully canceled
+	 */
+	CompletableFuture<Acknowledge> dispatchStateToStandbyTask(
+			ExecutionAttemptID executionAttemptID,
+			JobManagerTaskRestore taskRestore,
+			Time timeout);
+
+	/**
+	 * Switch the given (standby) task to running.
+	 *
+	 * @param executionAttemptID identifying the task
+	 * @param timeout for the cancel operation
+	 * @return Future acknowledge if the task is successfully canceled
+	 */
+	CompletableFuture<Acknowledge> switchStandbyTaskToRunning(
+			ExecutionAttemptID executionAttemptID,
+			Time timeout);
 
 	/**
 	 * Update the task where the given partitions can be found.
@@ -201,4 +241,6 @@ public interface TaskManagerGateway {
 		final AllocationID allocationId,
 		final Throwable cause,
 		@RpcTimeout final Time timeout);
+
+	CompletableFuture<Acknowledge> ignoreCheckpoint(ExecutionAttemptID attemptId, long checkpointId, Time rpcTimeout);
 }

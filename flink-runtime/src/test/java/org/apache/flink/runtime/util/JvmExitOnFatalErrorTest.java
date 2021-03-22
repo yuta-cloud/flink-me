@@ -46,13 +46,14 @@ import org.apache.flink.runtime.io.disk.iomanager.IOManagerAsync;
 import org.apache.flink.runtime.io.network.NetworkEnvironment;
 import org.apache.flink.runtime.io.network.TaskEventDispatcher;
 import org.apache.flink.runtime.io.network.netty.PartitionProducerStateChecker;
-import org.apache.flink.runtime.io.network.partition.ResultPartitionConsumableNotifier;
+import org.apache.flink.runtime.io.network.partition.NoOpResultPartitionConsumableNotifier;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
 import org.apache.flink.runtime.jobgraph.tasks.InputSplitProvider;
 import org.apache.flink.runtime.memory.MemoryManager;
+import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.metrics.groups.UnregisteredMetricGroups;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
 import org.apache.flink.runtime.state.TaskLocalStateStore;
@@ -62,10 +63,8 @@ import org.apache.flink.runtime.state.TaskStateManagerImpl;
 import org.apache.flink.runtime.state.TestLocalRecoveryConfig;
 import org.apache.flink.runtime.taskexecutor.TaskManagerConfiguration;
 import org.apache.flink.runtime.taskmanager.CheckpointResponder;
+import org.apache.flink.runtime.taskmanager.NoOpTaskManagerActions;
 import org.apache.flink.runtime.taskmanager.Task;
-import org.apache.flink.runtime.taskmanager.TaskActions;
-import org.apache.flink.runtime.taskmanager.TaskExecutionState;
-import org.apache.flink.runtime.taskmanager.TaskManagerActions;
 import org.apache.flink.runtime.taskmanager.TaskManagerRuntimeInfo;
 import org.apache.flink.runtime.testutils.TestJvmProcess;
 import org.apache.flink.util.OperatingSystem;
@@ -251,21 +250,6 @@ public class JvmExitOnFatalErrorTest {
 			}
 		}
 
-		private static final class NoOpTaskManagerActions implements TaskManagerActions {
-
-			@Override
-			public void notifyFinalState(ExecutionAttemptID executionAttemptID) {}
-
-			@Override
-			public void notifyFatalError(String message, Throwable cause) {}
-
-			@Override
-			public void failTask(ExecutionAttemptID executionAttemptID, Throwable cause) {}
-
-			@Override
-			public void updateTaskExecutionState(TaskExecutionState taskExecutionState) {}
-		}
-
 		private static final class NoOpInputSplitProvider implements InputSplitProvider {
 
 			@Override
@@ -283,17 +267,18 @@ public class JvmExitOnFatalErrorTest {
 			public void declineCheckpoint(JobID j, ExecutionAttemptID e, long l, Throwable t) {}
 		}
 
-		private static final class NoOpResultPartitionConsumableNotifier implements ResultPartitionConsumableNotifier {
-
-			@Override
-			public void notifyPartitionConsumable(JobID j, ResultPartitionID p, TaskActions t) {}
-		}
-
 		private static final class NoOpPartitionProducerStateChecker implements PartitionProducerStateChecker {
 
 			@Override
 			public CompletableFuture<ExecutionState> requestPartitionProducerState(
 					JobID jobId, IntermediateDataSetID intermediateDataSetId, ResultPartitionID r) {
+				return null;
+			}
+
+			@Override
+			public CompletableFuture<Acknowledge> triggerFailProducer(IntermediateDataSetID intermediateDataSetId,
+																	  ResultPartitionID resultPartitionId,
+																	  Throwable cause) {
 				return null;
 			}
 		}

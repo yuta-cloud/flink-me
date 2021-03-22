@@ -40,7 +40,7 @@ import org.apache.flink.runtime.broadcast.BroadcastVariableManager
 import org.apache.flink.runtime.clusterframework.BootstrapTools
 import org.apache.flink.runtime.clusterframework.messages.StopCluster
 import org.apache.flink.runtime.clusterframework.types.{AllocationID, ResourceID}
-import org.apache.flink.runtime.concurrent.{Executors, FutureUtils}
+import org.apache.flink.runtime.concurrent.Executors
 import org.apache.flink.runtime.deployment.TaskDeploymentDescriptor
 import org.apache.flink.runtime.execution.ExecutionState
 import org.apache.flink.runtime.execution.librarycache.{BlobLibraryCacheManager, LibraryCacheManager}
@@ -48,7 +48,8 @@ import org.apache.flink.runtime.executiongraph.{ExecutionAttemptID, PartitionInf
 import org.apache.flink.runtime.filecache.FileCache
 import org.apache.flink.runtime.highavailability.HighAvailabilityServicesUtils.AddressResolution
 import org.apache.flink.runtime.highavailability.{HighAvailabilityServices, HighAvailabilityServicesUtils}
-import org.apache.flink.runtime.instance.{ActorGateway, AkkaActorGateway, HardwareDescription, InstanceID}
+import org.apache.flink.runtime.inflightlogging.InFlightLogFactory
+import org.apache.flink.runtime.instance.{AkkaActorGateway, HardwareDescription, InstanceID}
 import org.apache.flink.runtime.io.disk.iomanager.IOManager
 import org.apache.flink.runtime.io.network.NetworkEnvironment
 import org.apache.flink.runtime.io.network.netty.PartitionProducerStateChecker
@@ -77,6 +78,7 @@ import scala.collection.JavaConverters._
 import scala.concurrent._
 import scala.concurrent.duration._
 import scala.language.postfixOps
+import scala.util.{Failure, Success}
 
 /**
  * The TaskManager is responsible for executing the individual tasks of a Flink job. It is
@@ -126,6 +128,7 @@ class TaskManager(
     protected val memoryManager: MemoryManager,
     protected val ioManager: IOManager,
     protected val network: NetworkEnvironment,
+    protected val inFlightLogFactory: InFlightLogFactory,
     protected val taskManagerLocalStateStoresManager: TaskExecutorLocalStateStoresManager,
     protected val numberOfSlots: Int,
     protected val highAvailabilityServices: HighAvailabilityServices,
@@ -423,7 +426,7 @@ class TaskManager(
               futureResponse.mapTo[Boolean].onComplete {
                 // IMPORTANT: In the future callback, we cannot directly modify state
                 //            but only send messages to the TaskManager to do those changes
-                case scala.util.Success(result) =>
+                case Success(result) =>
                   if (!result) {
                   self ! decorateMessage(
                     FailTask(
@@ -432,7 +435,7 @@ class TaskManager(
                     )
                   }
 
-                case scala.util.Failure(t) =>
+                case Failure(t) =>
                 self ! decorateMessage(
                   FailTask(
                     executionID,
@@ -839,10 +842,10 @@ class TaskManager(
             blobCache.get.getTransientBlobService.putTransient(fis)
           }(context.dispatcher)
             .onComplete {
-              case scala.util.Success(value) =>
+              case Success(value) =>
                 sender ! value
                 fis.close()
-              case scala.util.Failure(e) =>
+              case Failure(e) =>
                 sender ! akka.actor.Status.Failure(e)
                 fis.close()
             }(context.dispatcher)
@@ -1235,6 +1238,7 @@ class TaskManager(
         ioManager,
         network,
         bcVarManager,
+        inFlightLogFactory,
         taskStateManager,
         taskManagerConnection,
         inputSplitProvider,
@@ -1246,7 +1250,8 @@ class TaskManager(
         taskMetricGroup,
         resultPartitionConsumableNotifier,
         partitionStateChecker,
-        context.dispatcher)
+        context.dispatcher,
+        tdd.getIsStandby, jobInformation.getTopologicallySortedJobVertexes)
 
       log.info(s"Received task ${task.getTaskInfo.getTaskNameWithSubtasks()}")
 
@@ -1294,7 +1299,8 @@ class TaskManager(
           if (reader != null) {
             Future {
               try {
-                reader.updateInputChannel(partitionInfo)
+                reader.updateInputChannel(partitionInfo, network,
+                  task.getMetricGroup().getIOMetricGroup())
               }
               catch {
                 case t: Throwable =>
@@ -1411,8 +1417,8 @@ class TaskManager(
             accumulatorEvents.append(accumulators)
           } catch {
             case e: Exception =>
-              log.warn("Failed to take accumulator snapshot for task {}.",
-                execID, ExceptionUtils.getRootCause(e))
+              log.warn(s"Failed to take accumulator snapshot for task $execID.",
+                ExceptionUtils.getRootCause(e))
           }
       }
 
@@ -1534,7 +1540,7 @@ class TaskManager(
   }
 
   protected def shutdown(): Unit = {
-    context.system.shutdown()
+    context.system.terminate()
 
     // Await actor system termination and shut down JVM
     new ProcessShutDownThread(
@@ -1734,8 +1740,7 @@ object TaskManager {
       highAvailabilityServices: HighAvailabilityServices)
     : (String, java.util.Iterator[Integer]) = {
 
-    var taskManagerHostname = configuration.getString(
-      ConfigConstants.TASK_MANAGER_HOSTNAME_KEY, null)
+    var taskManagerHostname = configuration.getString(TaskManagerOptions.HOST)
 
     if (taskManagerHostname != null) {
       LOG.info("Using configured hostname/address for TaskManager: " + taskManagerHostname)
@@ -1830,7 +1835,7 @@ object TaskManager {
       taskManagerClass: Class[_ <: TaskManager])
     : Unit = {
 
-    LOG.info("Starting TaskManager")
+    LOG.info(s"Starting TaskManager with ResourceID: $resourceID")
 
     // Bring up the TaskManager actor system first, bind it to the given address.
 
@@ -1882,30 +1887,17 @@ object TaskManager {
         )
       }
 
-      // if desired, start the logging daemon that periodically logs the
-      // memory usage information
-      if (LOG.isInfoEnabled && configuration.getBoolean(
-        TaskManagerOptions.DEBUG_MEMORY_LOG))
-      {
-        LOG.info("Starting periodic memory usage logger")
-
-        val interval = configuration.getLong(
-          TaskManagerOptions.DEBUG_MEMORY_USAGE_LOG_INTERVAL_MS)
-
-        val logger = new MemoryLogger(LOG.logger, interval, taskManagerSystem)
-        logger.start()
-      }
+      MemoryLogger.startIfConfigured(LOG.logger, configuration, taskManagerSystem)
 
       // block until everything is done
-      taskManagerSystem.awaitTermination()
+      Await.ready(taskManagerSystem.whenTerminated, Duration.Inf)
     } catch {
       case t: Throwable =>
         LOG.error("Error while starting up taskManager", t)
-        try {
-          taskManagerSystem.shutdown()
-        } catch {
-          case tt: Throwable => LOG.warn("Could not cleanly shut down actor system", tt)
-        }
+        taskManagerSystem.terminate().onComplete {
+          case Success(_) =>
+          case Failure(tt) => LOG.warn("Could not cleanly shut down actor system", tt)
+        }(Executors.directExecutionContext())
         throw t
     }
 
@@ -2031,7 +2023,8 @@ object TaskManager {
     val taskManagerMetricGroup = MetricUtils.instantiateTaskManagerMetricGroup(
       metricRegistry,
       taskManagerServices.getTaskManagerLocation(),
-      taskManagerServices.getNetworkEnvironment())
+      taskManagerServices.getNetworkEnvironment(),
+      taskManagerServicesConfiguration.getSystemResourceMetricsProbingInterval)
 
     // create the actor properties (which define the actor constructor parameters)
     val tmProps = getTaskManagerProps(

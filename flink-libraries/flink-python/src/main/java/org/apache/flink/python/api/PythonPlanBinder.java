@@ -68,7 +68,7 @@ import static org.apache.flink.python.api.PythonOperationInfo.DatasizeHint.TINY;
  * This class allows the execution of a Flink plan written in python.
  */
 public class PythonPlanBinder {
-	static final Logger LOG = LoggerFactory.getLogger(PythonPlanBinder.class);
+	private static final Logger LOG = LoggerFactory.getLogger(PythonPlanBinder.class);
 
 	public static final String FLINK_PYTHON_DC_ID = "flink";
 	public static final String FLINK_PYTHON_PLAN_NAME = File.separator + "plan.py";
@@ -515,7 +515,7 @@ public class PythonPlanBinder {
 	private <IN> void createUnionOperation(PythonOperationInfo info) {
 		DataSet<IN> op1 = sets.getDataSet(info.parentID);
 		DataSet<IN> op2 = sets.getDataSet(info.otherID);
-		sets.add(info.setID, op1.union(op2).setParallelism(info.parallelism).name("Union"));
+		sets.add(info.setID, op1.union(op2).name("Union"));
 	}
 
 	private <IN1, IN2, OUT> void createCoGroupOperation(PythonOperationInfo info, TypeInformation<OUT> type) {

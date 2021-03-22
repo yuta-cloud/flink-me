@@ -59,7 +59,9 @@ import org.apache.flink.runtime.util.TestingFatalErrorHandler;
 import org.apache.flink.util.TestLogger;
 
 import org.hamcrest.Matchers;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 import org.mockito.Mockito;
 
 import java.io.File;
@@ -75,14 +77,17 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.argThat;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.RETURNS_MOCKS;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.hamcrest.MockitoHamcrest.argThat;
 
 public class TaskExecutorITCase extends TestLogger {
+
+	@Rule
+	public TemporaryFolder tempFolder = new TemporaryFolder();
 
 	private final Time timeout = Time.seconds(10L);
 
@@ -127,7 +132,7 @@ public class TaskExecutorITCase extends TestLogger {
 			TestingUtils.infiniteTime());
 
 		final File[] taskExecutorLocalStateRootDirs =
-			new File[]{new File(System.getProperty("java.io.tmpdir"), "localRecovery")};
+			new File[]{ new File(tempFolder.getRoot(),"localRecovery") };
 
 		final TaskExecutorLocalStateStoresManager taskStateManager = new TaskExecutorLocalStateStoresManager(
 			false,
@@ -144,7 +149,8 @@ public class TaskExecutorITCase extends TestLogger {
 			metricRegistry,
 			jobLeaderIdService,
 			new ClusterInformation("localhost", 1234),
-			testingFatalErrorHandler);
+			testingFatalErrorHandler,
+			UnregisteredMetricGroups.createUnregisteredJobManagerMetricGroup());
 
 		final TaskManagerServices taskManagerServices = new TaskManagerServicesBuilder()
 			.setTaskManagerLocation(taskManagerLocation)
@@ -159,6 +165,7 @@ public class TaskExecutorITCase extends TestLogger {
 			taskManagerServices,
 			heartbeatServices,
 			UnregisteredMetricGroups.createUnregisteredTaskManagerMetricGroup(),
+			null,
 			new BlobCacheService(
 				configuration,
 				new VoidBlobStore(),

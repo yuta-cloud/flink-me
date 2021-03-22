@@ -179,6 +179,7 @@ public interface SourceFunction<T> extends Function, Serializable {
 	 */
 	void cancel();
 
+
 	// ------------------------------------------------------------------------
 	//  source context
 	// ------------------------------------------------------------------------

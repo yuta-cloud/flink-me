@@ -21,6 +21,9 @@ package org.apache.flink.streaming.api.operators;
 import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.ExecutionConfig;
+import org.apache.flink.api.common.services.RandomService;
+import org.apache.flink.api.common.services.SerializableServiceFactory;
+import org.apache.flink.api.common.services.TimeService;
 import org.apache.flink.api.common.state.KeyedStateStore;
 import org.apache.flink.api.common.state.State;
 import org.apache.flink.api.common.state.StateDescriptor;
@@ -32,28 +35,14 @@ import org.apache.flink.core.fs.CloseableRegistry;
 import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.MetricGroup;
+import org.apache.flink.runtime.causal.log.job.JobCausalLog;
 import org.apache.flink.runtime.checkpoint.CheckpointOptions;
 import org.apache.flink.runtime.execution.Environment;
 import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.metrics.groups.OperatorMetricGroup;
 import org.apache.flink.runtime.metrics.groups.TaskManagerJobMetricGroup;
 import org.apache.flink.runtime.metrics.groups.UnregisteredMetricGroups;
-import org.apache.flink.runtime.state.AbstractKeyedStateBackend;
-import org.apache.flink.runtime.state.CheckpointStreamFactory;
-import org.apache.flink.runtime.state.DefaultKeyedStateStore;
-import org.apache.flink.runtime.state.KeyGroupRange;
-import org.apache.flink.runtime.state.KeyGroupStatePartitionStreamProvider;
-import org.apache.flink.runtime.state.KeyGroupsList;
-import org.apache.flink.runtime.state.KeyedStateBackend;
-import org.apache.flink.runtime.state.KeyedStateCheckpointOutputStream;
-import org.apache.flink.runtime.state.OperatorStateBackend;
-import org.apache.flink.runtime.state.StateInitializationContext;
-import org.apache.flink.runtime.state.StateInitializationContextImpl;
-import org.apache.flink.runtime.state.StatePartitionStreamProvider;
-import org.apache.flink.runtime.state.StateSnapshotContext;
-import org.apache.flink.runtime.state.StateSnapshotContextSynchronousImpl;
-import org.apache.flink.runtime.state.VoidNamespace;
-import org.apache.flink.runtime.state.VoidNamespaceSerializer;
+import org.apache.flink.runtime.state.*;
 import org.apache.flink.streaming.api.graph.StreamConfig;
 import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.runtime.streamrecord.LatencyMarker;
@@ -61,17 +50,13 @@ import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import org.apache.flink.streaming.runtime.tasks.ProcessingTimeService;
 import org.apache.flink.streaming.runtime.tasks.StreamTask;
 import org.apache.flink.streaming.util.LatencyStats;
-import org.apache.flink.util.CloseableIterable;
-import org.apache.flink.util.ExceptionUtils;
-import org.apache.flink.util.IOUtils;
-import org.apache.flink.util.OutputTag;
-import org.apache.flink.util.Preconditions;
-
+import org.apache.flink.util.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.Closeable;
 import java.io.Serializable;
+import java.util.Locale;
 
 /**
  * Base class for all stream operators. Operators that contain a user function should extend the class
@@ -89,11 +74,15 @@ import java.io.Serializable;
  */
 @PublicEvolving
 public abstract class AbstractStreamOperator<OUT>
-		implements StreamOperator<OUT>, Serializable {
+	implements StreamOperator<OUT>, Serializable {
 
 	private static final long serialVersionUID = 1L;
 
-	/** The logger used by the operator class and its subclasses. */
+	//todo provide an efficient runtime Id to each instance of an operator.
+
+	/**
+	 * The logger used by the operator class and its subclasses.
+	 */
 	protected static final Logger LOG = LoggerFactory.getLogger(AbstractStreamOperator.class);
 
 	// ----------- configuration properties -------------
@@ -103,14 +92,18 @@ public abstract class AbstractStreamOperator<OUT>
 
 	// ---------------- runtime fields ------------------
 
-	/** The task that contains this operator (and other operators in the same chain). */
+	/**
+	 * The task that contains this operator (and other operators in the same chain).
+	 */
 	private transient StreamTask<?, ?> container;
 
 	protected transient StreamConfig config;
 
 	protected transient Output<StreamRecord<OUT>> output;
 
-	/** The runtime context for UDFs. */
+	/**
+	 * The runtime context for UDFs.
+	 */
 	private transient StreamingRuntimeContext runtimeContext;
 
 	// ---------------- key/value state ------------------
@@ -171,7 +164,7 @@ public abstract class AbstractStreamOperator<OUT>
 		this.container = containingTask;
 		this.config = config;
 		try {
-			OperatorMetricGroup operatorMetricGroup = environment.getMetricGroup().addOperator(config.getOperatorID(), config.getOperatorName());
+			OperatorMetricGroup operatorMetricGroup = environment.getMetricGroup().getOrAddOperator(config.getOperatorID(), config.getOperatorName());
 			this.output = new CountingOutput(output, operatorMetricGroup.getIOMetricGroup().getNumRecordsOutCounter());
 			if (config.isChainStart()) {
 				operatorMetricGroup.getIOMetricGroup().reuseInputMetricsForTask();
@@ -193,11 +186,33 @@ public abstract class AbstractStreamOperator<OUT>
 				LOG.warn("{} has been set to a value equal or below 0: {}. Using default.", MetricOptions.LATENCY_HISTORY_SIZE, historySize);
 				historySize = MetricOptions.LATENCY_HISTORY_SIZE.defaultValue();
 			}
+
+			final String configuredGranularity = taskManagerConfig.getString(MetricOptions.LATENCY_SOURCE_GRANULARITY);
+			LatencyStats.Granularity granularity;
+			try {
+				granularity = LatencyStats.Granularity.valueOf(configuredGranularity.toUpperCase(Locale.ROOT));
+			} catch (IllegalArgumentException iae) {
+				granularity = LatencyStats.Granularity.OPERATOR;
+				LOG.warn(
+					"Configured value {} option for {} is invalid. Defaulting to {}.",
+					configuredGranularity,
+					MetricOptions.LATENCY_SOURCE_GRANULARITY.key(),
+					granularity);
+			}
 			TaskManagerJobMetricGroup jobMetricGroup = this.metrics.parent().parent();
-			this.latencyStats = new LatencyStats(jobMetricGroup.addGroup("latency"), historySize, container.getIndexInSubtaskGroup(), getOperatorID());
+			this.latencyStats = new LatencyStats(jobMetricGroup.addGroup("latency"),
+				historySize,
+				container.getIndexInSubtaskGroup(),
+				getOperatorID(),
+				granularity);
 		} catch (Exception e) {
 			LOG.warn("An error occurred while instantiating latency metrics.", e);
-			this.latencyStats = new LatencyStats(UnregisteredMetricGroups.createUnregisteredTaskManagerJobMetricGroup().addGroup("latency"), 1, 0, new OperatorID());
+			this.latencyStats = new LatencyStats(
+				UnregisteredMetricGroups.createUnregisteredTaskManagerJobMetricGroup().addGroup("latency"),
+				1,
+				0,
+				new OperatorID(),
+				LatencyStats.Granularity.SINGLE);
 		}
 
 		this.runtimeContext = new StreamingRuntimeContext(this, environment, container.getAccumulatorMap());
@@ -229,9 +244,20 @@ public abstract class AbstractStreamOperator<OUT>
 				getClass().getSimpleName(),
 				this,
 				keySerializer,
-				streamTaskCloseableRegistry);
+				streamTaskCloseableRegistry,
+				metrics);
 
+		// Required for StandbyTaskFailoverStrategy
+		if (this.operatorStateBackend != null) {
+			this.operatorStateBackend.dispose();
+		}
 		this.operatorStateBackend = context.operatorStateBackend();
+
+		// Required for StandbyTaskFailoverStrategy
+		if (this.keyedStateBackend != null) {
+			this.keyedStateBackend.dispose();
+		}
+
 		this.keyedStateBackend = context.keyedStateBackend();
 
 		if (keyedStateBackend != null) {
@@ -243,13 +269,20 @@ public abstract class AbstractStreamOperator<OUT>
 		CloseableIterable<KeyGroupStatePartitionStreamProvider> keyedStateInputs = context.rawKeyedStateInputs();
 		CloseableIterable<StatePartitionStreamProvider> operatorStateInputs = context.rawOperatorStateInputs();
 
+		RandomService randomService = this.container.getRandomService();
+		TimeService timestampService = this.container.getTimeService();
+		SerializableServiceFactory serializableServiceFactory= this.container.getSerializableServiceFactory();
 		try {
 			StateInitializationContext initializationContext = new StateInitializationContextImpl(
 				context.isRestored(), // information whether we restore or start for the first time
+                containingTask.getRecoveryManager().isRecovering(),
 				operatorStateBackend, // access to operator state backend
 				keyedStateStore, // access to keyed state backend
 				keyedStateInputs, // access to keyed state stream
-				operatorStateInputs); // access to operator state stream
+				operatorStateInputs, // access to operator state stream
+				randomService,
+				timestampService,
+				serializableServiceFactory);
 
 			initializeState(initializationContext);
 		} finally {
@@ -389,8 +422,13 @@ public abstract class AbstractStreamOperator<OUT>
 				snapshotException.addSuppressed(e);
 			}
 
-			throw new Exception("Could not complete snapshot " + checkpointId + " for operator " +
-				getOperatorName() + '.', snapshotException);
+			String snapshotFailMessage = "Could not complete snapshot " + checkpointId + " for operator " +
+				getOperatorName() + ".";
+
+			if (!getContainingTask().isCanceled()) {
+				LOG.info(snapshotFailMessage, snapshotException);
+			}
+			throw new Exception(snapshotFailMessage, snapshotException);
 		}
 
 		return snapshotInProgress;
@@ -616,6 +654,10 @@ public abstract class AbstractStreamOperator<OUT>
 
 	public KeyedStateStore getKeyedStateStore() {
 		return keyedStateStore;
+	}
+
+	public JobCausalLog getCausalLog() {
+		return this.container.getCausalLog();
 	}
 
 	// ------------------------------------------------------------------------

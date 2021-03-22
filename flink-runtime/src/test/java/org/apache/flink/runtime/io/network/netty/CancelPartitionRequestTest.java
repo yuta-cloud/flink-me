@@ -18,6 +18,8 @@
 
 package org.apache.flink.runtime.io.network.netty;
 
+import org.apache.flink.api.common.JobID;
+import org.apache.flink.runtime.causal.VertexID;
 import org.apache.flink.runtime.io.network.TaskEventDispatcher;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.buffer.BufferProvider;
@@ -206,6 +208,10 @@ public class CancelPartitionRequestTest {
 		}
 
 		@Override
+		public void sendFailConsumerTrigger(Throwable cause) {
+		}
+
+		@Override
 		public void notifySubpartitionConsumed() throws IOException {
 		}
 
@@ -222,6 +228,16 @@ public class CancelPartitionRequestTest {
 		@Override
 		public boolean isAvailable() {
 			return true;
+		}
+
+		@Override
+		public JobID getJobID() {
+			return null;
+		}
+
+		@Override
+		public short getVertexID() {
+			return -1;
 		}
 
 		@Override

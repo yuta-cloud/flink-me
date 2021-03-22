@@ -18,11 +18,12 @@
 
 package org.apache.flink.streaming.tests;
 
-import org.apache.flink.api.common.state.StateTtlConfiguration;
+import org.apache.flink.api.common.state.StateTtlConfig;
 import org.apache.flink.api.common.time.Time;
 import org.apache.flink.api.java.utils.ParameterTool;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
+import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.sink.PrintSinkFunction;
 
@@ -74,6 +75,8 @@ public class DataStreamStateTTLTestProgram {
 
 		setupEnvironment(env, pt);
 
+		final MonotonicTTLTimeProvider ttlTimeProvider = setBackendWithCustomTTLTimeProvider(env);
+
 		int keySpace = pt.getInt(UPDATE_GENERATOR_SRC_KEYSPACE.key(), UPDATE_GENERATOR_SRC_KEYSPACE.defaultValue());
 		long sleepAfterElements = pt.getLong(UPDATE_GENERATOR_SRC_SLEEP_AFTER_ELEMENTS.key(),
 			UPDATE_GENERATOR_SRC_SLEEP_AFTER_ELEMENTS.defaultValue());
@@ -84,17 +87,33 @@ public class DataStreamStateTTLTestProgram {
 		long reportStatAfterUpdatesNum = pt.getLong(REPORT_STAT_AFTER_UPDATES_NUM.key(),
 			REPORT_STAT_AFTER_UPDATES_NUM.defaultValue());
 
-		StateTtlConfiguration ttlConfig = StateTtlConfiguration.newBuilder(ttl).build();
+		StateTtlConfig ttlConfig = StateTtlConfig.newBuilder(ttl).build();
 
 		env
 			.addSource(new TtlStateUpdateSource(keySpace, sleepAfterElements, sleepTime))
 			.name("TtlStateUpdateSource")
 			.keyBy(TtlStateUpdate::getKey)
-			.flatMap(new TtlVerifyUpdateFunction(ttlConfig, reportStatAfterUpdatesNum))
+			.flatMap(new TtlVerifyUpdateFunction(ttlConfig, ttlTimeProvider, reportStatAfterUpdatesNum))
 			.name("TtlVerifyUpdateFunction")
 			.addSink(new PrintSinkFunction<>())
 			.name("PrintFailedVerifications");
 
 		env.execute("State TTL test job");
+	}
+
+	/**
+	 * Sets the state backend to a new {@link StubStateBackend} which has a {@link MonotonicTTLTimeProvider}.
+	 *
+	 * @param env The {@link StreamExecutionEnvironment} of the job.
+	 * @return The {@link MonotonicTTLTimeProvider}.
+	 */
+	private static MonotonicTTLTimeProvider setBackendWithCustomTTLTimeProvider(StreamExecutionEnvironment env) {
+		final MonotonicTTLTimeProvider ttlTimeProvider = new MonotonicTTLTimeProvider();
+
+		final StateBackend configuredBackend = env.getStateBackend();
+		final StateBackend stubBackend = new StubStateBackend(configuredBackend, ttlTimeProvider);
+		env.setStateBackend(stubBackend);
+
+		return ttlTimeProvider;
 	}
 }

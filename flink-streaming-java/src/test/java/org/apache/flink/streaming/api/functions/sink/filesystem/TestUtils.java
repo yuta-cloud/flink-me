@@ -20,23 +20,30 @@ package org.apache.flink.streaming.api.functions.sink.filesystem;
 
 import org.apache.flink.api.common.serialization.BulkWriter;
 import org.apache.flink.api.common.serialization.Encoder;
+import org.apache.flink.api.common.state.ListState;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.core.io.SimpleVersionedSerializer;
-import org.apache.flink.streaming.api.functions.sink.filesystem.bucketers.Bucketer;
-import org.apache.flink.streaming.api.functions.sink.filesystem.bucketers.SimpleVersionedStringSerializer;
-import org.apache.flink.streaming.api.functions.sink.filesystem.rolling.policies.DefaultRollingPolicy;
+import org.apache.flink.streaming.api.functions.sink.SinkFunction;
+import org.apache.flink.streaming.api.functions.sink.filesystem.bucketassigners.SimpleVersionedStringSerializer;
+import org.apache.flink.streaming.api.functions.sink.filesystem.rollingpolicies.DefaultRollingPolicy;
 import org.apache.flink.streaming.api.operators.StreamSink;
 import org.apache.flink.streaming.util.OneInputStreamOperatorTestHarness;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.Assert;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -59,7 +66,7 @@ public class TestUtils {
 						.withInactivityInterval(inactivityInterval)
 						.build();
 
-		final Bucketer<Tuple2<String, Integer>, String> bucketer = new TupleToStringBucketer();
+		final BucketAssigner<Tuple2<String, Integer>, String> bucketer = new TupleToStringBucketer();
 
 		final Encoder<Tuple2<String, Integer>> encoder = (element, stream) -> {
 			stream.write((element.f0 + '@' + element.f1).getBytes(StandardCharsets.UTF_8));
@@ -74,7 +81,7 @@ public class TestUtils {
 				bucketer,
 				encoder,
 				rollingPolicy,
-				new DefaultBucketFactory<>());
+				new DefaultBucketFactoryImpl<>());
 	}
 
 	static OneInputStreamOperatorTestHarness<Tuple2<String, Integer>, Object> createCustomRescalingTestSink(
@@ -82,14 +89,14 @@ public class TestUtils {
 			final int totalParallelism,
 			final int taskIdx,
 			final long bucketCheckInterval,
-			final Bucketer<Tuple2<String, Integer>, String> bucketer,
+			final BucketAssigner<Tuple2<String, Integer>, String> bucketer,
 			final Encoder<Tuple2<String, Integer>> writer,
 			final RollingPolicy<Tuple2<String, Integer>, String> rollingPolicy,
 			final BucketFactory<Tuple2<String, Integer>, String> bucketFactory) throws Exception {
 
 		StreamingFileSink<Tuple2<String, Integer>> sink = StreamingFileSink
 				.forRowFormat(new Path(outDir.toURI()), writer)
-				.withBucketer(bucketer)
+				.withBucketAssigner(bucketer)
 				.withRollingPolicy(rollingPolicy)
 				.withBucketCheckInterval(bucketCheckInterval)
 				.withBucketFactory(bucketFactory)
@@ -103,13 +110,13 @@ public class TestUtils {
 			final int totalParallelism,
 			final int taskIdx,
 			final long bucketCheckInterval,
-			final Bucketer<Tuple2<String, Integer>, String> bucketer,
+			final BucketAssigner<Tuple2<String, Integer>, String> bucketer,
 			final BulkWriter.Factory<Tuple2<String, Integer>> writer,
 			final BucketFactory<Tuple2<String, Integer>, String> bucketFactory) throws Exception {
 
 		StreamingFileSink<Tuple2<String, Integer>> sink = StreamingFileSink
 				.forBulkFormat(new Path(outDir.toURI()), writer)
-				.withBucketer(bucketer)
+				.withBucketAssigner(bucketer)
 				.withBucketCheckInterval(bucketCheckInterval)
 				.withBucketFactory(bucketFactory)
 				.build();
@@ -147,7 +154,7 @@ public class TestUtils {
 		return contents;
 	}
 
-	static class TupleToStringBucketer implements Bucketer<Tuple2<String, Integer>, String> {
+	static class TupleToStringBucketer implements BucketAssigner<Tuple2<String, Integer>, String> {
 
 		private static final long serialVersionUID = 1L;
 
@@ -159,6 +166,111 @@ public class TestUtils {
 		@Override
 		public SimpleVersionedSerializer<String> getSerializer() {
 			return SimpleVersionedStringSerializer.INSTANCE;
+		}
+	}
+
+	/**
+	 * A simple {@link BucketAssigner} that accepts {@code String}'s
+	 * and returns the element itself as the bucket id.
+	 */
+	static class StringIdentityBucketAssigner implements BucketAssigner<String, String> {
+		private static final long serialVersionUID = 1L;
+
+		@Override
+		public String getBucketId(String element, BucketAssigner.Context context) {
+			return element;
+		}
+
+		@Override
+		public SimpleVersionedSerializer<String> getSerializer() {
+			return SimpleVersionedStringSerializer.INSTANCE;
+		}
+	}
+
+	/**
+	 * A mock {@link SinkFunction.Context} to be used in the tests.
+	 */
+	static class MockSinkContext implements SinkFunction.Context {
+
+		@Nullable
+		private Long elementTimestamp;
+
+		private long watermark;
+
+		private long processingTime;
+
+		MockSinkContext(
+				@Nullable Long elementTimestamp,
+				long watermark,
+				long processingTime) {
+			this.elementTimestamp = elementTimestamp;
+			this.watermark = watermark;
+			this.processingTime = processingTime;
+		}
+
+		@Override
+		public long currentProcessingTime() {
+			return processingTime;
+		}
+
+		@Override
+		public long currentWatermark() {
+			return watermark;
+		}
+
+		@Nullable
+		@Override
+		public Long timestamp() {
+			return elementTimestamp;
+		}
+	}
+
+	/**
+	 * A mock {@link ListState} used for testing the snapshot/restore cycle of the sink.
+	 */
+	static class MockListState<T> implements ListState<T> {
+
+		private final List<T> backingList;
+
+		MockListState() {
+			this.backingList = new ArrayList<>();
+		}
+
+		public List<T> getBackingList() {
+			return backingList;
+		}
+
+		@Override
+		public void update(List<T> values) {
+			backingList.clear();
+			addAll(values);
+		}
+
+		@Override
+		public void addAll(List<T> values) {
+			backingList.addAll(values);
+		}
+
+		@Override
+		public Iterable<T> get() {
+			return new Iterable<T>() {
+
+				@Nonnull
+				@Override
+				public Iterator<T> iterator() {
+					return backingList.iterator();
+				}
+			};
+		}
+
+		@Override
+		public void add(T value) {
+			backingList.add(value);
+		}
+
+		@Override
+		public void clear() {
+			backingList.clear();
 		}
 	}
 }

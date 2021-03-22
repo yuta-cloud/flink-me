@@ -36,7 +36,6 @@ import org.apache.flink.streaming.connectors.kafka.partitioner.FlinkFixedPartiti
 import org.apache.flink.streaming.connectors.kafka.partitioner.FlinkKafkaPartitioner;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.api.Types;
-import org.apache.flink.table.descriptors.DescriptorProperties;
 import org.apache.flink.table.descriptors.Kafka;
 import org.apache.flink.table.descriptors.Rowtime;
 import org.apache.flink.table.descriptors.Schema;
@@ -133,7 +132,7 @@ public abstract class KafkaTableSourceSinkFactoryTestBase extends TestLogger {
 				.toRowType()
 		);
 
-		final KafkaTableSource expected = getExpectedKafkaTableSource(
+		final KafkaTableSourceBase expected = getExpectedKafkaTableSource(
 			schema,
 			Optional.of(PROC_TIME),
 			rowtimeAttributeDescriptors,
@@ -153,6 +152,7 @@ public abstract class KafkaTableSourceSinkFactoryTestBase extends TestLogger {
 					.version(getKafkaVersion())
 					.topic(TOPIC)
 					.properties(KAFKA_PROPERTIES)
+					.sinkPartitionerRoundRobin() // test if accepted although not needed
 					.startFromSpecificOffsets(OFFSETS))
 			.withFormat(new TestTableFormat())
 			.withSchema(
@@ -164,14 +164,14 @@ public abstract class KafkaTableSourceSinkFactoryTestBase extends TestLogger {
 					.field(PROC_TIME, Types.SQL_TIMESTAMP()).proctime())
 			.inAppendMode();
 
-		final Map<String, String> propertiesMap = DescriptorProperties.toJavaMap(testDesc);
+		final Map<String, String> propertiesMap = testDesc.toProperties();
 		final TableSource<?> actualSource = TableFactoryService.find(StreamTableSourceFactory.class, propertiesMap)
 			.createStreamTableSource(propertiesMap);
 
 		assertEquals(expected, actualSource);
 
 		// test Kafka consumer
-		final KafkaTableSource actualKafkaSource = (KafkaTableSource) actualSource;
+		final KafkaTableSourceBase actualKafkaSource = (KafkaTableSourceBase) actualSource;
 		final StreamExecutionEnvironmentMock mock = new StreamExecutionEnvironmentMock();
 		actualKafkaSource.getDataStream(mock);
 		assertTrue(getExpectedFlinkKafkaConsumer().isAssignableFrom(mock.sourceFunction.getClass()));
@@ -190,11 +190,11 @@ public abstract class KafkaTableSourceSinkFactoryTestBase extends TestLogger {
 			.field(EVENT_TIME, Types.SQL_TIMESTAMP())
 			.build();
 
-		final KafkaTableSink expected = getExpectedKafkaTableSink(
+		final KafkaTableSinkBase expected = getExpectedKafkaTableSink(
 			schema,
 			TOPIC,
 			KAFKA_PROPERTIES,
-			new FlinkFixedPartitioner<>(), // a custom partitioner is not support yet
+			Optional.of(new FlinkFixedPartitioner<>()),
 			new TestSerializationSchema(schema.toRowType()));
 
 		// construct table sink using descriptors and table sink factory
@@ -204,6 +204,7 @@ public abstract class KafkaTableSourceSinkFactoryTestBase extends TestLogger {
 					.version(getKafkaVersion())
 					.topic(TOPIC)
 					.properties(KAFKA_PROPERTIES)
+					.sinkPartitionerFixed()
 					.startFromSpecificOffsets(OFFSETS)) // test if they accepted although not needed
 			.withFormat(new TestTableFormat())
 			.withSchema(
@@ -213,14 +214,14 @@ public abstract class KafkaTableSourceSinkFactoryTestBase extends TestLogger {
 					.field(EVENT_TIME, Types.SQL_TIMESTAMP()))
 			.inAppendMode();
 
-		final Map<String, String> propertiesMap = DescriptorProperties.toJavaMap(testDesc);
+		final Map<String, String> propertiesMap = testDesc.toProperties();
 		final TableSink<?> actualSink = TableFactoryService.find(StreamTableSinkFactory.class, propertiesMap)
 			.createStreamTableSink(propertiesMap);
 
 		assertEquals(expected, actualSink);
 
 		// test Kafka producer
-		final KafkaTableSink actualKafkaSink = (KafkaTableSink) actualSink;
+		final KafkaTableSinkBase actualKafkaSink = (KafkaTableSinkBase) actualSink;
 		final DataStreamMock streamMock = new DataStreamMock(new StreamExecutionEnvironmentMock(), schema.toRowType());
 		actualKafkaSink.emitDataStream(streamMock);
 		assertTrue(getExpectedFlinkKafkaProducer().isAssignableFrom(streamMock.sinkFunction.getClass()));
@@ -284,7 +285,7 @@ public abstract class KafkaTableSourceSinkFactoryTestBase extends TestLogger {
 
 	protected abstract Class<?> getExpectedFlinkKafkaProducer();
 
-	protected abstract KafkaTableSource getExpectedKafkaTableSource(
+	protected abstract KafkaTableSourceBase getExpectedKafkaTableSource(
 		TableSchema schema,
 		Optional<String> proctimeAttribute,
 		List<RowtimeAttributeDescriptor> rowtimeAttributeDescriptors,
@@ -295,10 +296,10 @@ public abstract class KafkaTableSourceSinkFactoryTestBase extends TestLogger {
 		StartupMode startupMode,
 		Map<KafkaTopicPartition, Long> specificStartupOffsets);
 
-	protected abstract KafkaTableSink getExpectedKafkaTableSink(
+	protected abstract KafkaTableSinkBase getExpectedKafkaTableSink(
 		TableSchema schema,
 		String topic,
 		Properties properties,
-		FlinkKafkaPartitioner<Row> partitioner,
+		Optional<FlinkKafkaPartitioner<Row>> partitioner,
 		SerializationSchema<Row> serializationSchema);
 }

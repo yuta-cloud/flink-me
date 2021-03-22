@@ -18,8 +18,10 @@
 
 package org.apache.flink.runtime.io.network.partition;
 
+import org.apache.flink.api.common.JobID;
 import org.apache.flink.core.memory.MemorySegment;
 import org.apache.flink.core.memory.MemorySegmentFactory;
+import org.apache.flink.runtime.causal.VertexID;
 import org.apache.flink.runtime.io.disk.iomanager.BufferFileReader;
 import org.apache.flink.runtime.io.disk.iomanager.BufferFileWriter;
 import org.apache.flink.runtime.io.disk.iomanager.SynchronousBufferFileReader;
@@ -228,9 +230,22 @@ class SpilledSubpartitionView implements ResultSubpartitionView, NotificationLis
 	}
 
 	@Override
+	public JobID getJobID() {
+		return this.parent.getJobID();
+	}
+
+	@Override
+	public short getVertexID() {
+		return this.parent.getVertexID();
+	}
+
+	@Override
 	public Throwable getFailureCause() {
 		return parent.getFailureCause();
 	}
+
+	@Override
+	public void sendFailConsumerTrigger(Throwable cause) {}
 
 	@Override
 	public String toString() {
@@ -257,7 +272,8 @@ class SpilledSubpartitionView implements ResultSubpartitionView, NotificationLis
 
 			synchronized (buffers) {
 				for (int i = 0; i < numberOfBuffers; i++) {
-					buffers.add(new NetworkBuffer(MemorySegmentFactory.allocateUnpooledSegment(memorySegmentSize), this));
+					buffers.add(new NetworkBuffer(MemorySegmentFactory.allocateUnpooledOffHeapMemory(
+						memorySegmentSize, null), this));
 				}
 			}
 		}

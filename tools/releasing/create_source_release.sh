@@ -63,14 +63,15 @@ cd ${CLONE_DIR}
 
 rsync -a \
   --exclude ".git" --exclude ".gitignore" --exclude ".gitattributes" --exclude ".travis.yml" \
-  --exclude "deploysettings.xml" --exclude "CHANGELOG" --exclude ".github" --exclude "target" \
+  --exclude "CHANGELOG" --exclude ".github" --exclude "target" \
   --exclude ".idea" --exclude "*.iml" --exclude ".DS_Store" --exclude "build-target" \
   --exclude "docs/content" --exclude ".rubydeps" \
   . flink-$RELEASE_VERSION
 
 tar czf ${RELEASE_DIR}/flink-${RELEASE_VERSION}-src.tgz flink-$RELEASE_VERSION
 gpg --armor --detach-sig ${RELEASE_DIR}/flink-$RELEASE_VERSION-src.tgz
-$SHASUM ${RELEASE_DIR}/flink-$RELEASE_VERSION-src.tgz > ${RELEASE_DIR}/flink-$RELEASE_VERSION-src.tgz.sha512
+cd ${RELEASE_DIR}
+$SHASUM flink-$RELEASE_VERSION-src.tgz > flink-$RELEASE_VERSION-src.tgz.sha512
 
 cd ${CURR_DIR}
 rm -rf ${CLONE_DIR}

@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.io.network.partition.consumer;
 
+import org.apache.flink.api.common.JobID;
 import org.apache.flink.runtime.event.TaskEvent;
 
 import java.io.IOException;
@@ -26,10 +27,10 @@ import java.util.Optional;
 /**
  * An input gate consumes one or more partitions of a single produced intermediate result.
  *
- * <p> Each intermediate result is partitioned over its producing parallel subtasks; each of these
+ * <p>Each intermediate result is partitioned over its producing parallel subtasks; each of these
  * partitions is furthermore partitioned into one or more subpartitions.
  *
- * <p> As an example, consider a map-reduce program, where the map operator produces data and the
+ * <p>As an example, consider a map-reduce program, where the map operator produces data and the
  * reduce operator consumes the produced data.
  *
  * <pre>{@code
@@ -38,7 +39,7 @@ import java.util.Optional;
  * +-----+              +---------------------+              +--------+
  * }</pre>
  *
- * <p> When deploying such a program in parallel, the intermediate result will be partitioned over its
+ * <p>When deploying such a program in parallel, the intermediate result will be partitioned over its
  * producing parallel subtasks; each of these partitions is furthermore partitioned into one or more
  * subpartitions.
  *
@@ -59,7 +60,7 @@ import java.util.Optional;
  *               +-----------------------------------------+
  * }</pre>
  *
- * <p> In the above example, two map subtasks produce the intermediate result in parallel, resulting
+ * <p>In the above example, two map subtasks produce the intermediate result in parallel, resulting
  * in two partitions (Partition 1 and 2). Each of these partitions is further partitioned into two
  * subpartitions -- one for each parallel reduce subtask. As shown in the Figure, each reduce task
  * will have an input gate attached to it. This will provide its input, which will consist of one
@@ -68,6 +69,8 @@ import java.util.Optional;
 public interface InputGate {
 
 	int getNumberOfInputChannels();
+
+	String getOwningTaskName();
 
 	boolean isFinished();
 
@@ -87,9 +90,17 @@ public interface InputGate {
 	 */
 	Optional<BufferOrEvent> pollNextBufferOrEvent() throws IOException, InterruptedException;
 
-	void sendTaskEvent(TaskEvent event) throws IOException;
+	void sendTaskEvent(TaskEvent event) throws IOException, InterruptedException;
 
 	void registerListener(InputGateListener listener);
 
 	int getPageSize();
+
+	InputChannel getInputChannel(int i);
+
+    int getAbsoluteChannelIndex(InputGate gate, int channelIndex);
+
+	SingleInputGate[] getInputGates();
+
+    JobID getJobID();
 }

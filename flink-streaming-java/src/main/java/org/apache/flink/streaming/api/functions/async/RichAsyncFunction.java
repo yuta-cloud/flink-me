@@ -27,6 +27,9 @@ import org.apache.flink.api.common.accumulators.IntCounter;
 import org.apache.flink.api.common.accumulators.LongCounter;
 import org.apache.flink.api.common.aggregators.Aggregator;
 import org.apache.flink.api.common.cache.DistributedCache;
+import org.apache.flink.api.common.services.RandomService;
+import org.apache.flink.api.common.services.SerializableService;
+import org.apache.flink.api.common.services.TimeService;
 import org.apache.flink.api.common.functions.AbstractRichFunction;
 import org.apache.flink.api.common.functions.BroadcastVariableInitializer;
 import org.apache.flink.api.common.functions.IterationRuntimeContext;
@@ -51,6 +54,7 @@ import org.apache.flink.util.Preconditions;
 import java.io.Serializable;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 /**
  * Rich variant of the {@link AsyncFunction}. As a {@link RichFunction}, it gives access to the
@@ -189,6 +193,21 @@ public abstract class RichAsyncFunction<IN, OUT> extends AbstractRichFunction im
 		}
 
 		@Override
+		public TimeService getTimeService() {
+			return runtimeContext.getTimeService();
+		}
+
+		@Override
+		public RandomService getRandomService() {
+			return runtimeContext.getRandomService();
+		}
+
+		@Override
+		public <I, O extends Serializable> SerializableService<I, O> getSerializableService(Function<I, O> function) {
+			return runtimeContext.getSerializableService(function);
+		}
+
+		@Override
 		public <V, A extends Serializable> void addAccumulator(String name, Accumulator<V, A> accumulator) {
 			throw new UnsupportedOperationException("Accumulators are not supported in rich async functions.");
 		}
@@ -266,6 +285,11 @@ public abstract class RichAsyncFunction<IN, OUT> extends AbstractRichFunction im
 		@Override
 		public <T extends Value> T getPreviousIterationAggregate(String name) {
 			throw new UnsupportedOperationException("Iteration aggregators are not supported in rich async functions.");
+		}
+
+		@Override
+		public <I, O extends Serializable> SerializableService<I, O> getSerializableService(Function<I, O> function) {
+			return null;
 		}
 	}
 }

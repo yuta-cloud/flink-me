@@ -70,4 +70,5 @@ public class CollectingSourceContext<T extends Serializable> implements SourceFu
 
 	@Override
 	public void close() {}
+
 }

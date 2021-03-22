@@ -20,6 +20,7 @@ package org.apache.flink.streaming.examples.ml;
 import org.apache.flink.api.java.utils.ParameterTool;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.streaming.api.environment.CheckpointConfig;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.AssignerWithPunctuatedWatermarks;
 import org.apache.flink.streaming.api.functions.co.CoMapFunction;
@@ -61,6 +62,8 @@ public class IncrementalLearningSkeleton {
 		final ParameterTool params = ParameterTool.fromArgs(args);
 
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+		env.enableCheckpointing(2000L);
+		env.getCheckpointConfig().enableExternalizedCheckpoints(CheckpointConfig.ExternalizedCheckpointCleanup.RETAIN_ON_CANCELLATION);
 		env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
 
 		DataStream<Integer> trainingData = env.addSource(new FiniteTrainingDataSource());
@@ -97,12 +100,12 @@ public class IncrementalLearningSkeleton {
 	 */
 	public static class FiniteNewDataSource implements SourceFunction<Integer> {
 		private static final long serialVersionUID = 1L;
-		private int counter;
+		private int counter = 0;
 
 		@Override
 		public void run(SourceContext<Integer> ctx) throws Exception {
 			Thread.sleep(15);
-			while (counter < 50) {
+			while (counter < 500000000) {
 				ctx.collect(getNewData());
 			}
 		}
@@ -115,7 +118,7 @@ public class IncrementalLearningSkeleton {
 		private Integer getNewData() throws InterruptedException {
 			Thread.sleep(5);
 			counter++;
-			return 1;
+			return counter;
 		}
 	}
 
@@ -129,7 +132,7 @@ public class IncrementalLearningSkeleton {
 
 		@Override
 		public void run(SourceContext<Integer> collector) throws Exception {
-			while (counter < 8200) {
+			while (counter < 820000000) {
 				collector.collect(getTrainingData());
 			}
 		}
@@ -141,7 +144,7 @@ public class IncrementalLearningSkeleton {
 
 		private Integer getTrainingData() throws InterruptedException {
 			counter++;
-			return 1;
+			return counter;
 		}
 	}
 
@@ -202,7 +205,7 @@ public class IncrementalLearningSkeleton {
 			// Update model
 			partialModel = value;
 			batchModel = getBatchModel();
-			return 1;
+			return 0;
 		}
 
 		// pulls model built with batch-job on the old training data
@@ -212,7 +215,7 @@ public class IncrementalLearningSkeleton {
 
 		// performs newData using the two models
 		protected Integer predict(Integer inTuple) {
-			return 0;
+			return inTuple;
 		}
 
 	}

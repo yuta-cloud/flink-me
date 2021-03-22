@@ -247,5 +247,6 @@ public class StatefulSequenceSourceTest {
 		@Override
 		public void close() {
 		}
+
 	}
 }

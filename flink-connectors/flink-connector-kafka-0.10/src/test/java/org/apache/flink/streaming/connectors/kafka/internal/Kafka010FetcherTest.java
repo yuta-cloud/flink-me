@@ -480,5 +480,6 @@ public class Kafka010FetcherTest {
 				lock.unlock();
 			}
 		}
+
 	}
 }

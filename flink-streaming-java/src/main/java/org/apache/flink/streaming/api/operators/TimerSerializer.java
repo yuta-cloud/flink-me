@@ -19,9 +19,13 @@
 package org.apache.flink.streaming.api.operators;
 
 import org.apache.flink.api.common.typeutils.CompatibilityResult;
+import org.apache.flink.api.common.typeutils.CompatibilityUtil;
 import org.apache.flink.api.common.typeutils.CompositeTypeSerializerConfigSnapshot;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.common.typeutils.TypeSerializerConfigSnapshot;
+import org.apache.flink.api.common.typeutils.TypeSerializerSnapshot;
+import org.apache.flink.api.common.typeutils.UnloadableDummyTypeSerializer;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.DataOutputView;
 import org.apache.flink.util.MathUtils;
@@ -29,7 +33,10 @@ import org.apache.flink.util.MathUtils;
 import javax.annotation.Nonnull;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Objects;
+
+import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
  * A serializer for {@link TimerHeapInternalTimer} objects that produces a serialization format that is
@@ -41,6 +48,9 @@ import java.util.Objects;
 public class TimerSerializer<K, N> extends TypeSerializer<TimerHeapInternalTimer<K, N>> {
 
 	private static final long serialVersionUID = 1L;
+
+	private static final int KEY_SERIALIZER_SNAPSHOT_INDEX = 0;
+	private static final int NAMESPACE_SERIALIZER_SNAPSHOT_INDEX = 1;
 
 	/** Serializer for the key. */
 	@Nonnull
@@ -72,8 +82,8 @@ public class TimerSerializer<K, N> extends TypeSerializer<TimerHeapInternalTimer
 		int length,
 		boolean immutableType) {
 
-		this.keySerializer = keySerializer;
-		this.namespaceSerializer = namespaceSerializer;
+		this.keySerializer = checkNotNull(keySerializer);
+		this.namespaceSerializer = checkNotNull(namespaceSerializer);
 		this.length = length;
 		this.immutableType = immutableType;
 	}
@@ -201,15 +211,42 @@ public class TimerSerializer<K, N> extends TypeSerializer<TimerHeapInternalTimer
 	}
 
 	@Override
-	public TypeSerializerConfigSnapshot snapshotConfiguration() {
+	public TypeSerializerConfigSnapshot<TimerHeapInternalTimer<K, N>> snapshotConfiguration() {
 		return new TimerSerializerConfigSnapshot<>(keySerializer, namespaceSerializer);
 	}
 
 	@Override
 	public CompatibilityResult<TimerHeapInternalTimer<K, N>> ensureCompatibility(
 		TypeSerializerConfigSnapshot configSnapshot) {
-		//TODO this is just a mock (assuming no serializer updates) for now and needs a proper implementation! change this before release.
-		return CompatibilityResult.compatible();
+
+		if (configSnapshot instanceof TimerSerializerConfigSnapshot) {
+			List<Tuple2<TypeSerializer<?>, TypeSerializerSnapshot<?>>> previousSerializersAndConfigs =
+				((TimerSerializerConfigSnapshot<?, ?>) configSnapshot).getNestedSerializersAndConfigs();
+
+			if (previousSerializersAndConfigs.size() == 2) {
+				Tuple2<TypeSerializer<?>, TypeSerializerSnapshot<?>> keySerializerAndSnapshot =
+					previousSerializersAndConfigs.get(KEY_SERIALIZER_SNAPSHOT_INDEX);
+				Tuple2<TypeSerializer<?>, TypeSerializerSnapshot<?>> namespaceSerializerAndSnapshot =
+					previousSerializersAndConfigs.get(NAMESPACE_SERIALIZER_SNAPSHOT_INDEX);
+				CompatibilityResult<K> keyCompatibilityResult = CompatibilityUtil.resolveCompatibilityResult(
+					keySerializerAndSnapshot.f0,
+					UnloadableDummyTypeSerializer.class,
+					keySerializerAndSnapshot.f1,
+					keySerializer);
+
+				CompatibilityResult<N> namespaceCompatibilityResult = CompatibilityUtil.resolveCompatibilityResult(
+					namespaceSerializerAndSnapshot.f0,
+					UnloadableDummyTypeSerializer.class,
+					namespaceSerializerAndSnapshot.f1,
+					namespaceSerializer);
+
+				if (!keyCompatibilityResult.isRequiresMigration()
+					&& !namespaceCompatibilityResult.isRequiresMigration()) {
+					return CompatibilityResult.compatible();
+				}
+			}
+		}
+		return CompatibilityResult.requiresMigration();
 	}
 
 	@Nonnull
@@ -228,18 +265,31 @@ public class TimerSerializer<K, N> extends TypeSerializer<TimerHeapInternalTimer
 	 * @param <K> type of key.
 	 * @param <N> type of namespace.
 	 */
-	public static class TimerSerializerConfigSnapshot<K, N> extends CompositeTypeSerializerConfigSnapshot {
+	public static class TimerSerializerConfigSnapshot<K, N> extends CompositeTypeSerializerConfigSnapshot<TimerHeapInternalTimer<K, N>> {
+
+		private static final int VERSION = 1;
 
 		public TimerSerializerConfigSnapshot() {
 		}
 
-		public TimerSerializerConfigSnapshot(TypeSerializer<K> keySerializer, TypeSerializer<N> namespaceSerializer) {
-			super(keySerializer, namespaceSerializer);
+		public TimerSerializerConfigSnapshot(
+			@Nonnull TypeSerializer<K> keySerializer,
+			@Nonnull TypeSerializer<N> namespaceSerializer) {
+			super(init(keySerializer, namespaceSerializer));
+		}
+
+		private static TypeSerializer<?>[] init(
+			@Nonnull TypeSerializer<?> keySerializer,
+			@Nonnull TypeSerializer<?> namespaceSerializer) {
+			TypeSerializer<?>[] timerSerializers = new TypeSerializer[2];
+			timerSerializers[KEY_SERIALIZER_SNAPSHOT_INDEX] = keySerializer;
+			timerSerializers[NAMESPACE_SERIALIZER_SNAPSHOT_INDEX] = namespaceSerializer;
+			return timerSerializers;
 		}
 
 		@Override
 		public int getVersion() {
-			return 0;
+			return VERSION;
 		}
 	}
 }

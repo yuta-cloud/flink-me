@@ -29,11 +29,13 @@ import org.apache.flink.configuration.AkkaOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
+import org.apache.flink.contrib.streaming.state.RocksDBOptions;
 import org.apache.flink.contrib.streaming.state.RocksDBStateBackend;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.runtime.state.AbstractStateBackend;
 import org.apache.flink.runtime.state.filesystem.FsStateBackend;
 import org.apache.flink.runtime.state.memory.MemoryStateBackend;
+import org.apache.flink.runtime.testutils.MiniClusterResourceConfiguration;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.source.SourceFunction;
@@ -44,8 +46,7 @@ import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 import org.apache.flink.test.checkpointing.utils.FailingSource;
 import org.apache.flink.test.checkpointing.utils.IntType;
 import org.apache.flink.test.checkpointing.utils.ValidatingSink;
-import org.apache.flink.test.util.MiniClusterResource;
-import org.apache.flink.test.util.MiniClusterResourceConfiguration;
+import org.apache.flink.test.util.MiniClusterWithClientResource;
 import org.apache.flink.util.Collector;
 import org.apache.flink.util.TestLogger;
 
@@ -90,7 +91,7 @@ public class EventTimeWindowCheckpointingITCase extends TestLogger {
 
 	private TestingServer zkServer;
 
-	public MiniClusterResource miniClusterResource;
+	public MiniClusterWithClientResource miniClusterResource;
 
 	@ClassRule
 	public static TemporaryFolder tempFolder = new TemporaryFolder();
@@ -116,8 +117,8 @@ public class EventTimeWindowCheckpointingITCase extends TestLogger {
 		return this.stateBackendEnum;
 	}
 
-	protected final MiniClusterResource getMiniClusterResource() {
-		return new MiniClusterResource(
+	protected final MiniClusterWithClientResource getMiniClusterResource() {
+		return new MiniClusterWithClientResource(
 			new MiniClusterResourceConfiguration.Builder()
 				.setConfiguration(getConfigurationSafe())
 				.setNumberTaskManagers(2)
@@ -167,32 +168,38 @@ public class EventTimeWindowCheckpointingITCase extends TestLogger {
 				break;
 			}
 			case ROCKSDB_FULLY_ASYNC: {
-				String rocksDb = tempFolder.newFolder().getAbsolutePath();
-				String backups = tempFolder.newFolder().getAbsolutePath();
-				RocksDBStateBackend rdb = new RocksDBStateBackend(new FsStateBackend("file://" + backups));
-				rdb.setDbStoragePath(rocksDb);
-				this.stateBackend = rdb;
+				setupRocksDB(-1, false);
 				break;
 			}
 			case ROCKSDB_INCREMENTAL:
+				// Test RocksDB based timer service as well
+				config.setString(
+					RocksDBOptions.TIMER_SERVICE_FACTORY,
+					RocksDBStateBackend.PriorityQueueStateType.ROCKSDB.toString());
+				setupRocksDB(16, true);
+				break;
 			case ROCKSDB_INCREMENTAL_ZK: {
-				String rocksDb = tempFolder.newFolder().getAbsolutePath();
-				String backups = tempFolder.newFolder().getAbsolutePath();
-				// we use the fs backend with small threshold here to test the behaviour with file
-				// references, not self contained byte handles
-				RocksDBStateBackend rdb =
-					new RocksDBStateBackend(
-						new FsStateBackend(
-							new Path("file://" + backups).toUri(), 16),
-						true);
-				rdb.setDbStoragePath(rocksDb);
-				this.stateBackend = rdb;
+				setupRocksDB(16, true);
 				break;
 			}
 			default:
 				throw new IllegalStateException("No backend selected.");
 		}
 		return config;
+	}
+
+	private void setupRocksDB(int fileSizeThreshold, boolean incrementalCheckpoints) throws IOException {
+		String rocksDb = tempFolder.newFolder().getAbsolutePath();
+		String backups = tempFolder.newFolder().getAbsolutePath();
+		// we use the fs backend with small threshold here to test the behaviour with file
+		// references, not self contained byte handles
+		RocksDBStateBackend rdb =
+			new RocksDBStateBackend(
+				new FsStateBackend(
+					new Path("file://" + backups).toUri(), fileSizeThreshold),
+				incrementalCheckpoints);
+		rdb.setDbStoragePath(rocksDb);
+		this.stateBackend = rdb;
 	}
 
 	protected Configuration createClusterConfig() throws IOException {

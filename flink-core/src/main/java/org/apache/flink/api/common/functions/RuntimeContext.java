@@ -27,6 +27,9 @@ import org.apache.flink.api.common.accumulators.Histogram;
 import org.apache.flink.api.common.accumulators.IntCounter;
 import org.apache.flink.api.common.accumulators.LongCounter;
 import org.apache.flink.api.common.cache.DistributedCache;
+import org.apache.flink.api.common.services.RandomService;
+import org.apache.flink.api.common.services.SerializableService;
+import org.apache.flink.api.common.services.TimeService;
 import org.apache.flink.api.common.state.AggregatingState;
 import org.apache.flink.api.common.state.AggregatingStateDescriptor;
 import org.apache.flink.api.common.state.FoldingState;
@@ -44,6 +47,7 @@ import org.apache.flink.metrics.MetricGroup;
 import java.io.Serializable;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 /**
  * A RuntimeContext contains information about the context in which functions are executed. Each parallel instance
@@ -486,4 +490,13 @@ public interface RuntimeContext {
 	 */
 	@PublicEvolving
 	<UK, UV> MapState<UK, UV> getMapState(MapStateDescriptor<UK, UV> stateProperties);
+
+	@PublicEvolving
+	TimeService getTimeService();
+
+	@PublicEvolving
+	RandomService getRandomService();
+
+	@PublicEvolving
+	<I,O extends Serializable> SerializableService<I,O> getSerializableService(Function<I,O> function);
 }

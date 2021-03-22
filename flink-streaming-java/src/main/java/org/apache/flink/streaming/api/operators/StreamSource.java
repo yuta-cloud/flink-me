@@ -18,6 +18,9 @@
 package org.apache.flink.streaming.api.operators;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.MetricOptions;
+import org.apache.flink.runtime.causal.determinant.ProcessingTimeCallbackID;
 import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.functions.source.SourceFunction;
@@ -62,17 +65,26 @@ public class StreamSource<OUT, SRC extends SourceFunction<OUT>>
 
 		final TimeCharacteristic timeCharacteristic = getOperatorConfig().getTimeCharacteristic();
 
-		LatencyMarksEmitter latencyEmitter = null;
-		if (getExecutionConfig().isLatencyTrackingEnabled()) {
+		final Configuration configuration = this.getContainingTask().getEnvironment().getTaskManagerInfo().getConfiguration();
+		final long latencyTrackingInterval = getExecutionConfig().isLatencyTrackingConfigured()
+			? getExecutionConfig().getLatencyTrackingInterval()
+			: configuration.getLong(MetricOptions.LATENCY_INTERVAL);
+
+		LatencyMarksEmitter<OUT> latencyEmitter = null;
+		if (latencyTrackingInterval > 0) {
 			latencyEmitter = new LatencyMarksEmitter<>(
 				getProcessingTimeService(),
 				collector,
-				getExecutionConfig().getLatencyTrackingInterval(),
+				latencyTrackingInterval,
 				this.getOperatorID(),
-				getRuntimeContext().getIndexOfThisSubtask());
+				getRuntimeContext().getIndexOfThisSubtask(),
+				lockingObject
+				);
 		}
 
 		final long watermarkInterval = getRuntimeContext().getExecutionConfig().getAutoWatermarkInterval();
+		final long timeSetterInterval = getRuntimeContext().getExecutionConfig().getAutoTimeSetterInterval();
+
 
 		this.ctx = StreamSourceContexts.getSourceContext(
 			timeCharacteristic,
@@ -81,7 +93,8 @@ public class StreamSource<OUT, SRC extends SourceFunction<OUT>>
 			streamStatusMaintainer,
 			collector,
 			watermarkInterval,
-			-1);
+			timeSetterInterval,
+			getContainingTask().getRecoveryManager());
 
 		try {
 			userFunction.run(ctx);
@@ -132,29 +145,42 @@ public class StreamSource<OUT, SRC extends SourceFunction<OUT>>
 		return canceledOrStopped;
 	}
 
+
 	private static class LatencyMarksEmitter<OUT> {
 		private final ScheduledFuture<?> latencyMarkTimer;
 
 		public LatencyMarksEmitter(
-				final ProcessingTimeService processingTimeService,
-				final Output<StreamRecord<OUT>> output,
-				long latencyTrackingInterval,
-				final OperatorID operatorId,
-				final int subtaskIndex) {
+			final ProcessingTimeService processingTimeService,
+			final Output<StreamRecord<OUT>> output,
+			long latencyTrackingInterval,
+			final OperatorID operatorId,
+			final int subtaskIndex,
+			Object lockingObject) {
 
 			latencyMarkTimer = processingTimeService.scheduleAtFixedRate(
 				new ProcessingTimeCallback() {
+
+					ProcessingTimeCallbackID id = new ProcessingTimeCallbackID(ProcessingTimeCallbackID.Type.LATENCY);
+
 					@Override
 					public void onProcessingTime(long timestamp) throws Exception {
-						try {
-							// ProcessingTimeService callbacks are executed under the checkpointing lock
-							output.emitLatencyMarker(new LatencyMarker(timestamp, operatorId, subtaskIndex));
-						} catch (Throwable t) {
-							// we catch the Throwables here so that we don't trigger the processing
-							// timer services async exception handler
-							LOG.warn("Error while emitting latency marker.", t);
+						synchronized (lockingObject) {
+							try {
+								// ProcessingTimeService callbacks are executed under the checkpointing lock
+								output.emitLatencyMarker(new LatencyMarker(timestamp, operatorId, subtaskIndex));
+							} catch (Throwable t) {
+								// we catch the Throwables here so that we don't trigger the processing
+								// timer services async exception handler
+								LOG.warn("Error while emitting latency marker.", t);
+							}
 						}
 					}
+
+					@Override
+					public ProcessingTimeCallbackID getID() {
+						return id;
+					}
+
 				},
 				0L,
 				latencyTrackingInterval);

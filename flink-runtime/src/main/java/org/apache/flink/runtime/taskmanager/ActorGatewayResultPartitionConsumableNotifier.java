@@ -75,4 +75,8 @@ public class ActorGatewayResultPartitionConsumableNotifier implements ResultPart
 			}
 		}, executionContext);
 	}
+
+	@Override
+	public void requestFailConsumer(ResultPartitionID partitionId, int subpartitionIndex, Throwable cause, TaskActions taskActions) {}
+
 }

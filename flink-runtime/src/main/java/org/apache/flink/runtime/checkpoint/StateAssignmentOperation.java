@@ -19,16 +19,17 @@
 package org.apache.flink.runtime.checkpoint;
 
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.runtime.causal.log.job.serde.DeltaSerializerDeserializer;
 import org.apache.flink.runtime.executiongraph.Execution;
 import org.apache.flink.runtime.executiongraph.ExecutionJobVertex;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.jobgraph.OperatorInstanceID;
-import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
 import org.apache.flink.runtime.state.KeyGroupsStateHandle;
 import org.apache.flink.runtime.state.KeyedStateHandle;
+import org.apache.flink.runtime.state.OperatorStateHandle;
 import org.apache.flink.util.Preconditions;
 
 import org.slf4j.Logger;
@@ -51,6 +52,11 @@ import static org.apache.flink.util.Preconditions.checkState;
  */
 public class StateAssignmentOperation {
 
+	public static enum Operation {
+		RESTORE_STATE,
+		DISPATCH_STATE_TO_STANDBY_TASK
+	}
+
 	private static final Logger LOG = LoggerFactory.getLogger(StateAssignmentOperation.class);
 
 	private final Map<JobVertexID, ExecutionJobVertex> tasks;
@@ -58,32 +64,34 @@ public class StateAssignmentOperation {
 
 	private final long restoreCheckpointId;
 	private final boolean allowNonRestoredState;
+	public final Operation operation;
 
 	public StateAssignmentOperation(
 		long restoreCheckpointId,
 		Map<JobVertexID, ExecutionJobVertex> tasks,
 		Map<OperatorID, OperatorState> operatorStates,
-		boolean allowNonRestoredState) {
+		boolean allowNonRestoredState,
+		Operation operation) {
 
 		this.restoreCheckpointId = restoreCheckpointId;
 		this.tasks = Preconditions.checkNotNull(tasks);
 		this.operatorStates = Preconditions.checkNotNull(operatorStates);
 		this.allowNonRestoredState = allowNonRestoredState;
+		this.operation = operation;
 	}
 
-	public boolean assignStates() throws Exception {
+	public void assignStates() {
 		Map<OperatorID, OperatorState> localOperators = new HashMap<>(operatorStates);
-		Map<JobVertexID, ExecutionJobVertex> localTasks = this.tasks;
 
 		checkStateMappingCompleteness(allowNonRestoredState, operatorStates, tasks);
 
-		for (Map.Entry<JobVertexID, ExecutionJobVertex> task : localTasks.entrySet()) {
+		for (Map.Entry<JobVertexID, ExecutionJobVertex> task : this.tasks.entrySet()) {
 			final ExecutionJobVertex executionJobVertex = task.getValue();
 
 			// find the states of all operators belonging to this task
 			List<OperatorID> operatorIDs = executionJobVertex.getOperatorIDs();
 			List<OperatorID> altOperatorIDs = executionJobVertex.getUserDefinedOperatorIDs();
-			List<OperatorState> operatorStates = new ArrayList<>();
+			List<OperatorState> operatorStates = new ArrayList<>(operatorIDs.size());
 			boolean statelessTask = true;
 			for (int x = 0; x < operatorIDs.size(); x++) {
 				OperatorID operatorID = altOperatorIDs.get(x) == null
@@ -101,14 +109,15 @@ public class StateAssignmentOperation {
 				}
 				operatorStates.add(operatorState);
 			}
-			if (statelessTask) { // skip tasks where no operator has any state
+			if (statelessTask && operation == Operation.RESTORE_STATE) {
+				// skip tasks where no operator has any state and we want to restore state.
+				//If dispatching to standbytask we use this as an epochID notification
 				continue;
 			}
 
 			assignAttemptState(task.getValue(), operatorStates);
 		}
 
-		return true;
 	}
 
 	private void assignAttemptState(ExecutionJobVertex executionJobVertex, List<OperatorState> operatorStates) {
@@ -124,7 +133,9 @@ public class StateAssignmentOperation {
 			executionJobVertex.getMaxParallelism(),
 			newParallelism);
 
-		/**
+		final int expectedNumberOfSubTasks = newParallelism * operatorIDs.size();
+
+		/*
 		 * Redistribute ManagedOperatorStates and RawOperatorStates from old parallelism to new parallelism.
 		 *
 		 * The old ManagedOperatorStates with old parallelism 3:
@@ -143,8 +154,10 @@ public class StateAssignmentOperation {
 		 * op2   state2,0	  state2,1 	   state2,2		state2,3
 		 * op3   state3,0	  state3,1 	   state3,2		state3,3
 		 */
-		Map<OperatorInstanceID, List<OperatorStateHandle>> newManagedOperatorStates = new HashMap<>();
-		Map<OperatorInstanceID, List<OperatorStateHandle>> newRawOperatorStates = new HashMap<>();
+		Map<OperatorInstanceID, List<OperatorStateHandle>> newManagedOperatorStates =
+			new HashMap<>(expectedNumberOfSubTasks);
+		Map<OperatorInstanceID, List<OperatorStateHandle>> newRawOperatorStates =
+			new HashMap<>(expectedNumberOfSubTasks);
 
 		reDistributePartitionableStates(
 			operatorStates,
@@ -153,8 +166,10 @@ public class StateAssignmentOperation {
 			newManagedOperatorStates,
 			newRawOperatorStates);
 
-		Map<OperatorInstanceID, List<KeyedStateHandle>> newManagedKeyedState = new HashMap<>();
-		Map<OperatorInstanceID, List<KeyedStateHandle>> newRawKeyedState = new HashMap<>();
+		Map<OperatorInstanceID, List<KeyedStateHandle>> newManagedKeyedState =
+			new HashMap<>(expectedNumberOfSubTasks);
+		Map<OperatorInstanceID, List<KeyedStateHandle>> newRawKeyedState =
+			new HashMap<>(expectedNumberOfSubTasks);
 
 		reDistributeKeyedStates(
 			operatorStates,
@@ -164,7 +179,7 @@ public class StateAssignmentOperation {
 			newManagedKeyedState,
 			newRawKeyedState);
 
-		/**
+		/*
 		 *  An executionJobVertex's all state handles needed to restore are something like a matrix
 		 *
 		 * 		parallelism0 parallelism1 parallelism2 parallelism3
@@ -195,10 +210,21 @@ public class StateAssignmentOperation {
 
 		for (int subTaskIndex = 0; subTaskIndex < newParallelism; subTaskIndex++) {
 
-			Execution currentExecutionAttempt = executionJobVertex.getTaskVertices()[subTaskIndex]
-				.getCurrentExecutionAttempt();
+			Execution executionAttempt = null;
+			if (operation == Operation.RESTORE_STATE) {
+				executionAttempt = executionJobVertex.getTaskVertices()[subTaskIndex]
+					.getCurrentExecutionAttempt();
+			} else if (operation == Operation.DISPATCH_STATE_TO_STANDBY_TASK) {
+				ArrayList<Execution> standbyExecutions = executionJobVertex.getTaskVertices()
+					[subTaskIndex].getStandbyExecutions();
+				if (standbyExecutions.isEmpty())
+					continue; //If task does not have standby, we may be recovering only a subtask
+				executionAttempt = standbyExecutions.get(0);
+			} else {
+				throw new IllegalStateException("Unknown state assignment operation " + operation + '.');
+			}
 
-			TaskStateSnapshot taskState = new TaskStateSnapshot();
+			TaskStateSnapshot taskState = new TaskStateSnapshot(operatorIDs.size());
 			boolean statelessTask = true;
 
 			for (OperatorID operatorID : operatorIDs) {
@@ -217,9 +243,23 @@ public class StateAssignmentOperation {
 				taskState.putSubtaskStateByOperatorID(operatorID, operatorSubtaskState);
 			}
 
-			if (!statelessTask) {
-				JobManagerTaskRestore taskRestore = new JobManagerTaskRestore(restoreCheckpointId, taskState);
-				currentExecutionAttempt.setInitialState(taskRestore);
+			if (!statelessTask || operation == Operation.DISPATCH_STATE_TO_STANDBY_TASK) {
+
+				JobManagerTaskRestore taskRestore;
+				if(statelessTask)
+					taskRestore = new JobManagerTaskRestore(restoreCheckpointId,new TaskStateSnapshot());
+				else
+					taskRestore = new JobManagerTaskRestore(restoreCheckpointId, taskState);
+
+				try {
+					executionAttempt.setInitialState(taskRestore);
+				} catch (IllegalStateException e) {
+					// For DISPATCH_STATE_TO_STANDBY_TASKS do nothing.
+					// The standby execution that is the recipient of the state may not be in place yet.
+					if (operation == Operation.RESTORE_STATE) {
+						throw e;
+					}
+				}
 			}
 		}
 	}
@@ -248,10 +288,6 @@ public class StateAssignmentOperation {
 			new StateObjectCollection<>(subRawKeyedState.getOrDefault(instanceID, Collections.emptyList())));
 	}
 
-	private static boolean isHeadOperator(int opIdx, List<OperatorID> operatorIDs) {
-		return opIdx == operatorIDs.size() - 1;
-	}
-
 	public void checkParallelismPreconditions(List<OperatorState> operatorStates, ExecutionJobVertex executionJobVertex) {
 		for (OperatorState operatorState : operatorStates) {
 			checkParallelismPreconditions(operatorState, executionJobVertex);
@@ -272,42 +308,35 @@ public class StateAssignmentOperation {
 		for (int operatorIndex = 0; operatorIndex < newOperatorIDs.size(); operatorIndex++) {
 			OperatorState operatorState = oldOperatorStates.get(operatorIndex);
 			int oldParallelism = operatorState.getParallelism();
-
 			for (int subTaskIndex = 0; subTaskIndex < newParallelism; subTaskIndex++) {
 				OperatorInstanceID instanceID = OperatorInstanceID.of(subTaskIndex, newOperatorIDs.get(operatorIndex));
-				if (isHeadOperator(operatorIndex, newOperatorIDs)) {
-					Tuple2<Collection<KeyedStateHandle>, Collection<KeyedStateHandle>> subKeyedStates = reAssignSubKeyedStates(
-						operatorState,
-						newKeyGroupPartitions,
-						subTaskIndex,
-						newParallelism,
-						oldParallelism);
-					newManagedKeyedState
-						.computeIfAbsent(instanceID, key -> new ArrayList<>())
-						.addAll(subKeyedStates.f0);
-					newRawKeyedState
-						.computeIfAbsent(instanceID, key -> new ArrayList<>())
-						.addAll(subKeyedStates.f1);
-				}
+				Tuple2<List<KeyedStateHandle>, List<KeyedStateHandle>> subKeyedStates = reAssignSubKeyedStates(
+					operatorState,
+					newKeyGroupPartitions,
+					subTaskIndex,
+					newParallelism,
+					oldParallelism);
+				newManagedKeyedState.put(instanceID, subKeyedStates.f0);
+				newRawKeyedState.put(instanceID, subKeyedStates.f1);
 			}
 		}
 	}
 
 	// TODO rewrite based on operator id
-	private Tuple2<Collection<KeyedStateHandle>, Collection<KeyedStateHandle>> reAssignSubKeyedStates(
+	private Tuple2<List<KeyedStateHandle>, List<KeyedStateHandle>> reAssignSubKeyedStates(
 			OperatorState operatorState,
 			List<KeyGroupRange> keyGroupPartitions,
 			int subTaskIndex,
 			int newParallelism,
 			int oldParallelism) {
 
-		Collection<KeyedStateHandle> subManagedKeyedState;
-		Collection<KeyedStateHandle> subRawKeyedState;
+		List<KeyedStateHandle> subManagedKeyedState;
+		List<KeyedStateHandle> subRawKeyedState;
 
 		if (newParallelism == oldParallelism) {
 			if (operatorState.getState(subTaskIndex) != null) {
-				subManagedKeyedState = operatorState.getState(subTaskIndex).getManagedKeyedState();
-				subRawKeyedState = operatorState.getState(subTaskIndex).getRawKeyedState();
+				subManagedKeyedState = operatorState.getState(subTaskIndex).getManagedKeyedState().asList();
+				subRawKeyedState = operatorState.getState(subTaskIndex).getRawKeyedState().asList();
 			} else {
 				subManagedKeyedState = Collections.emptyList();
 				subRawKeyedState = Collections.emptyList();
@@ -336,8 +365,8 @@ public class StateAssignmentOperation {
 			"This method still depends on the order of the new and old operators");
 
 		//collect the old partitionable state
-		List<List<OperatorStateHandle>> oldManagedOperatorStates = new ArrayList<>();
-		List<List<OperatorStateHandle>> oldRawOperatorStates = new ArrayList<>();
+		List<List<OperatorStateHandle>> oldManagedOperatorStates = new ArrayList<>(oldOperatorStates.size());
+		List<List<OperatorStateHandle>> oldRawOperatorStates = new ArrayList<>(oldOperatorStates.size());
 
 		collectPartionableStates(oldOperatorStates, oldManagedOperatorStates, oldRawOperatorStates);
 
@@ -368,24 +397,29 @@ public class StateAssignmentOperation {
 			List<List<OperatorStateHandle>> rawOperatorStates) {
 
 		for (OperatorState operatorState : operatorStates) {
+
+			final int parallelism = operatorState.getParallelism();
+
 			List<OperatorStateHandle> managedOperatorState = null;
 			List<OperatorStateHandle> rawOperatorState = null;
 
-			for (int i = 0; i < operatorState.getParallelism(); i++) {
+			for (int i = 0; i < parallelism; i++) {
 				OperatorSubtaskState operatorSubtaskState = operatorState.getState(i);
 				if (operatorSubtaskState != null) {
 
+					StateObjectCollection<OperatorStateHandle> managed = operatorSubtaskState.getManagedOperatorState();
+					StateObjectCollection<OperatorStateHandle> raw = operatorSubtaskState.getRawOperatorState();
+
 					if (managedOperatorState == null) {
-						managedOperatorState = new ArrayList<>();
+						managedOperatorState = new ArrayList<>(parallelism * managed.size());
 					}
-					managedOperatorState.addAll(operatorSubtaskState.getManagedOperatorState());
+					managedOperatorState.addAll(managed);
 
 					if (rawOperatorState == null) {
-						rawOperatorState = new ArrayList<>();
+						rawOperatorState = new ArrayList<>(parallelism * raw.size());
 					}
-					rawOperatorState.addAll(operatorSubtaskState.getRawOperatorState());
+					rawOperatorState.addAll(raw);
 				}
-
 			}
 			managedOperatorStates.add(managedOperatorState);
 			rawOperatorStates.add(rawOperatorState);
@@ -404,12 +438,19 @@ public class StateAssignmentOperation {
 		OperatorState operatorState,
 		KeyGroupRange subtaskKeyGroupRange) {
 
-		List<KeyedStateHandle> subtaskKeyedStateHandles = new ArrayList<>();
+		final int parallelism = operatorState.getParallelism();
 
-		for (int i = 0; i < operatorState.getParallelism(); i++) {
+		List<KeyedStateHandle> subtaskKeyedStateHandles = null;
+
+		for (int i = 0; i < parallelism; i++) {
 			if (operatorState.getState(i) != null) {
 
 				Collection<KeyedStateHandle> keyedStateHandles = operatorState.getState(i).getManagedKeyedState();
+
+				if (subtaskKeyedStateHandles == null) {
+					subtaskKeyedStateHandles = new ArrayList<>(parallelism * keyedStateHandles.size());
+				}
+
 				extractIntersectingState(
 					keyedStateHandles,
 					subtaskKeyGroupRange,
@@ -432,11 +473,19 @@ public class StateAssignmentOperation {
 		OperatorState operatorState,
 		KeyGroupRange subtaskKeyGroupRange) {
 
-		List<KeyedStateHandle> extractedKeyedStateHandles = new ArrayList<>();
+		final int parallelism = operatorState.getParallelism();
 
-		for (int i = 0; i < operatorState.getParallelism(); i++) {
+		List<KeyedStateHandle> extractedKeyedStateHandles = null;
+
+		for (int i = 0; i < parallelism; i++) {
 			if (operatorState.getState(i) != null) {
+
 				Collection<KeyedStateHandle> rawKeyedState = operatorState.getState(i).getRawKeyedState();
+
+				if (extractedKeyedStateHandles == null) {
+					extractedKeyedStateHandles = new ArrayList<>(parallelism * rawKeyedState.size());
+				}
+
 				extractIntersectingState(
 					rawKeyedState,
 					subtaskKeyGroupRange,
@@ -565,19 +614,18 @@ public class StateAssignmentOperation {
 			List<OperatorStateHandle> chainOpParallelStates,
 			int oldParallelism,
 			int newParallelism) {
-		Map<OperatorInstanceID, List<OperatorStateHandle>> result = new HashMap<>();
 
-		List<Collection<OperatorStateHandle>> states = applyRepartitioner(
+		List<List<OperatorStateHandle>> states = applyRepartitioner(
 			opStateRepartitioner,
 			chainOpParallelStates,
 			oldParallelism,
 			newParallelism);
 
+		Map<OperatorInstanceID, List<OperatorStateHandle>> result = new HashMap<>(states.size());
+
 		for (int subtaskIndex = 0; subtaskIndex < states.size(); subtaskIndex++) {
 			checkNotNull(states.get(subtaskIndex) != null, "states.get(subtaskIndex) is null");
-			result
-				.computeIfAbsent(OperatorInstanceID.of(subtaskIndex, operatorID), key -> new ArrayList<>())
-				.addAll(states.get(subtaskIndex));
+			result.put(OperatorInstanceID.of(subtaskIndex, operatorID), states.get(subtaskIndex));
 		}
 
 		return result;
@@ -594,7 +642,7 @@ public class StateAssignmentOperation {
 	 * @return repartitioned state
 	 */
 	// TODO rewrite based on operator id
-	public static List<Collection<OperatorStateHandle>> applyRepartitioner(
+	public static List<List<OperatorStateHandle>> applyRepartitioner(
 			OperatorStateRepartitioner opStateRepartitioner,
 			List<OperatorStateHandle> chainOpParallelStates,
 			int oldParallelism,
@@ -611,7 +659,7 @@ public class StateAssignmentOperation {
 					chainOpParallelStates,
 					newParallelism);
 		} else {
-			List<Collection<OperatorStateHandle>> repackStream = new ArrayList<>(newParallelism);
+			List<List<OperatorStateHandle>> repackStream = new ArrayList<>(newParallelism);
 			for (OperatorStateHandle operatorStateHandle : chainOpParallelStates) {
 
 				if (operatorStateHandle != null) {
@@ -645,7 +693,7 @@ public class StateAssignmentOperation {
 		Collection<? extends KeyedStateHandle> keyedStateHandles,
 		KeyGroupRange subtaskKeyGroupRange) {
 
-		List<KeyedStateHandle> subtaskKeyedStateHandles = new ArrayList<>();
+		List<KeyedStateHandle> subtaskKeyedStateHandles = new ArrayList<>(keyedStateHandles.size());
 
 		for (KeyedStateHandle keyedStateHandle : keyedStateHandles) {
 			KeyedStateHandle intersectedKeyedStateHandle = keyedStateHandle.getIntersection(subtaskKeyGroupRange);

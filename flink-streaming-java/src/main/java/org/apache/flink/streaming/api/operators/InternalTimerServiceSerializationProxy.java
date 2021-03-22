@@ -23,6 +23,8 @@ import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.core.io.PostVersionedIOReadableWritable;
 import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.DataOutputView;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.Map;
@@ -77,13 +79,13 @@ public class InternalTimerServiceSerializationProxy<K> extends PostVersionedIORe
 	@Override
 	public void write(DataOutputView out) throws IOException {
 		super.write(out);
-		final Map<String, HeapInternalTimerService<K, ?>> registeredTimerServices =
+		final Map<String, InternalTimerServiceImpl<K, ?>> registeredTimerServices =
 			timerServicesManager.getRegisteredTimerServices();
 
 		out.writeInt(registeredTimerServices.size());
-		for (Map.Entry<String, HeapInternalTimerService<K, ?>> entry : registeredTimerServices.entrySet()) {
+		for (Map.Entry<String, InternalTimerServiceImpl<K, ?>> entry : registeredTimerServices.entrySet()) {
 			String serviceName = entry.getKey();
-			HeapInternalTimerService<K, ?> timerService = entry.getValue();
+			InternalTimerServiceImpl<K, ?> timerService = entry.getValue();
 
 			out.writeUTF(serviceName);
 			InternalTimersSnapshotReaderWriters
@@ -104,7 +106,7 @@ public class InternalTimerServiceSerializationProxy<K> extends PostVersionedIORe
 				.getReaderForVersion(readerVersion, userCodeClassLoader)
 				.readTimersSnapshot(in);
 
-			HeapInternalTimerService<K, ?> timerService = registerOrGetTimerService(
+			InternalTimerServiceImpl<K, ?> timerService = registerOrGetTimerService(
 				serviceName,
 				restoredTimersSnapshot);
 
@@ -113,7 +115,7 @@ public class InternalTimerServiceSerializationProxy<K> extends PostVersionedIORe
 	}
 
 	@SuppressWarnings("unchecked")
-	private <N> HeapInternalTimerService<K, N> registerOrGetTimerService(
+	private <N> InternalTimerServiceImpl<K, N> registerOrGetTimerService(
 		String serviceName, InternalTimersSnapshot<?, ?> restoredTimersSnapshot) {
 		final TypeSerializer<K> keySerializer = (TypeSerializer<K>) restoredTimersSnapshot.getKeySerializer();
 		final TypeSerializer<N> namespaceSerializer = (TypeSerializer<N>) restoredTimersSnapshot.getNamespaceSerializer();

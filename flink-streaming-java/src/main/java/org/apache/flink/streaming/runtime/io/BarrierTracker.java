@@ -32,6 +32,7 @@ import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.Optional;
 
@@ -91,6 +92,7 @@ public class BarrierTracker implements CheckpointBarrierHandler {
 	@Override
 	public BufferOrEvent getNextNonBlocked() throws Exception {
 		while (true) {
+			LOG.debug("call inputGate.getNextBufferOrEvent().");
 			Optional<BufferOrEvent> next = inputGate.getNextBufferOrEvent();
 			if (!next.isPresent()) {
 				// buffer or input exhausted
@@ -140,6 +142,16 @@ public class BarrierTracker implements CheckpointBarrierHandler {
 		return 0L;
 	}
 
+	@Override
+	public void ignoreCheckpoint(long checkpointID) throws IOException {
+
+	}
+
+	@Override
+	public void unblockChannelIfBlocked(int absoluteChannelIndex) {
+
+	}
+
 	private void processBarrier(CheckpointBarrier receivedBarrier, int channelIndex) throws Exception {
 		final long barrierId = receivedBarrier.getId();
 
@@ -153,6 +165,7 @@ public class BarrierTracker implements CheckpointBarrierHandler {
 		if (LOG.isDebugEnabled()) {
 			LOG.debug("Received barrier for checkpoint {} from channel {}", barrierId, channelIndex);
 		}
+		LOG.debug("Received barrier for checkpoint {} from channel {}", barrierId, channelIndex);
 
 		// find the checkpoint barrier in the queue of pending barriers
 		CheckpointBarrierCount cbc = null;
@@ -182,6 +195,7 @@ public class BarrierTracker implements CheckpointBarrierHandler {
 					if (LOG.isDebugEnabled()) {
 						LOG.debug("Received all barriers for checkpoint {}", barrierId);
 					}
+					LOG.debug("Received all barriers for checkpoint {}", barrierId);
 
 					notifyCheckpoint(receivedBarrier.getId(), receivedBarrier.getTimestamp(), receivedBarrier.getCheckpointOptions());
 				}
@@ -210,6 +224,7 @@ public class BarrierTracker implements CheckpointBarrierHandler {
 		if (LOG.isDebugEnabled()) {
 			LOG.debug("Received cancellation barrier for checkpoint {} from channel {}", checkpointId, channelIndex);
 		}
+		LOG.debug("Received cancellation barrier for checkpoint {} from channel {}", checkpointId, channelIndex);
 
 		// fast path for single channel trackers
 		if (totalNumberOfInputChannels == 1) {

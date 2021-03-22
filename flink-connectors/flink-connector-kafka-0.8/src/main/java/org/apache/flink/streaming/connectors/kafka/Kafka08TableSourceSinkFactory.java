@@ -49,7 +49,7 @@ public class Kafka08TableSourceSinkFactory extends KafkaTableSourceSinkFactoryBa
 	}
 
 	@Override
-	protected KafkaTableSource createKafkaTableSource(
+	protected KafkaTableSourceBase createKafkaTableSource(
 			TableSchema schema,
 			Optional<String> proctimeAttribute,
 			List<RowtimeAttributeDescriptor> rowtimeAttributeDescriptors,
@@ -73,11 +73,11 @@ public class Kafka08TableSourceSinkFactory extends KafkaTableSourceSinkFactoryBa
 	}
 
 	@Override
-	protected KafkaTableSink createKafkaTableSink(
+	protected KafkaTableSinkBase createKafkaTableSink(
 			TableSchema schema,
 			String topic,
 			Properties properties,
-			FlinkKafkaPartitioner<Row> partitioner,
+			Optional<FlinkKafkaPartitioner<Row>> partitioner,
 			SerializationSchema<Row> serializationSchema) {
 
 		return new Kafka08TableSink(

@@ -18,10 +18,9 @@
 package org.apache.flink.streaming.runtime.partitioner;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.api.common.services.RandomService;
 import org.apache.flink.runtime.plugable.SerializationDelegate;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
-
-import java.util.Random;
 
 /**
  * Partitioner that distributes the data equally by selecting one output channel
@@ -34,14 +33,18 @@ import java.util.Random;
 public class ShufflePartitioner<T> extends StreamPartitioner<T> {
 	private static final long serialVersionUID = 1L;
 
-	private Random random = new Random();
+	private RandomService randomService;
 
 	private final int[] returnArray = new int[1];
 
 	@Override
+	public void setRandomService(RandomService randomService) {
+		this.randomService = randomService;
+	}
+	@Override
 	public int[] selectChannels(SerializationDelegate<StreamRecord<T>> record,
 			int numberOfOutputChannels) {
-		returnArray[0] = random.nextInt(numberOfOutputChannels);
+		returnArray[0] = randomService.nextInt(numberOfOutputChannels);
 		return returnArray;
 	}
 
@@ -54,4 +57,5 @@ public class ShufflePartitioner<T> extends StreamPartitioner<T> {
 	public String toString() {
 		return "SHUFFLE";
 	}
+
 }

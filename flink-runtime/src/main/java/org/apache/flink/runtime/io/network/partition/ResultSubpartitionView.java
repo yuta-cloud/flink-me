@@ -18,10 +18,13 @@
 
 package org.apache.flink.runtime.io.network.partition;
 
+import org.apache.flink.api.common.JobID;
+import org.apache.flink.runtime.causal.VertexID;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.partition.ResultSubpartition.BufferAndBacklog;
 
 import javax.annotation.Nullable;
+
 import java.io.IOException;
 
 /**
@@ -49,6 +52,8 @@ public interface ResultSubpartitionView {
 
 	void notifySubpartitionConsumed() throws IOException;
 
+	void sendFailConsumerTrigger(Throwable cause);
+
 	boolean isReleased();
 
 	Throwable getFailureCause();
@@ -59,4 +64,8 @@ public interface ResultSubpartitionView {
 	boolean nextBufferIsEvent();
 
 	boolean isAvailable();
+
+    JobID getJobID();
+
+    short getVertexID();
 }

@@ -52,9 +52,9 @@ public class InputProcessorUtil {
 			}
 
 			if (taskManagerConfig.getBoolean(TaskManagerOptions.NETWORK_CREDIT_MODEL)) {
-				barrierHandler = new BarrierBuffer(inputGate, new CachedBufferBlocker(inputGate.getPageSize()), maxAlign);
+				barrierHandler = new BarrierBuffer(inputGate, new CachedBufferBlocker(inputGate.getPageSize()), maxAlign, checkpointedTask.getCheckpointLock());
 			} else {
-				barrierHandler = new BarrierBuffer(inputGate, new BufferSpiller(ioManager, inputGate.getPageSize()), maxAlign);
+				barrierHandler = new BarrierBuffer(inputGate, new BufferSpiller(ioManager, inputGate.getPageSize()), maxAlign, checkpointedTask.getCheckpointLock());
 			}
 		} else if (checkpointMode == CheckpointingMode.AT_LEAST_ONCE) {
 			barrierHandler = new BarrierTracker(inputGate);
@@ -66,6 +66,6 @@ public class InputProcessorUtil {
 			barrierHandler.registerCheckpointEventHandler(checkpointedTask);
 		}
 
-		return barrierHandler;
+		return new CausalBufferHandler(checkpointedTask.getCausalLog(), checkpointedTask.getRecoveryManager(), barrierHandler, inputGate.getNumberOfInputChannels(), checkpointedTask.getCheckpointLock());
 	}
 }

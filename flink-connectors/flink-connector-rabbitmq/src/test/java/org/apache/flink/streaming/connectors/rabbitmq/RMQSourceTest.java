@@ -460,5 +460,6 @@ public class RMQSourceTest {
 		@Override
 		public void close() {
 		}
+
 	}
 }

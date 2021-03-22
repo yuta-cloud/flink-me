@@ -18,6 +18,8 @@
 
 package org.apache.flink.runtime.io.network.partition;
 
+import org.apache.flink.api.common.JobID;
+import org.apache.flink.runtime.causal.VertexID;
 import org.apache.flink.runtime.io.disk.iomanager.BufferFileWriter;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
@@ -113,6 +115,7 @@ class SpillableSubpartitionView implements ResultSubpartitionView {
 				int numBuffers = buffers.size();
 				for (int i = 0; i < numBuffers; i++) {
 					try (BufferConsumer bufferConsumer = buffers.remove()) {
+						// TODO: revisit the following: hard-coded input
 						Buffer buffer = bufferConsumer.build();
 						checkState(bufferConsumer.isFinished(), "BufferConsumer must be finished before " +
 							"spilling. Otherwise we would not be able to simply remove it from the queue. This should " +
@@ -140,6 +143,7 @@ class SpillableSubpartitionView implements ResultSubpartitionView {
 		}
 	}
 
+
 	@Nullable
 	@Override
 	public BufferAndBacklog getNextBuffer() throws IOException, InterruptedException {
@@ -152,6 +156,7 @@ class SpillableSubpartitionView implements ResultSubpartitionView {
 			if (isReleased.get()) {
 				return null;
 			} else if (nextBuffer != null) {
+				// TODO: revisit the following: hard-coded input
 				current = nextBuffer.build();
 				checkState(nextBuffer.isFinished(),
 					"We can only read from SpillableSubpartition after it was finished");
@@ -258,6 +263,16 @@ class SpillableSubpartitionView implements ResultSubpartitionView {
 	}
 
 	@Override
+	public JobID getJobID() {
+		return this.parent.getJobID();
+	}
+
+	@Override
+	public short getVertexID() {
+		return this.parent.getVertexID();
+	}
+
+	@Override
 	public Throwable getFailureCause() {
 		SpilledSubpartitionView spilled = spilledView;
 		if (spilled != null) {
@@ -266,6 +281,9 @@ class SpillableSubpartitionView implements ResultSubpartitionView {
 			return parent.getFailureCause();
 		}
 	}
+
+	@Override
+	public void sendFailConsumerTrigger(Throwable cause) {}
 
 	@Override
 	public String toString() {

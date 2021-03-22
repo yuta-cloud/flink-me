@@ -21,10 +21,12 @@ import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.runtime.execution.Environment;
 import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
+import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGate;
 import org.apache.flink.runtime.metrics.MetricNames;
 import org.apache.flink.streaming.api.graph.StreamConfig;
 import org.apache.flink.streaming.api.graph.StreamEdge;
 import org.apache.flink.streaming.api.operators.TwoInputStreamOperator;
+import org.apache.flink.streaming.runtime.io.CheckpointBarrierHandler;
 import org.apache.flink.streaming.runtime.io.StreamTwoInputProcessor;
 import org.apache.flink.streaming.runtime.metrics.MinWatermarkGauge;
 import org.apache.flink.streaming.runtime.metrics.WatermarkGauge;
@@ -68,14 +70,14 @@ public class TwoInputStreamTask<IN1, IN2, OUT> extends StreamTask<OUT, TwoInputS
 
 		int numberOfInputs = configuration.getNumberOfInputs();
 
-		ArrayList<InputGate> inputList1 = new ArrayList<InputGate>();
-		ArrayList<InputGate> inputList2 = new ArrayList<InputGate>();
+		ArrayList<SingleInputGate> inputList1 = new ArrayList<SingleInputGate>();
+		ArrayList<SingleInputGate> inputList2 = new ArrayList<SingleInputGate>();
 
 		List<StreamEdge> inEdges = configuration.getInPhysicalEdges(userClassLoader);
 
 		for (int i = 0; i < numberOfInputs; i++) {
 			int inputType = inEdges.get(i).getTypeNumber();
-			InputGate reader = getEnvironment().getInputGate(i);
+			SingleInputGate reader = getEnvironment().getInputGate(i);
 			switch (inputType) {
 				case 1:
 					inputList1.add(reader);
@@ -100,8 +102,8 @@ public class TwoInputStreamTask<IN1, IN2, OUT> extends StreamTask<OUT, TwoInputS
 				this.headOperator,
 				getEnvironment().getMetricGroup().getIOMetricGroup(),
 				input1WatermarkGauge,
-				input2WatermarkGauge);
-
+				input2WatermarkGauge,
+				getStreamOutputs());
 		headOperator.getMetricGroup().gauge(MetricNames.IO_CURRENT_INPUT_WATERMARK, minInputWatermarkGauge);
 		headOperator.getMetricGroup().gauge(MetricNames.IO_CURRENT_INPUT_1_WATERMARK, input1WatermarkGauge);
 		headOperator.getMetricGroup().gauge(MetricNames.IO_CURRENT_INPUT_2_WATERMARK, input2WatermarkGauge);
@@ -129,5 +131,16 @@ public class TwoInputStreamTask<IN1, IN2, OUT> extends StreamTask<OUT, TwoInputS
 	@Override
 	protected void cancelTask() {
 		running = false;
+	}
+
+	@Override
+	protected CheckpointBarrierHandler getCheckpointBarrierHandler() {
+		return inputProcessor.getCheckpointBarrierHandlers();
+	}
+
+
+	@Override
+	public void resetInputChannelDeserializer(InputGate gate, int channelIndex){
+		this.inputProcessor.resetInputChannelDeserializer(gate, channelIndex);
 	}
 }

@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.io.network.partition.consumer;
 
+import org.apache.flink.api.common.JobID;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.runtime.event.TaskEvent;
 import org.apache.flink.runtime.execution.CancelTaskException;
@@ -34,8 +35,8 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
  * An input channel consumes a single {@link ResultSubpartitionView}.
- * <p>
- * For each channel, the consumption life cycle is as follows:
+ *
+ * <p>For each channel, the consumption life cycle is as follows:
  * <ol>
  * <li>{@link #requestSubpartition(int)}</li>
  * <li>{@link #getNextBuffer()}</li>
@@ -64,8 +65,11 @@ public abstract class InputChannel {
 
 	protected final Counter numBytesIn;
 
-	/** The current backoff (in ms) */
+	protected final Counter numBuffersIn;
+
+	/** The current backoff (in ms). */
 	private int currentBackoff;
+
 
 	protected InputChannel(
 			SingleInputGate inputGate,
@@ -73,7 +77,8 @@ public abstract class InputChannel {
 			ResultPartitionID partitionId,
 			int initialBackoff,
 			int maxBackoff,
-			Counter numBytesIn) {
+			Counter numBytesIn,
+			Counter numBuffersIn) {
 
 		checkArgument(channelIndex >= 0);
 
@@ -91,13 +96,14 @@ public abstract class InputChannel {
 		this.currentBackoff = initial == 0 ? -1 : 0;
 
 		this.numBytesIn = numBytesIn;
+		this.numBuffersIn = numBuffersIn;
 	}
 
 	// ------------------------------------------------------------------------
 	// Properties
 	// ------------------------------------------------------------------------
 
-	int getChannelIndex() {
+	public int getChannelIndex() {
 		return channelIndex;
 	}
 
@@ -105,14 +111,16 @@ public abstract class InputChannel {
 		return partitionId;
 	}
 
+	public SingleInputGate getInputGate(){return inputGate;}
+
 	/**
 	 * Notifies the owning {@link SingleInputGate} that this channel became non-empty.
-	 * 
+	 *
 	 * <p>This is guaranteed to be called only when a Buffer was added to a previously
 	 * empty input channel. The notion of empty is atomically consistent with the flag
 	 * {@link BufferAndAvailability#moreAvailable()} when polling the next buffer
 	 * from this channel.
-	 * 
+	 *
 	 * <p><b>Note:</b> When the input channel observes an exception, this
 	 * method is called regardless of whether the channel was empty before. That ensures
 	 * that the parent InputGate will always be notified about the exception.
@@ -128,8 +136,8 @@ public abstract class InputChannel {
 	/**
 	 * Requests the queue with the specified index of the source intermediate
 	 * result partition.
-	 * <p>
-	 * The queue index to request depends on which sub task the channel belongs
+	 *
+	 * <p>The queue index to request depends on which sub task the channel belongs
 	 * to and is specified by the consumer of this channel.
 	 */
 	abstract void requestSubpartition(int subpartitionIndex) throws IOException, InterruptedException;
@@ -145,13 +153,13 @@ public abstract class InputChannel {
 
 	/**
 	 * Sends a {@link TaskEvent} back to the task producing the consumed result partition.
-	 * <p>
-	 * <strong>Important</strong>: The producing task has to be running to receive backwards events.
+	 *
+	 * <p><strong>Important</strong>: The producing task has to be running to receive backwards events.
 	 * This means that the result type needs to be pipelined and the task logic has to ensure that
 	 * the producer will wait for all backwards events. Otherwise, this will lead to an Exception
 	 * at runtime.
 	 */
-	abstract void sendTaskEvent(TaskEvent event) throws IOException;
+	public abstract void sendTaskEvent(TaskEvent event) throws IOException, InterruptedException;
 
 	// ------------------------------------------------------------------------
 	// Life cycle
@@ -193,7 +201,7 @@ public abstract class InputChannel {
 	 * Atomically sets an error for this channel and notifies the input gate about available data to
 	 * trigger querying this channel by the task thread.
 	 */
-	protected void setError(Throwable cause) {
+	public void setError(Throwable cause) {
 		if (this.cause.compareAndSet(null, checkNotNull(cause))) {
 			// Notify the input gate.
 			notifyChannelNonEmpty();
@@ -240,7 +248,11 @@ public abstract class InputChannel {
 		return false;
 	}
 
-	// ------------------------------------------------------------------------
+    public JobID getJobID(){
+		return this.inputGate.getJobID();
+	}
+
+    // ------------------------------------------------------------------------
 
 	/**
 	 * A combination of a {@link Buffer} and a flag indicating availability of further buffers,
@@ -252,11 +264,16 @@ public abstract class InputChannel {
 		private final Buffer buffer;
 		private final boolean moreAvailable;
 		private final int buffersInBacklog;
+		private final long epochID;
 
-		public BufferAndAvailability(Buffer buffer, boolean moreAvailable, int buffersInBacklog) {
+		public BufferAndAvailability(Buffer buffer, boolean moreAvailable, int buffersInBacklog){
+			this(buffer, moreAvailable, buffersInBacklog, -1L);
+		}
+		public BufferAndAvailability(Buffer buffer, boolean moreAvailable, int buffersInBacklog, long epochID) {
 			this.buffer = checkNotNull(buffer);
 			this.moreAvailable = moreAvailable;
 			this.buffersInBacklog = buffersInBacklog;
+			this.epochID = epochID;
 		}
 
 		public Buffer buffer() {
@@ -269,6 +286,10 @@ public abstract class InputChannel {
 
 		public int buffersInBacklog() {
 			return buffersInBacklog;
+		}
+
+		public long getEpochID() {
+			return epochID;
 		}
 	}
 }

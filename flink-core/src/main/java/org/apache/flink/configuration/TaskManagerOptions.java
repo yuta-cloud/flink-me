@@ -190,11 +190,11 @@ public class TaskManagerOptions {
 	// ------------------------------------------------------------------------
 
 	/**
-	 * Size of memory buffers used by the network stack and the memory manager (in bytes).
+	 * Size of memory buffers used by the network stack and the memory manager.
 	 */
 	public static final ConfigOption<String> MEMORY_SEGMENT_SIZE =
 			key("taskmanager.memory.segment-size")
-			.defaultValue("32768")
+			.defaultValue("32kb")
 			.withDescription("Size of memory buffers used by the network stack and the memory manager.");
 
 	/**
@@ -268,19 +268,19 @@ public class TaskManagerOptions {
 				"` and \"taskmanager.network.memory.max\" may override this fraction.");
 
 	/**
-	 * Minimum memory size for network buffers (in bytes).
+	 * Minimum memory size for network buffers.
 	 */
 	public static final ConfigOption<String> NETWORK_BUFFERS_MEMORY_MIN =
 			key("taskmanager.network.memory.min")
-			.defaultValue(String.valueOf(64L << 20)) // 64 MB
+			.defaultValue("64mb")
 			.withDescription("Minimum memory size for network buffers.");
 
 	/**
-	 * Maximum memory size for network buffers (in bytes).
+	 * Maximum memory size for network buffers.
 	 */
 	public static final ConfigOption<String> NETWORK_BUFFERS_MEMORY_MAX =
 			key("taskmanager.network.memory.max")
-			.defaultValue(String.valueOf(1024L << 20)) // 1 GB
+			.defaultValue("1gb")
 			.withDescription("Maximum memory size for network buffers.");
 
 	/**
@@ -295,6 +295,15 @@ public class TaskManagerOptions {
 				"In credit-based flow control mode, this indicates how many credits are exclusive in each input channel. It should be" +
 				" configured at least 2 for good performance. 1 buffer is for receiving in-flight data in the subpartition and 1 buffer is" +
 				" for parallel serialization.");
+	/**
+	 * Number of network buffers to use for each outgoing channel (subpartition).
+	 *
+	 * <p>Reasoning: Extra buffers are needed per channel to ensure in-flight logging has time to spill
+	 */
+	public static final ConfigOption<Integer> SENDER_EXTRA_NETWORK_BUFFERS_PER_CHANNEL =
+		key("taskmanager.network.memory.sender-extra-buffers-per-channel")
+			.defaultValue(8)
+			.withDescription("Extra buffers each sender has per channel");
 
 	/**
 	 * Number of extra network buffers to use for each outgoing/incoming gate (result partition/input gate).
@@ -308,6 +317,17 @@ public class TaskManagerOptions {
 				" help relieve back-pressure caused by unbalanced data distribution among the subpartitions. This value should be" +
 				" increased in case of higher round trip times between nodes and/or larger number of machines in the cluster.");
 
+	/**
+	 * Number of extra network buffers to use for each outgoing gate (result partition).
+	 */
+	public static final ConfigOption<Integer> SENDER_EXTRA_NETWORK_EXTRA_BUFFERS_PER_GATE =
+		key("taskmanager.network.memory.sender-extra-floating-buffers-per-gate")
+			.defaultValue(92)
+			.withDescription("Number of extra network buffers to use for each outgoing (result partition)." +
+				" In credit-based flow control mode, this indicates how many floating credits are shared among all the input channels." +
+				" The floating buffers are distributed based on backlog (real-time output buffers in the subpartition) feedback, and can" +
+				" help relieve back-pressure caused by unbalanced data distribution among the subpartitions. This value should be" +
+				" increased in case of higher round trip times between nodes and/or larger number of machines in the cluster.");
 
 	/**
 	 * Minimum backoff for partition requests of input channels.
@@ -316,7 +336,7 @@ public class TaskManagerOptions {
 			key("taskmanager.network.request-backoff.initial")
 			.defaultValue(100)
 			.withDeprecatedKeys("taskmanager.net.request-backoff.initial")
-			.withDescription("Minimum backoff for partition requests of input channels.");
+			.withDescription("Minimum backoff in milliseconds for partition requests of input channels.");
 
 	/**
 	 * Maximum backoff for partition requests of input channels.
@@ -325,7 +345,7 @@ public class TaskManagerOptions {
 			key("taskmanager.network.request-backoff.max")
 			.defaultValue(10000)
 			.withDeprecatedKeys("taskmanager.net.request-backoff.max")
-			.withDescription("Maximum backoff for partition requests of input channels.");
+			.withDescription("Maximum backoff in milliseconds for partition requests of input channels.");
 
 	/**
 	 * Boolean flag to enable/disable more detailed metrics about inbound/outbound network queue

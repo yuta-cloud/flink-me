@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.io.network.netty;
 
+import org.apache.flink.runtime.causal.log.CausalLogManager;
 import org.apache.flink.runtime.event.TaskEvent;
 import org.apache.flink.runtime.io.network.NetworkClientHandler;
 import org.apache.flink.runtime.io.network.ConnectionID;
@@ -62,16 +63,26 @@ public class PartitionRequestClient {
 	/** If zero, the underlying TCP channel can be safely closed. */
 	private final AtomicDisposableReferenceCounter closeReferenceCounter = new AtomicDisposableReferenceCounter();
 
+	private final CausalLogManager causalLogManager;
+
+	PartitionRequestClient(
+		Channel tcpChannel,
+		NetworkClientHandler clientHandler,
+		ConnectionID connectionId,
+		PartitionRequestClientFactory clientFactory){
+		this(tcpChannel, clientHandler, connectionId, clientFactory, null);
+	}
 	PartitionRequestClient(
 			Channel tcpChannel,
 			NetworkClientHandler clientHandler,
 			ConnectionID connectionId,
-			PartitionRequestClientFactory clientFactory) {
+			PartitionRequestClientFactory clientFactory, CausalLogManager causalLogManager) {
 
 		this.tcpChannel = checkNotNull(tcpChannel);
 		this.clientHandler = checkNotNull(clientHandler);
 		this.connectionId = checkNotNull(connectionId);
 		this.clientFactory = checkNotNull(clientFactory);
+		this.causalLogManager = checkNotNull(causalLogManager);
 	}
 
 	boolean disposeIfNotUsed() {
@@ -94,7 +105,7 @@ public class PartitionRequestClient {
 	 * <p>The request goes to the remote producer, for which this partition
 	 * request client instance has been created.
 	 */
-	public ChannelFuture requestSubpartition(
+	public void requestSubpartition(
 			final ResultPartitionID partitionId,
 			final int subpartitionIndex,
 			final RemoteInputChannel inputChannel,
@@ -102,6 +113,7 @@ public class PartitionRequestClient {
 
 		checkNotClosed();
 
+		causalLogManager.registerNewUpstreamConnection(inputChannel.getInputChannelId(), inputChannel.getJobID());
 		LOG.debug("Requesting subpartition {} of partition {} with {} ms delay.",
 				subpartitionIndex, partitionId, delayMs);
 
@@ -128,7 +140,6 @@ public class PartitionRequestClient {
 		if (delayMs == 0) {
 			ChannelFuture f = tcpChannel.writeAndFlush(request);
 			f.addListener(listener);
-			return f;
 		} else {
 			final ChannelFuture[] f = new ChannelFuture[1];
 			tcpChannel.eventLoop().schedule(new Runnable() {
@@ -139,7 +150,6 @@ public class PartitionRequestClient {
 				}
 			}, delayMs, TimeUnit.MILLISECONDS);
 
-			return f[0];
 		}
 	}
 
@@ -171,10 +181,7 @@ public class PartitionRequestClient {
 	}
 
 	public void notifyCreditAvailable(RemoteInputChannel inputChannel) {
-		// We should skip the notification if the client is already closed.
-		if (!closeReferenceCounter.isDisposed()) {
-			clientHandler.notifyCreditAvailable(inputChannel);
-		}
+		clientHandler.notifyCreditAvailable(inputChannel);
 	}
 
 	public void close(RemoteInputChannel inputChannel) throws IOException {

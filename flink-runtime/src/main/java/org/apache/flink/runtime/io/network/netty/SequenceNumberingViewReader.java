@@ -18,6 +18,9 @@
 
 package org.apache.flink.runtime.io.network.netty;
 
+import org.apache.flink.api.common.JobID;
+import org.apache.flink.runtime.causal.VertexID;
+import org.apache.flink.runtime.causal.log.job.CausalLogID;
 import org.apache.flink.runtime.io.network.NetworkSequenceViewReader;
 import org.apache.flink.runtime.io.network.partition.BufferAvailabilityListener;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
@@ -49,6 +52,8 @@ class SequenceNumberingViewReader implements BufferAvailabilityListener, Network
 	private int sequenceNumber = -1;
 
 	private boolean isRegisteredAvailable;
+	private JobID jobID;
+	private short vertexID;
 
 	SequenceNumberingViewReader(InputChannelID receiverId, PartitionRequestQueue requestQueue) {
 		this.receiverId = receiverId;
@@ -71,6 +76,8 @@ class SequenceNumberingViewReader implements BufferAvailabilityListener, Network
 					resultPartitionId,
 					subPartitionIndex,
 					this);
+				this.jobID = subpartitionView.getJobID();
+				this.vertexID = subpartitionView.getVertexID();
 			} else {
 				throw new IllegalStateException("Subpartition already requested");
 			}
@@ -102,8 +109,18 @@ class SequenceNumberingViewReader implements BufferAvailabilityListener, Network
 	}
 
 	@Override
+	public JobID getJobID() {
+		return jobID;
+	}
+
+	@Override
 	public int getSequenceNumber() {
 		return sequenceNumber;
+	}
+
+	@Override
+	public short getVertexID() {
+		return vertexID;
 	}
 
 	@Override
@@ -111,7 +128,7 @@ class SequenceNumberingViewReader implements BufferAvailabilityListener, Network
 		BufferAndBacklog next = subpartitionView.getNextBuffer();
 		if (next != null) {
 			sequenceNumber++;
-			return new BufferAndAvailability(next.buffer(), next.isMoreAvailable(), next.buffersInBacklog());
+			return new BufferAndAvailability(next.buffer(), next.isMoreAvailable(), next.buffersInBacklog(), next.getEpochID());
 		} else {
 			return null;
 		}
@@ -136,6 +153,9 @@ class SequenceNumberingViewReader implements BufferAvailabilityListener, Network
 	public void releaseAllResources() throws IOException {
 		subpartitionView.releaseAllResources();
 	}
+
+	@Override
+	public void releaseAllResources(Throwable cause) throws IOException {}
 
 	@Override
 	public void notifyDataAvailable() {

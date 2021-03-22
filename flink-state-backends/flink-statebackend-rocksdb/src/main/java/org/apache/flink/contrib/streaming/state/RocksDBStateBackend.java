@@ -24,6 +24,7 @@ import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.IllegalConfigurationException;
 import org.apache.flink.core.fs.Path;
+import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.runtime.execution.Environment;
 import org.apache.flink.runtime.query.TaskKvStateRegistry;
 import org.apache.flink.runtime.state.AbstractKeyedStateBackend;
@@ -60,7 +61,7 @@ import java.util.List;
 import java.util.Random;
 import java.util.UUID;
 
-import static org.apache.flink.contrib.streaming.state.RocksDBOptions.TIMER_SERVICE_IMPL;
+import static org.apache.flink.contrib.streaming.state.RocksDBOptions.TIMER_SERVICE_FACTORY;
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
@@ -121,6 +122,9 @@ public class RocksDBStateBackend extends AbstractStateBackend implements Configu
 
 	/** This determines the type of priority queue state. */
 	private final PriorityQueueStateType priorityQueueStateType;
+
+	/** The default rocksdb metrics options. */
+	private final RocksDBNativeMetricOptions defaultMetricOptions;
 
 	// -- runtime values, set on TaskManager when initializing / using the backend
 
@@ -236,6 +240,7 @@ public class RocksDBStateBackend extends AbstractStateBackend implements Configu
 		this.enableIncrementalCheckpointing = enableIncrementalCheckpointing;
 		// for now, we use still the heap-based implementation as default
 		this.priorityQueueStateType = PriorityQueueStateType.HEAP;
+		this.defaultMetricOptions = new RocksDBNativeMetricOptions();
 	}
 
 	/**
@@ -271,7 +276,7 @@ public class RocksDBStateBackend extends AbstractStateBackend implements Configu
 		this.enableIncrementalCheckpointing = original.enableIncrementalCheckpointing.resolveUndefined(
 			config.getBoolean(CheckpointingOptions.INCREMENTAL_CHECKPOINTS));
 
-		final String priorityQueueTypeString = config.getString(TIMER_SERVICE_IMPL);
+		final String priorityQueueTypeString = config.getString(TIMER_SERVICE_FACTORY);
 
 		this.priorityQueueStateType = priorityQueueTypeString.length() > 0 ?
 			PriorityQueueStateType.valueOf(priorityQueueTypeString.toUpperCase()) : original.priorityQueueStateType;
@@ -294,6 +299,9 @@ public class RocksDBStateBackend extends AbstractStateBackend implements Configu
 				}
 			}
 		}
+
+		// configure metric options
+		this.defaultMetricOptions = RocksDBNativeMetricOptions.fromConfig(config);
 
 		// copy remaining settings
 		this.predefinedOptions = original.predefinedOptions;
@@ -412,7 +420,8 @@ public class RocksDBStateBackend extends AbstractStateBackend implements Configu
 			int numberOfKeyGroups,
 			KeyGroupRange keyGroupRange,
 			TaskKvStateRegistry kvStateRegistry,
-			TtlTimeProvider ttlTimeProvider) throws IOException {
+			TtlTimeProvider ttlTimeProvider,
+			MetricGroup metricGroup) throws IOException {
 
 		// first, make sure that the RocksDB JNI library is loaded
 		// we do this explicitly here to have better error handling
@@ -445,7 +454,9 @@ public class RocksDBStateBackend extends AbstractStateBackend implements Configu
 				isIncrementalCheckpointsEnabled(),
 				localRecoveryConfig,
 				priorityQueueStateType,
-				ttlTimeProvider);
+				ttlTimeProvider,
+				getMemoryWatcherOptions(),
+				metricGroup);
 	}
 
 	@Override
@@ -664,6 +675,15 @@ public class RocksDBStateBackend extends AbstractStateBackend implements Configu
 		}
 
 		return opt;
+	}
+
+	public RocksDBNativeMetricOptions getMemoryWatcherOptions() {
+		RocksDBNativeMetricOptions options = this.defaultMetricOptions;
+		if (optionsFactory != null) {
+			options = optionsFactory.createNativeMetricsOptions(options);
+		}
+
+		return options;
 	}
 
 	// ------------------------------------------------------------------------

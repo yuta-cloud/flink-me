@@ -19,6 +19,7 @@ package org.apache.flink.streaming.api.graph;
 
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.ExecutionConfig;
+import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.functions.Function;
 import org.apache.flink.api.common.operators.ResourceSpec;
 import org.apache.flink.api.common.operators.util.UserCodeObjectWrapper;
@@ -62,14 +63,10 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
+
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
 
 /**
@@ -83,7 +80,11 @@ public class StreamingJobGraphGenerator {
 	// ------------------------------------------------------------------------
 
 	public static JobGraph createJobGraph(StreamGraph streamGraph) {
-		return new StreamingJobGraphGenerator(streamGraph).createJobGraph();
+		return createJobGraph(streamGraph, null);
+	}
+
+	public static JobGraph createJobGraph(StreamGraph streamGraph, @Nullable JobID jobID) {
+		return new StreamingJobGraphGenerator(streamGraph, jobID).createJobGraph();
 	}
 
 	// ------------------------------------------------------------------------
@@ -108,6 +109,10 @@ public class StreamingJobGraphGenerator {
 	private final List<StreamGraphHasher> legacyStreamGraphHashers;
 
 	private StreamingJobGraphGenerator(StreamGraph streamGraph) {
+		this(streamGraph, null);
+	}
+
+	private StreamingJobGraphGenerator(StreamGraph streamGraph, @Nullable JobID jobID) {
 		this.streamGraph = streamGraph;
 		this.defaultStreamGraphHasher = new StreamGraphHasherV2();
 		this.legacyStreamGraphHashers = Arrays.asList(new StreamGraphUserHashHasher());
@@ -121,7 +126,7 @@ public class StreamingJobGraphGenerator {
 		this.chainedPreferredResources = new HashMap<>();
 		this.physicalEdgesInOrder = new ArrayList<>();
 
-		jobGraph = new JobGraph(streamGraph.getJobName());
+		jobGraph = new JobGraph(jobID, streamGraph.getJobName());
 	}
 
 	private JobGraph createJobGraph() {
@@ -440,12 +445,12 @@ public class StreamingJobGraphGenerator {
 
 		config.setTimeCharacteristic(streamGraph.getEnvironment().getStreamTimeCharacteristic());
 
-		final CheckpointConfig ceckpointCfg = streamGraph.getCheckpointConfig();
+		final CheckpointConfig checkpointCfg = streamGraph.getCheckpointConfig();
 
 		config.setStateBackend(streamGraph.getStateBackend());
-		config.setCheckpointingEnabled(ceckpointCfg.isCheckpointingEnabled());
-		if (ceckpointCfg.isCheckpointingEnabled()) {
-			config.setCheckpointMode(ceckpointCfg.getCheckpointingMode());
+		config.setCheckpointingEnabled(checkpointCfg.isCheckpointingEnabled());
+		if (checkpointCfg.isCheckpointingEnabled()) {
+			config.setCheckpointMode(checkpointCfg.getCheckpointingMode());
 		}
 		else {
 			// the "at-least-once" input handler is slightly cheaper (in the absence of checkpoints),
@@ -534,7 +539,11 @@ public class StreamingJobGraphGenerator {
 			final JobVertex vertex = entry.getValue();
 
 			// configure slot sharing group
-			final String slotSharingGroupKey = node.getSlotSharingGroup();
+			final String slotSharingGroupKey;
+			if( streamGraph.getExecutionConfig().isSlotSharingEnabled())
+				slotSharingGroupKey = node.getSlotSharingGroup();
+			else
+				slotSharingGroupKey = String.valueOf(UUID.randomUUID());
 			final SlotSharingGroup sharingGroup;
 
 			if (slotSharingGroupKey != null) {

@@ -18,7 +18,7 @@
 
 package org.apache.flink.runtime.state.ttl;
 
-import org.apache.flink.api.common.state.StateTtlConfiguration;
+import org.apache.flink.api.common.state.StateTtlConfig;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.runtime.state.internal.InternalMapState;
 import org.apache.flink.util.FlinkRuntimeException;
@@ -46,7 +46,7 @@ class TtlMapState<K, N, UK, UV>
 	implements InternalMapState<K, N, UK, UV> {
 	TtlMapState(
 		InternalMapState<K, N, UK, TtlValue<UV>> original,
-		StateTtlConfiguration config,
+		StateTtlConfig config,
 		TtlTimeProvider timeProvider,
 		TypeSerializer<Map<UK, UV>> valueSerializer) {
 		super(original, config, timeProvider, valueSerializer);
@@ -54,7 +54,13 @@ class TtlMapState<K, N, UK, UV>
 
 	@Override
 	public UV get(UK key) throws Exception {
-		return getWithTtlCheckAndUpdate(() -> original.get(key), v -> original.put(key, v), () -> original.remove(key));
+		TtlValue<UV> ttlValue = getWrapped(key);
+		return ttlValue == null ? null : ttlValue.getUserValue();
+	}
+
+	private TtlValue<UV> getWrapped(UK key) throws Exception {
+		return getWrappedWithTtlCheckAndUpdate(
+			() -> original.get(key), v -> original.put(key, v), () -> original.remove(key));
 	}
 
 	@Override
@@ -68,8 +74,10 @@ class TtlMapState<K, N, UK, UV>
 			return;
 		}
 		Map<UK, TtlValue<UV>> ttlMap = new HashMap<>(map.size());
-		for (UK key : map.keySet()) {
-			ttlMap.put(key, wrapWithTs(map.get(key)));
+		long currentTimestamp = timeProvider.currentTimestamp();
+		for (Map.Entry<UK, UV> entry : map.entrySet()) {
+			UK key = entry.getKey();
+			ttlMap.put(key, TtlUtils.wrapWithTs(entry.getValue(), currentTimestamp));
 		}
 		original.putAll(ttlMap);
 	}
@@ -81,7 +89,8 @@ class TtlMapState<K, N, UK, UV>
 
 	@Override
 	public boolean contains(UK key) throws Exception {
-		return get(key) != null;
+		TtlValue<UV> ttlValue = getWrapped(key);
+		return ttlValue != null;
 	}
 
 	@Override
@@ -159,16 +168,16 @@ class TtlMapState<K, N, UK, UV>
 		}
 
 		private Map.Entry<UK, UV> getUnexpiredAndUpdateOrCleanup(Map.Entry<UK, TtlValue<UV>> e) {
-			UV unexpiredValue;
+			TtlValue<UV> unexpiredValue;
 			try {
-				unexpiredValue = getWithTtlCheckAndUpdate(
+				unexpiredValue = getWrappedWithTtlCheckAndUpdate(
 					e::getValue,
 					v -> original.put(e.getKey(), v),
 					originalIterator::remove);
 			} catch (Exception ex) {
 				throw new FlinkRuntimeException(ex);
 			}
-			return unexpiredValue == null ? null : new AbstractMap.SimpleEntry<>(e.getKey(), unexpiredValue);
+			return unexpiredValue == null ? null : new AbstractMap.SimpleEntry<>(e.getKey(), unexpiredValue.getUserValue());
 		}
 	}
 }

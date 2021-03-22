@@ -25,6 +25,9 @@ import javax.annotation.concurrent.ThreadSafe;
 
 import java.nio.ByteBuffer;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
 
@@ -34,6 +37,8 @@ import static org.apache.flink.util.Preconditions.checkState;
  */
 @NotThreadSafe
 public class BufferBuilder {
+	private static final Logger LOG = LoggerFactory.getLogger(BufferBuilder.class);
+
 	private final MemorySegment memorySegment;
 
 	private final BufferRecycler recycler;
@@ -47,17 +52,29 @@ public class BufferBuilder {
 		this.recycler = checkNotNull(recycler);
 	}
 
+	public BufferBuilder(BufferBuilder bufferBuilder, MemorySegment memorySegment, BufferRecycler recycler) {
+		bufferBuilder.memorySegment.copyTo(0, memorySegment, 0, bufferBuilder.getWrittenBytes());
+		this.memorySegment = memorySegment;
+		this.recycler = recycler;
+		this.positionMarker.move(bufferBuilder.getWrittenBytes());
+		LOG.debug("Created {} from {}. Copied {} to {}.", this, bufferBuilder, bufferBuilder.memorySegment, memorySegment);
+	}
+
+	public BufferConsumer createBufferConsumer() {
+		return createBufferConsumer(0);
+	}
 	/**
 	 * @return created matching instance of {@link BufferConsumer} to this {@link BufferBuilder}. There can exist only
 	 * one {@link BufferConsumer} per each {@link BufferBuilder} and vice versa.
 	 */
-	public BufferConsumer createBufferConsumer() {
+	public BufferConsumer createBufferConsumer(long epochID) {
 		checkState(!bufferConsumerCreated, "There can not exists two BufferConsumer for one BufferBuilder");
 		bufferConsumerCreated = true;
+		LOG.debug("New BufferConsumer wrapping memory segment {} (hash: {}) with positionMarker {}", memorySegment, System.identityHashCode(memorySegment), positionMarker.getCached());
 		return new BufferConsumer(
 			memorySegment,
 			recycler,
-			positionMarker);
+			positionMarker, epochID);
 	}
 
 	/**
@@ -82,6 +99,8 @@ public class BufferBuilder {
 		int available = getMaxCapacity() - positionMarker.getCached();
 		int toCopy = Math.min(needed, available);
 
+		LOG.debug("append to memorySegment (hash: {}): positionMarker: {}, needed: {}, available: {}, toCopy: {}", System.identityHashCode(memorySegment), positionMarker.getCached(), needed, available, toCopy);
+
 		memorySegment.put(positionMarker.getCached(), source, toCopy);
 		positionMarker.move(toCopy);
 		return toCopy;
@@ -104,9 +123,9 @@ public class BufferBuilder {
 	 * @return number of written bytes.
 	 */
 	public int finish() {
-		positionMarker.markFinished();
+		int writtenBytes = positionMarker.markFinished();
 		commit();
-		return getWrittenBytes();
+		return writtenBytes;
 	}
 
 	public boolean isFinished() {
@@ -118,16 +137,25 @@ public class BufferBuilder {
 		return positionMarker.getCached() == getMaxCapacity();
 	}
 
-	public boolean isEmpty() {
-		return positionMarker.getCached() == 0;
-	}
-
 	public int getMaxCapacity() {
 		return memorySegment.size();
 	}
 
+	public int getMemorySegmentHash() {
+		return System.identityHashCode(memorySegment);
+	}
+
+	public MemorySegment getMemorySegment() {
+		return memorySegment;
+	}
+
 	private int getWrittenBytes() {
 		return positionMarker.getCached();
+	}
+
+	@Override
+	public String toString() {
+		return String.format("BufferBuilder [isFinished: %b, isFull: %b, max capacity: %d, memory segment hash: %d, written bytes: %d]", isFinished(), isFull(),  getMaxCapacity(), getMemorySegmentHash(), getWrittenBytes());
 	}
 
 	/**
@@ -156,7 +184,7 @@ public class BufferBuilder {
 	 * Cached writing implementation of {@link PositionMarker}.
 	 *
 	 * <p>Writer ({@link BufferBuilder}) and reader ({@link BufferConsumer}) caches must be implemented independently
-	 * of one another - for example the cached values can not accidentally leak from one to another.
+	 * of one another - so that the cached values can not accidentally leak from one to another.
 	 *
 	 * <p>Remember to commit the {@link SettablePositionMarker} to make the changes visible.
 	 */
@@ -181,12 +209,19 @@ public class BufferBuilder {
 			return PositionMarker.getAbsolute(cachedPosition);
 		}
 
-		public void markFinished() {
-			int newValue = -getCached();
+		/**
+		 * Marks this position as finished and returns the current position.
+		 *
+		 * @return current position as of {@link #getCached()}
+		 */
+		public int markFinished() {
+			int currentPosition = getCached();
+			int newValue = -currentPosition;
 			if (newValue == 0) {
 				newValue = FINISHED_EMPTY;
 			}
 			set(newValue);
+			return currentPosition;
 		}
 
 		public void move(int offset) {

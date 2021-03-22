@@ -18,6 +18,8 @@
 
 package org.apache.flink.runtime.io.network;
 
+import org.apache.flink.api.common.JobID;
+import org.apache.flink.runtime.causal.VertexID;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionProvider;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannel.BufferAndAvailability;
@@ -67,9 +69,15 @@ public interface NetworkSequenceViewReader {
 
 	void releaseAllResources() throws IOException;
 
+	void releaseAllResources(Throwable cause) throws IOException;
+
 	Throwable getFailureCause();
 
 	InputChannelID getReceiverId();
 
+	JobID getJobID();
+
 	int getSequenceNumber();
+
+    short getVertexID();
 }

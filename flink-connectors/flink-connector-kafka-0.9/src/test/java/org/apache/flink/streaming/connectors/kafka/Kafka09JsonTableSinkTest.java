@@ -32,15 +32,18 @@ import java.util.Properties;
  *             drop support for format-specific table sinks.
  */
 @Deprecated
-public class Kafka09JsonTableSinkTest extends KafkaTableSinkTestBase {
+public class Kafka09JsonTableSinkTest extends KafkaTableSinkBaseTestBase {
 
 	@Override
-	protected KafkaTableSink createTableSink(
+	protected KafkaTableSinkBase createTableSink(
 			String topic,
 			Properties properties,
 			FlinkKafkaPartitioner<Row> partitioner) {
 
-		return new Kafka09JsonTableSink(topic, properties, partitioner);
+		return new Kafka09JsonTableSink(
+			topic,
+			properties,
+			partitioner);
 	}
 
 	@Override

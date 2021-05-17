@@ -6,7 +6,7 @@ Previous approaches to high-availability restricted users to writing fully deter
 This meant that you could not access the current time, use processing-time windowing, access external databases and services or even use timers.
 But there is more to the story: input streams have to be buffered and sorted before processing, adding latency, while watermarks have to be generated less accurately and idle stream detection is not possible. 
 
-The Clonos prototype is built on Apache Flink 1.7. Find out more at [http://flink.apache.org](http://flink.apache.org).
+The Clonos prototype is built on Apache Flink 1.7. Find out more at [https://delftdata.github.io/clonos-web/](https://delftdata.github.io/clonos-web/).
 
 ### Approach
 

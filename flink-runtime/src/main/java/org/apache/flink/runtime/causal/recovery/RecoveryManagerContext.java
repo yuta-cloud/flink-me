@@ -25,8 +25,6 @@
 
 package org.apache.flink.runtime.causal.recovery;
 
-import com.google.common.collect.HashBasedTable;
-import com.google.common.collect.Table;
 import org.apache.flink.runtime.causal.*;
 import org.apache.flink.runtime.causal.determinant.AsyncDeterminant;
 import org.apache.flink.runtime.causal.log.job.JobCausalLog;
@@ -38,6 +36,8 @@ import org.apache.flink.runtime.io.network.partition.ResultSubpartition;
 import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
+import org.apache.flink.shaded.guava18.com.google.common.collect.HashBasedTable;
+import org.apache.flink.shaded.guava18.com.google.common.collect.Table;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;

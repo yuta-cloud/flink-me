@@ -25,7 +25,6 @@
 
 package org.apache.flink.runtime.causal.recovery;
 
-import com.google.common.collect.Table;
 import org.apache.flink.api.common.operators.Order;
 import org.apache.flink.runtime.causal.DeterminantResponseEvent;
 import org.apache.flink.runtime.causal.determinant.*;
@@ -35,6 +34,7 @@ import org.apache.flink.runtime.io.network.partition.PipelinedSubpartition;
 import org.apache.flink.runtime.io.network.partition.consumer.InputChannel;
 import org.apache.flink.runtime.io.network.partition.consumer.RemoteInputChannel;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
+import org.apache.flink.shaded.guava18.com.google.common.collect.Table;
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
 import org.apache.flink.shaded.netty4.io.netty.buffer.Unpooled;
 import org.slf4j.Logger;

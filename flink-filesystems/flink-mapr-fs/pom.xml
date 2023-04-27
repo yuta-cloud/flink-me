@@ -31,16 +31,14 @@ under the License.
 	<name>flink-mapr-fs</name>
 
 	<packaging>jar</packaging>
-
 	<repositories>
 		<repository>
 			<id>mapr-releases</id>
-			<url>http://repository.mapr.com/maven/</url>
+			<url>https://repository.mapr.com/maven/</url>
 			<snapshots><enabled>false</enabled></snapshots>
 			<releases><enabled>true</enabled></releases>
 		</repository>
-	</repositories>
-
+		</repositories>
 	<dependencies>
 
 		<dependency>
@@ -57,14 +55,12 @@ under the License.
 
 		<!-- MapR dependencies as optional dependency, so we can hard depend on this without -->
 		<!-- pulling in MapR libraries by default -->
-
 		<dependency>
 			<groupId>com.mapr.hadoop</groupId>
 			<artifactId>maprfs</artifactId>
-			<version>5.2.1-mapr</version>
-			<optional>true</optional>
+			<version>5.1.0-mapr</version>
+			<!--		<optional>true</optional>-->
 		</dependency>
-
 	</dependencies>
 
 </project>

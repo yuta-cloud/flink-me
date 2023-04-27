@@ -126,14 +126,21 @@ public class SpillableSubpartitionInFlightLogger implements InFlightLog {
 	public InFlightLogIterator<Buffer> getInFlightIterator(long epochID, int ignoreBuffers) {
 		LOG.info("Creating InFlightLog iterator for epochID {} and skipping {} buffers", epochID, ignoreBuffers);
 		SortedMap<Long, Epoch> logToReplay;
+
 		synchronized (flushLock) {
-			if (closed)
+			 LOG.info("InFlightLogIterator_sync");
+			if (closed){
+				 LOG.info("InFlightLogIterator_closed");
 				return null;
+			}
 			this.isReplaying.set(true);
 			logToReplay = slicedLog.tailMap(epochID);
-			if (logToReplay.size() == 0)
+			if (logToReplay.size() == 0){
+				 LOG.info("InFlightLogIterator_sized");
+				this.isReplaying.set(false);
 				return null;
-
+			}
+			
 			this.currentIterator = new SpilledReplayIterator(logToReplay, prefetchBufferPool, ioManager, flushLock,
 				ignoreBuffers,
 				isReplaying);

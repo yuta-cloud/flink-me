@@ -131,8 +131,10 @@ public class SpillableSubpartitionInFlightLogger implements InFlightLog {
 				return null;
 			this.isReplaying.set(true);
 			logToReplay = slicedLog.tailMap(epochID);
-			if (logToReplay.size() == 0)
+			if (logToReplay.size() == 0){
+				this.isReplaying.set(false);
 				return null;
+			}
 
 			this.currentIterator = new SpilledReplayIterator(logToReplay, prefetchBufferPool, ioManager, flushLock,
 				ignoreBuffers,

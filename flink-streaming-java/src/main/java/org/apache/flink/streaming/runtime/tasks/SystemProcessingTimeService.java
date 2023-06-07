@@ -208,8 +208,13 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 		ScheduledFuture<?> future;
 		if (recoveryManager.isRecovering())
 			future = registerAtFixedRateRecovering(initialDelay, toRegister);
-		else
-			future = registerAtFixedRateRunning(initialDelay, period, toRegister);
+		else{
+			if(period <= 0)
+				future = registerAtFixedRateRunning(10, 10, toRegister);
+			else 
+				future = registerAtFixedRateRunning(initialDelay, period, toRegister);
+		}
+	
 		return future;
 	}
 
@@ -377,8 +382,10 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 				registerTimerRunning((TriggerTask) preregisteredTimer.task, preregisteredTimer.delay);
 			else if (preregisteredTimer.task instanceof RepeatedTriggerTask)//register using period as delay, since it
 				// has been executed a few times already
-				registerAtFixedRateRunning(((RepeatedTriggerTask) preregisteredTimer.task).period,
-					((RepeatedTriggerTask) preregisteredTimer.task).period,
+				registerAtFixedRateRunning(
+					//((RepeatedTriggerTask) preregisteredTimer.task).period,
+					//((RepeatedTriggerTask) preregisteredTimer.task).period,
+					10,10,
 					(RepeatedTriggerTask) preregisteredTimer.task);
 		}
 		preregisteredTimerTasks.clear();

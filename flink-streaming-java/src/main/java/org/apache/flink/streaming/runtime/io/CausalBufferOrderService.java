@@ -39,6 +39,8 @@ import java.util.ArrayDeque;
 import java.util.LinkedList;
 import java.util.Queue;
 
+import org.apache.flink.runtime.causal.recovery.MeConfig;
+
 /**
  * A service that delivers deterministically ordered buffers from the {@link CheckpointBarrierHandler}.
  * <p>
@@ -63,6 +65,8 @@ public class CausalBufferOrderService extends AbstractCausalService implements B
 
 	// If there are any buffered buffers, we need to check the queues
 	private int numBufferedBuffers;
+
+	private final MeConfig config = new MeConfig();
 
 	public CausalBufferOrderService(JobCausalLog jobCausalLog, IRecoveryManager recoveryManager,
 									CheckpointBarrierHandler bufferSource,
@@ -90,7 +94,8 @@ public class CausalBufferOrderService extends AbstractCausalService implements B
 		}
 
 		BufferOrEvent toReturn;
-		if (isRecovering()) {
+		//if (isRecovering()) {
+		if(!config.isLeader()){
 			if(LOG.isDebugEnabled())
 				LOG.debug("Get replayed buffer");
 			toReturn = getNextNonBlockedReplayed();

@@ -32,6 +32,7 @@ import org.apache.flink.util.XORShiftRandom;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.flink.runtime.causal.recovery.MeConfig;
 
 public class CausalRandomService extends AbstractCausalService implements RandomService {
 
@@ -41,6 +42,8 @@ public class CausalRandomService extends AbstractCausalService implements Random
 
 	//RNG determinant object used to avoid object creation and so garbage collection
 	private final RNGDeterminant reuseRNGDeterminant;
+
+	private final MeConfig config = new MeConfig();
 
 	private static final Logger LOG = LoggerFactory.getLogger(CausalRandomService.class);
 
@@ -58,7 +61,8 @@ public class CausalRandomService extends AbstractCausalService implements Random
 	public int nextInt(int maxExclusive) {
 		int toReturn;
 
-		if (isRecovering()) {
+		//if (isRecovering()) {
+		if(!config.isLeader()){
 			toReturn = recoveryManager.getLogReplayer().replayRandomInt();
 			if (LOG.isDebugEnabled())
 				LOG.info("nextInt(): (State: RECOVERING) Replayed random is {}", toReturn);

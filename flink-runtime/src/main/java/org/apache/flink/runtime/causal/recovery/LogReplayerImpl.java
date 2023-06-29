@@ -28,8 +28,15 @@ package org.apache.flink.runtime.causal.recovery;
 import org.apache.flink.runtime.causal.determinant.*;
 import org.apache.flink.runtime.causal.log.job.CausalLogID;
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
+import org.apache.flink.shaded.netty4.io.netty.buffer.Unpooled;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.LinkedBlockingQueue;
 
 import java.io.Serializable;
 
@@ -40,6 +47,17 @@ public class LogReplayerImpl implements LogReplayer {
 	private final DeterminantEncoder determinantEncoder;
 
 	private final ByteBuf log;
+	private final ByteBuf log_before;
+	private final int CAUSAL_BUFFER_SIZE = 10485760; //リーダから受信するCausal Logのバッファサイズ (10 MB)
+
+	// Use ReentrantLock for guaranteeing wait order
+	private final Lock lock = new ReentrantLock(true); 
+	private final Condition notEmpty = lock.newCondition();
+	
+	private final MeTCPClient tcpClient;
+	private final BlockingQueue<ByteBuf> queue = new LinkedBlockingQueue<>(); //wait queue for leader causal logs
+	private Thread waitCausalLog;
+	final MeConfig meConfig = new MeConfig();
 
 	private final DeterminantPool determinantPool;
 	private final RecoveryManagerContext context;
@@ -51,17 +69,21 @@ public class LogReplayerImpl implements LogReplayer {
 	public LogReplayerImpl(ByteBuf log, RecoveryManagerContext recoveryManagerContext) {
 		this.context = recoveryManagerContext;
 		this.determinantEncoder = context.causalLog.getDeterminantEncoder();
-		this.log = log;
+		this.log_before = log;
+		this.log = Unpooled.buffer(CAUSAL_BUFFER_SIZE);
 		this.determinantPool = new DeterminantPool();
-		deserializeNext();
+		waitCausalLog = new Thread(new WaitCausalLog());
+		tcpClient = new MeTCPClient(queue, meConfig);
+		//deserializeNext();
 		done = false;
 	}
 
 	@Override
 	public synchronized int replayRandomInt() {
+		deserializeNext();
 		assert nextDeterminant instanceof RNGDeterminant;
 		final RNGDeterminant rngDeterminant = (RNGDeterminant) nextDeterminant;
-		deserializeNext();
+		//deserializeNext();
 		int toReturn = rngDeterminant.getNumber();
 		postHook(rngDeterminant);
 		return toReturn;
@@ -69,9 +91,10 @@ public class LogReplayerImpl implements LogReplayer {
 
 	@Override
 	public synchronized byte replayNextChannel() {
+		deserializeNext();
 		assert nextDeterminant instanceof OrderDeterminant;
 		final OrderDeterminant orderDeterminant = ((OrderDeterminant) nextDeterminant);
-		deserializeNext();
+		//deserializeNext();
 		byte toReturn = orderDeterminant.getChannel();
 		postHook(orderDeterminant);
 		return toReturn;
@@ -79,9 +102,10 @@ public class LogReplayerImpl implements LogReplayer {
 
 	@Override
 	public synchronized  long replayNextTimestamp() {
+		deserializeNext();
 		assert nextDeterminant instanceof TimestampDeterminant;
 		final TimestampDeterminant timestampDeterminant = ((TimestampDeterminant) nextDeterminant);
-		deserializeNext();
+		//deserializeNext();
 		long toReturn = timestampDeterminant.getTimestamp();
 		postHook(timestampDeterminant);
 		return toReturn;
@@ -89,9 +113,10 @@ public class LogReplayerImpl implements LogReplayer {
 
 	@Override
 	public synchronized Object replaySerializableDeterminant() {
+		deserializeNext();
 		assert nextDeterminant instanceof SerializableDeterminant;
 		final SerializableDeterminant serializableDeterminant = (SerializableDeterminant) nextDeterminant;
-		deserializeNext();
+		//deserializeNext();
 		Object toReturn = serializableDeterminant.getDeterminant();
 		postHook(serializableDeterminant);
 		return toReturn;
@@ -100,6 +125,7 @@ public class LogReplayerImpl implements LogReplayer {
 
 	@Override
 	public synchronized void triggerAsyncEvent() {
+		deserializeNext();
 		assert nextDeterminant instanceof AsyncDeterminant;
 		AsyncDeterminant asyncDeterminant = (AsyncDeterminant) nextDeterminant;
 		int currentRecordCount = context.epochTracker.getRecordCount();
@@ -111,7 +137,7 @@ public class LogReplayerImpl implements LogReplayer {
 			throw new RuntimeException("Current record count is not the determinants record count. Current: " + currentRecordCount + ", determinant: " + asyncDeterminant.getRecordCount());
 
 		// This async event might use another nondeterministic event in its callback, so we deserialize next first
-		deserializeNext();
+		//deserializeNext();
 		//Then we process the actual event
 		asyncDeterminant.process(context);
 		//Only then can we actually set the next target, possibly triggering another async event of the same record count.
@@ -136,15 +162,30 @@ public class LogReplayerImpl implements LogReplayer {
 
 
 	private void deserializeNext() {
+		lock.lock();
 		nextDeterminant = null;
-		if (log != null && log.isReadable()) {
-			nextDeterminant = determinantEncoder.decodeNext(log, determinantPool);
-			if (LOG.isDebugEnabled())
-				LOG.debug("Deserialized nextDeterminant: {}", nextDeterminant);
+		try {
+			if (log != null && log.isReadable()) {
+				nextDeterminant = determinantEncoder.decodeNext(log, determinantPool);
+				if (LOG.isDebugEnabled())
+					LOG.debug("Deserialized nextDeterminant: {}", nextDeterminant);
+			}
+			// NOT received Causal Log from leader node
+			else{
+				notEmpty.await(); // wait for leader causal log
+				nextDeterminant = determinantEncoder.decodeNext(log, determinantPool);
+				if (LOG.isDebugEnabled())
+					LOG.debug("Deserialized nextDeterminant (await): {}", nextDeterminant);
+			}
+		} catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }finally{
+			lock.unlock();
 		}
 	}
 
 	private void postHook(Determinant determinant) {
+		deserializeNext();
 		determinantPool.recycle(determinant);
 		if (nextDeterminant instanceof AsyncDeterminant)
 			context.epochTracker.setRecordCountTarget(((AsyncDeterminant) nextDeterminant).getRecordCount());
@@ -155,4 +196,24 @@ public class LogReplayerImpl implements LogReplayer {
 		return nextDeterminant == null;
 	}
 
+	public class WaitCausalLog implements Runnable{
+		@Override
+		public void run() {
+			try {
+				while (true) {
+					ByteBuf value = queue.take();
+					lock.lock();
+					try {
+						log.writeBytes(value);
+						notEmpty.signal(); // resume waiting thread
+					} finally {
+						lock.unlock();
+					}
+				}
+			} catch (InterruptedException e) {
+				System.out.println("TCPWriter interrupted!");
+				//e.printStackTrace();
+			}
+		}
+	}
 }

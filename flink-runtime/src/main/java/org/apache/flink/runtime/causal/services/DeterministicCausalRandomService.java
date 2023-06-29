@@ -33,6 +33,8 @@ import org.apache.flink.util.XORShiftRandom;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.flink.runtime.causal.recovery.MeConfig;
+
 public class DeterministicCausalRandomService extends AbstractCausalService implements RandomService {
 
 	//Not thread safe
@@ -40,6 +42,8 @@ public class DeterministicCausalRandomService extends AbstractCausalService impl
 
 	//RNG determinant object used to avoid object creation and so garbage collection
 	private final RNGDeterminant reuseRNGDeterminant;
+
+	private final MeConfig config = new MeConfig();
 
 	private static final Logger LOG = LoggerFactory.getLogger(DeterministicCausalRandomService.class);
 
@@ -65,7 +69,8 @@ public class DeterministicCausalRandomService extends AbstractCausalService impl
 		//Use rng determinant to record seed
 		int seed;
 
-		if (isRecovering()) {
+		//if (isRecovering()) {
+		if(!config.isLeader()){
 			seed = recoveryManager.getLogReplayer().replayRandomInt();
 			if (LOG.isDebugEnabled())
 				LOG.debug("nextInt(): (State: RECOVERING) Replayed seed is {}", seed);

@@ -33,9 +33,13 @@ import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.flink.runtime.causal.recovery.MeConfig;
+
 public class PeriodicCausalTimeService extends AbstractCausalService implements TimeService {
 	//Timestamp determinant object used to avoid object creation and so garbage collection
 	private final TimestampDeterminant reuseTimestampDeterminant;
+
+	private final MeConfig config = new MeConfig();
 
 	private static final Logger LOG = LoggerFactory.getLogger(PeriodicCausalTimeService.class);
 	private final long interval;
@@ -69,7 +73,8 @@ public class PeriodicCausalTimeService extends AbstractCausalService implements 
 
 	void updateTimestamp(){
 		//record timestamp in causal log
-		if (isRecovering()) {
+		//if (isRecovering()) {
+		if(!config.isLeader()){
 			currentTime[0] = recoveryManager.getLogReplayer().replayNextTimestamp();
 			if (LOG.isDebugEnabled())
 				LOG.debug("readOrWriteTimestamp: (State: RECOVERING) restored {}", currentTime[0]);

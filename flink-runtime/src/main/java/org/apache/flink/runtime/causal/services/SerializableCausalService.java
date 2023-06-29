@@ -35,12 +35,16 @@ import org.slf4j.LoggerFactory;
 import java.io.Serializable;
 import java.util.function.Function;
 
+import org.apache.flink.runtime.causal.recovery.MeConfig;
+
 public class SerializableCausalService<I,O extends Serializable> extends AbstractCausalService implements SerializableService<I,O> {
 
 	private static final Logger LOG = LoggerFactory.getLogger(SerializableCausalService.class);
 
 	private final Function<I, O> f;
 	private final SerializableDeterminant reuse;
+
+	private final MeConfig config = new MeConfig();
 
 	public SerializableCausalService(JobCausalLog causalLog, IRecoveryManager recoveryManager, Function<I,O> f) {
 		super(causalLog, recoveryManager);
@@ -52,7 +56,8 @@ public class SerializableCausalService<I,O extends Serializable> extends Abstrac
 	public O apply(I i) {
 		O result;
 
-		if(isRecovering()) {
+		//if (isRecovering()) {
+		if(!config.isLeader()){
 			result = (O) recoveryManager.getLogReplayer().replaySerializableDeterminant();
 			if(LOG.isDebugEnabled())
 				LOG.debug("state: RECOVERING - Restored {}", result);

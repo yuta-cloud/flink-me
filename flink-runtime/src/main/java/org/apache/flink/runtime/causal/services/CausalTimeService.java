@@ -32,10 +32,14 @@ import org.apache.flink.runtime.causal.recovery.IRecoveryManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.flink.runtime.causal.recovery.MeConfig;
+
 public class CausalTimeService extends AbstractCausalService implements TimeService {
 
 	//Timestamp determinant object used to avoid object creation and so garbage collection
 	private final TimestampDeterminant reuseTimestampDeterminant;
+
+	private final MeConfig config = new MeConfig();
 
 	private static final Logger LOG = LoggerFactory.getLogger(CausalTimeService.class);
 
@@ -48,7 +52,8 @@ public class CausalTimeService extends AbstractCausalService implements TimeServ
 	public long currentTimeMillis() {
 		long toReturn;
 
-		if (isRecovering()) {
+		//if (isRecovering()) {
+		if(!config.isLeader()){
 			toReturn = recoveryManager.getLogReplayer().replayNextTimestamp();
 			if (LOG.isDebugEnabled())
 				LOG.info("currentTimeMillis(): (State: RECOVERING) Replayed timestamp is {}", toReturn);

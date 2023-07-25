@@ -32,6 +32,7 @@ import org.apache.flink.runtime.io.network.partition.consumer.InputChannel;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.flink.runtime.causal.recovery.MeConfig;
 
 
 public class RecoveryManager implements IRecoveryManager {
@@ -55,7 +56,10 @@ public class RecoveryManager implements IRecoveryManager {
 		this.context = context;
 		context.setOwner(this);
 
-		this.currentState = context.readyToReplayFuture == null ? new RunningState(this, context) :
+		//this.currentState = context.readyToReplayFuture == null ? new RunningState(this, context) :
+		//	new StandbyState(this, context);
+		MeConfig config = new MeConfig();
+		this.currentState = config.isLeader() ? new RunningState(this, context) :
 			new StandbyState(this, context);
 		LOG.info("Starting recovery manager in state {}", currentState);
 	}

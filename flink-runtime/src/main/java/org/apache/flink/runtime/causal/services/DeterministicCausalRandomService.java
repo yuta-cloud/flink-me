@@ -69,8 +69,8 @@ public class DeterministicCausalRandomService extends AbstractCausalService impl
 		//Use rng determinant to record seed
 		int seed;
 
-		if (isRecovering()) {
-		//if(!config.isLeader()){
+		//if (isRecovering()) {
+		if(!config.isLeader()){
 			seed = recoveryManager.getLogReplayer().replayRandomInt();
 			if (LOG.isDebugEnabled())
 				LOG.debug("nextInt(): (State: RECOVERING) Replayed seed is {}", seed);

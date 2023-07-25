@@ -94,8 +94,8 @@ public class CausalBufferOrderService extends AbstractCausalService implements B
 		}
 
 		BufferOrEvent toReturn;
-		if (isRecovering()) {
-		//if(!config.isLeader()){
+		//if (isRecovering()) {
+		if(!config.isLeader()){
 			if(LOG.isDebugEnabled())
 				LOG.debug("Get replayed buffer");
 			toReturn = getNextNonBlockedReplayed();

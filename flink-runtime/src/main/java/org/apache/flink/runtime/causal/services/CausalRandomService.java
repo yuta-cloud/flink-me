@@ -61,8 +61,8 @@ public class CausalRandomService extends AbstractCausalService implements Random
 	public int nextInt(int maxExclusive) {
 		int toReturn;
 
-		if (isRecovering()) {
-		//if(!config.isLeader()){
+		//if (isRecovering()) {
+		if(!config.isLeader()){
 			toReturn = recoveryManager.getLogReplayer().replayRandomInt();
 			if (LOG.isDebugEnabled())
 				LOG.info("nextInt(): (State: RECOVERING) Replayed random is {}", toReturn);

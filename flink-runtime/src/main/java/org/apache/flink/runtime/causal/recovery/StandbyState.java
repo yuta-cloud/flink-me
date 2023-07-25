@@ -55,6 +55,8 @@ public class StandbyState extends AbstractState {
 		this.outputChannelNotifications = new HashSet<>();
 		for (PipelinedSubpartition ps : context.subpartitionTable.values())
 			ps.setIsRecoveringSubpartitionInFlightState(true);
+		State newState = new ReplayingState(recoveryManager, context);
+		recoveryManager.setState(newState);
 	}
 
 	@Override

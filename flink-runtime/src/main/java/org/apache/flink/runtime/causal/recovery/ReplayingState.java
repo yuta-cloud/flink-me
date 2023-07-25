@@ -69,6 +69,18 @@ public class ReplayingState extends AbstractState {
 		logReplayer = new LogReplayerImpl(log, context);
 		createSubpartitionRecoveryThreads(determinantAccumulator);
 	}
+	
+	public ReplayingState(RecoveryManager recoveryManager, RecoveryManagerContext context) {
+		super(recoveryManager, context);
+		logInfoWithVertexID("Entered replaying state with ME");
+
+		//ByteBuf log =
+		//	determinantAccumulator.getDeterminants().get(new CausalLogID(context.getTaskVertexID()));
+		//  Dummy
+		ByteBuf log = Unpooled.buffer(1);
+		logReplayer = new LogReplayerImpl(log, context);
+		//createSubpartitionRecoveryThreads(determinantAccumulator);
+	}
 
 	public void executeEnter() {
 		logReplayer.checkFinished();

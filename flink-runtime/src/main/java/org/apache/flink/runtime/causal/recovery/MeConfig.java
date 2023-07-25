@@ -49,7 +49,7 @@ public class MeConfig implements Serializable {
 
 	public static final ConfigOption<Boolean> ME_LEADER = ConfigOptions
 		.key("taskmanager.me.server")
-		.defaultValue(false)
+		.defaultValue(true)
 		.withDescription("Is this node leader?");
 
 

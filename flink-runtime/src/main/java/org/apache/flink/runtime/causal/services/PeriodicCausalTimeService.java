@@ -73,8 +73,8 @@ public class PeriodicCausalTimeService extends AbstractCausalService implements 
 
 	void updateTimestamp(){
 		//record timestamp in causal log
-		//if (isRecovering()) {
-		if(!config.isLeader()){
+		if (isRecovering()) {
+		//if(!config.isLeader()){
 			currentTime[0] = recoveryManager.getLogReplayer().replayNextTimestamp();
 			if (LOG.isDebugEnabled())
 				LOG.debug("readOrWriteTimestamp: (State: RECOVERING) restored {}", currentTime[0]);

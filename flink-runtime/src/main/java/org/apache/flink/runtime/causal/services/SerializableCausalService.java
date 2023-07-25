@@ -56,8 +56,8 @@ public class SerializableCausalService<I,O extends Serializable> extends Abstrac
 	public O apply(I i) {
 		O result;
 
-		//if (isRecovering()) {
-		if(!config.isLeader()){
+		if (isRecovering()) {
+		//if(!config.isLeader()){
 			result = (O) recoveryManager.getLogReplayer().replaySerializableDeterminant();
 			if(LOG.isDebugEnabled())
 				LOG.debug("state: RECOVERING - Restored {}", result);

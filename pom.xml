@@ -28,7 +28,7 @@ under the License.
 
 	<groupId>org.apache.flink</groupId>
 	<artifactId>flink-parent</artifactId>
-	<version>1.7-CLONOS-SNAPSHOT-ME</version>
+	<version>1.7-CLONOS-SNAPSHOT</version>
 
 	<name>flink</name>
 	<packaging>pom</packaging>

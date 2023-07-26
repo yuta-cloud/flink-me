@@ -60,7 +60,7 @@ public class RecoveryManager implements IRecoveryManager {
 		//	new StandbyState(this, context);
 		MeConfig config = new MeConfig();
 		this.currentState = config.isLeader() ? new RunningState(this, context) :
-			new StandbyState(this, context);
+			new ReplayingState(this, context);
 		LOG.info("Starting recovery manager in state {}", currentState);
 	}
 

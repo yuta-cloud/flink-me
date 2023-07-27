@@ -76,7 +76,12 @@ public class MeTCPServer{
                             System.out.println("add client");
                             channels.add(ctx.channel()); //Add Follower to channels
                             if(firstClient){
-                                new Thread(this::processQueue).start();
+                                new Thread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        processQueue();
+                                    }
+                                }).start();
                                 firstClient = false;
                             }
                         }

@@ -48,10 +48,10 @@ public class MeTCPServer{
     private final int port = 7000; //TCP server porta
     private static final ChannelGroup channels = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE); //All Follower Channel
     private BlockingQueue<ByteBuf> queue; //Master BlockingQueue
+    private boolean firstClient = true;
 
     public MeTCPServer(BlockingQueue<ByteBuf> queue){
         this.queue = queue;
-        new Thread(this::processQueue).start();
     }
     
     public void run(){
@@ -75,6 +75,10 @@ public class MeTCPServer{
                         public void channelActive(ChannelHandlerContext ctx) {
                             System.out.println("add client");
                             channels.add(ctx.channel()); //Add Follower to channels
+                            if(firstClient){
+                                new Thread(this::processQueue).start();
+                                firstClient = false;
+                            }
                         }
 
                     });

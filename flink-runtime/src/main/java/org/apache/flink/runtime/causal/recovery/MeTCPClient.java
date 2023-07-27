@@ -72,7 +72,7 @@ public class MeTCPClient{
             });
 
             // Start the client.
-            ChannelFuture f = bootstrap.connect("localhost", 8080).sync(); // Use the correct IP and port
+            ChannelFuture f = bootstrap.connect(serverAddr, serverPort).sync(); // Use the correct IP and port
 
             // Wait until the connection is closed.
             f.channel().closeFuture().sync();

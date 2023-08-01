@@ -54,7 +54,7 @@ public class LogReplayerImpl implements LogReplayer {
 	private final Lock lock = new ReentrantLock(true); 
 	private final Condition notEmpty = lock.newCondition();
 	
-	private final MeTCPClient tcpClient;
+	private final Thread tcpClient;
 	private final BlockingQueue<ByteBuf> queue = new LinkedBlockingQueue<>(); //wait queue for leader causal logs
 	private Thread waitCausalLog;
 	final MeConfig meConfig = new MeConfig();
@@ -73,7 +73,11 @@ public class LogReplayerImpl implements LogReplayer {
 		this.log = Unpooled.buffer(CAUSAL_BUFFER_SIZE);
 		this.determinantPool = new DeterminantPool();
 		waitCausalLog = new Thread(new WaitCausalLog());
-		tcpClient = new MeTCPClient(queue, meConfig);
+		tcpClient = new Thread(() -> {
+            new MeTCPClient(queue, meConfig);
+        });
+		waitCausalLog.start();
+		tcpClient.start();
 		//deserializeNext();
 		done = false;
 	}

@@ -72,9 +72,9 @@ public class LogReplayerImpl implements LogReplayer {
 		this.log_before = log;
 		this.log = Unpooled.buffer(CAUSAL_BUFFER_SIZE);
 		this.determinantPool = new DeterminantPool();
-		waitCausalLog = new Thread(new WaitCausalLog());
+		waitCausalLog = new Thread(() -> {new WaitCausalLog().run();});
 		tcpClient = new Thread(() -> {
-            new MeTCPClient(queue, meConfig);
+            new MeTCPClient(queue, meConfig).run();
         });
 		waitCausalLog.start();
 		tcpClient.start();
@@ -203,6 +203,7 @@ public class LogReplayerImpl implements LogReplayer {
 	public class WaitCausalLog implements Runnable{
 		@Override
 		public void run() {
+			System.out.println("WaitCausalLog start");
 			try {
 				while (true) {
 					ByteBuf value = queue.take();

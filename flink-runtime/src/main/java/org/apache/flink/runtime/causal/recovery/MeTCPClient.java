@@ -49,6 +49,7 @@ public class MeTCPClient{
     }
 
     public void run(){
+        System.out.println("MeTCPClient start!");
         EventLoopGroup workerGroup = new NioEventLoopGroup();
 
         try {

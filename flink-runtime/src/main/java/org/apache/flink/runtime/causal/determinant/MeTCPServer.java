@@ -55,6 +55,7 @@ public class MeTCPServer{
     }
     
     public void run(){
+        System.out.println("MeTCPServer start!");
         EventLoopGroup bossGroup = new NioEventLoopGroup();
         EventLoopGroup workerGroup = new NioEventLoopGroup();
         try {

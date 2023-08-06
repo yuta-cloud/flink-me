@@ -207,6 +207,8 @@ public class LogReplayerImpl implements LogReplayer {
 			try {
 				while (true) {
 					ByteBuf value = queue.take();
+					System.out.println("get bytebuf!");
+					System.out.println(value.toString());
 					lock.lock();
 					try {
 						log.writeBytes(value);

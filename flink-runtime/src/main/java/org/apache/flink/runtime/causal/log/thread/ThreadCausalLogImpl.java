@@ -168,7 +168,7 @@ public class ThreadCausalLogImpl implements ThreadCausalLog {
 				epochStartOffsets.computeIfAbsent(epochID, k -> new EpochStartOffset(k, visibleWriterIndex.get()));
 				while (notEnoughSpaceFor(determinantEncodedSize))
 					addComponent();
-				determinantEncoder.encodeTo(determinant, buf);
+				determinantEncoder.encodeTo(determinant, buf, causalLogID.getVertexID());
 				visibleWriterIndex.addAndGet(determinantEncodedSize);
 			}
 		} finally {

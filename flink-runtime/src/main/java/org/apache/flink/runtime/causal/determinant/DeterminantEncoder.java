@@ -29,7 +29,7 @@ public interface DeterminantEncoder {
 
 	byte[] encode(Determinant determinant);
 
-	void encodeTo(Determinant determinant, ByteBuf targetBuf);
+	void encodeTo(Determinant determinant, ByteBuf targetBuf, short vertexID);
 
 	Determinant decodeNext(ByteBuf buffer);
 

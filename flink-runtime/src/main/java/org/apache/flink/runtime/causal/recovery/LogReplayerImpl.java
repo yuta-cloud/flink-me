@@ -207,12 +207,13 @@ public class LogReplayerImpl implements LogReplayer {
 			try {
 				while (true) {
 					ByteBuf value = queue.take();
-					System.out.println("get bytebuf!");
 					short determinantVertexID = value.readShort();
+					System.out.println("get bytebuf: " + context.vertexGraphInformation.getThisTasksVertexID().getVertexID() + ":" + determinantVertexID);
+					System.out.println(value.toString());
 					if(determinantVertexID != context.vertexGraphInformation.getThisTasksVertexID().getVertexID()){
 						continue;
 					}
-					System.out.println(value.toString());
+					System.out.println("Match Vertex ID");
 					System.out.println(context.vertexGraphInformation.getThisTasksVertexID().getVertexID());
 					lock.lock();
 					try {

@@ -66,7 +66,7 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 	//Leader sends determinant to followers
 	@Override
 	public void encodeTo(Determinant determinant, ByteBuf targetBuf, short vertexID) {
-		System.out.println("Add Determinant: " + vertexID + " tag: " + determinant.getTag);
+		System.out.println("Add Determinant: " + vertexID + " tag: " + determinant.getTag());
 		if (determinant.isOrderDeterminant())
 			encodeOrderDeterminant(determinant.asOrderDeterminant(), targetBuf, vertexID);
 		else if (determinant.isTimestampDeterminant())

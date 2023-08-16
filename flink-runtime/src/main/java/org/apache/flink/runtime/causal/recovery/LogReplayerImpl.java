@@ -211,7 +211,7 @@ public class LogReplayerImpl implements LogReplayer {
 					System.out.println(value.toString());
 					short determinantVertexID = value.readShort();
 					if(determinantVertexID != context.vertexGraphInformation.getThisTasksVertexID().getVertexID()){
-						value.resetReaderIndex()
+						value.resetReaderIndex();
 						continue;
 					}
 					System.out.println("Match Vertex ID");

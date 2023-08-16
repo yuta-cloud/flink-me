@@ -206,11 +206,13 @@ public class LogReplayerImpl implements LogReplayer {
 			System.out.println("WaitCausalLog start");
 			try {
 				while (true) {
+					System.out.println("queue take1 length: " + queue.length);
 					ByteBuf value = queue.take();
+					System.out.println("queue take2 length: " + queue.length);
 					System.out.println("get bytebuf: " + context.vertexGraphInformation.getThisTasksVertexID().getVertexID());
 					System.out.println(value.toString());
 					short determinantVertexID = value.readShort();
-					System.out.println("bytebuf vertex ID" + determinantVertexID);
+					System.out.println("bytebuf vertex ID: " + determinantVertexID);
 					if(determinantVertexID != context.vertexGraphInformation.getThisTasksVertexID().getVertexID()){
 						value.resetReaderIndex();
 						continue;

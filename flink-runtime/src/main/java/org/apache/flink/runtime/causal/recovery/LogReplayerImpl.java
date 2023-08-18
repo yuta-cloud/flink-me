@@ -170,16 +170,35 @@ public class LogReplayerImpl implements LogReplayer {
 		nextDeterminant = null;
 		try {
 			if (log != null && log.isReadable()) {
-				nextDeterminant = determinantEncoder.decodeNext(log, determinantPool);
-				if (LOG.isDebugEnabled())
-					LOG.debug("Deserialized nextDeterminant: {}", nextDeterminant);
+				while(log.isReadable()){
+					short determinantVertexID = log.readShort();
+					System.out.println("bytebuf vertex ID: " + determinantVertexID);
+					if(determinantVertexID != context.vertexGraphInformation.getThisTasksVertexID().getVertexID()){
+						determinantEncoder.decodeNext(log, determinantPool);
+						continue;
+					}
+					System.out.println(determinantVertexID + " : " + log.toString());
+					nextDeterminant = determinantEncoder.decodeNext(log, determinantPool);
+					if (LOG.isDebugEnabled())
+						LOG.debug("Deserialized nextDeterminant: {}", nextDeterminant);
+					break;
+				}
 			}
 			// NOT received Causal Log from leader node
 			else{
 				notEmpty.await(); // wait for leader causal log
-				nextDeterminant = determinantEncoder.decodeNext(log, determinantPool);
-				if (LOG.isDebugEnabled())
-					LOG.debug("Deserialized nextDeterminant (await): {}", nextDeterminant);
+				while(log.isReadable()){
+					short determinantVertexID = log.readShort();
+					if(determinantVertexID != context.vertexGraphInformation.getThisTasksVertexID().getVertexID()){
+						determinantEncoder.decodeNext(log, determinantPool);
+						continue;
+					}
+					System.out.println(determinantVertexID + " : " + log.toString());
+					nextDeterminant = determinantEncoder.decodeNext(log, determinantPool);
+					if (LOG.isDebugEnabled())
+						LOG.debug("Deserialized nextDeterminant (await): {}", nextDeterminant);
+					break;
+				}
 			}
 		} catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -207,16 +226,15 @@ public class LogReplayerImpl implements LogReplayer {
 			try {
 				while (true) {
 					ByteBuf value = queue.take();
-					System.out.println("get bytebuf: " + context.vertexGraphInformation.getThisTasksVertexID().getVertexID());
-					System.out.println(value.toString());
+					//System.out.println(value.toString());
+					/*
 					short determinantVertexID = value.readShort();
 					System.out.println("bytebuf vertex ID: " + determinantVertexID);
 					if(determinantVertexID != context.vertexGraphInformation.getThisTasksVertexID().getVertexID()){
 						value.release();
 						continue;
 					}
-					System.out.println("Match Vertex ID");
-					System.out.println(value.toString());
+					*/
 					lock.lock();
 					try {
 						log.writeBytes(value);

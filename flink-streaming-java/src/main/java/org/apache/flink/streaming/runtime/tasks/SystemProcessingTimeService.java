@@ -209,10 +209,12 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 		if (recoveryManager.isRecovering())
 			future = registerAtFixedRateRecovering(initialDelay, toRegister);
 		else{
+			/*
 			if(period <= 0)
 				future = registerAtFixedRateRunning(10, 10, toRegister);
 			else 
-				future = registerAtFixedRateRunning(initialDelay, period, toRegister);
+			*/
+			future = registerAtFixedRateRunning(initialDelay, period, toRegister);
 		}
 	
 		return future;
@@ -239,6 +241,7 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 			LOG.debug("We are running, directly registering fixed rate timer!");
 		// we directly try to register the timer and only react to the status on exception
 		// that way we save unnecessary volatile accesses for each timer
+		LOG.debug("registerAtFixedRateRunning: {} : {}", initialDelay, period);
 		try {
 			return timerService.scheduleAtFixedRate(
 				toRegister,
@@ -383,9 +386,9 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 			else if (preregisteredTimer.task instanceof RepeatedTriggerTask)//register using period as delay, since it
 				// has been executed a few times already
 				registerAtFixedRateRunning(
-					//((RepeatedTriggerTask) preregisteredTimer.task).period,
-					//((RepeatedTriggerTask) preregisteredTimer.task).period,
-					10,10,
+					((RepeatedTriggerTask) preregisteredTimer.task).period,
+					((RepeatedTriggerTask) preregisteredTimer.task).period,
+					//10,10,
 					(RepeatedTriggerTask) preregisteredTimer.task);
 		}
 		preregisteredTimerTasks.clear();

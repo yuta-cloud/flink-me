@@ -175,6 +175,9 @@ public class LogReplayerImpl implements LogReplayer {
 					System.out.println("bytebuf vertex ID: " + determinantVertexID);
 					if(determinantVertexID != context.vertexGraphInformation.getThisTasksVertexID().getVertexID()){
 						determinantEncoder.decodeNext(log, determinantPool);
+						if(!log.isReadable()){
+							notEmpty.await();
+						}
 						continue;
 					}
 					System.out.println(determinantVertexID + " : " + log.toString());
@@ -191,6 +194,9 @@ public class LogReplayerImpl implements LogReplayer {
 					short determinantVertexID = log.readShort();
 					if(determinantVertexID != context.vertexGraphInformation.getThisTasksVertexID().getVertexID()){
 						determinantEncoder.decodeNext(log, determinantPool);
+						if(!log.isReadable()){
+							notEmpty.await();
+						}
 						continue;
 					}
 					System.out.println(determinantVertexID + " : " + log.toString());

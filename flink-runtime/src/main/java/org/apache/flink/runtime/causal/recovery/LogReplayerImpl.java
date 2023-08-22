@@ -219,11 +219,11 @@ public class LogReplayerImpl implements LogReplayer {
 	}
 
 	private void postHook(Determinant determinant) {
-		deserializeNext();
+		//deserializeNext();
 		determinantPool.recycle(determinant);
-		if (nextDeterminant instanceof AsyncDeterminant)
-			context.epochTracker.setRecordCountTarget(((AsyncDeterminant) nextDeterminant).getRecordCount());
-		checkFinished();
+		//if (nextDeterminant instanceof AsyncDeterminant)
+		//	context.epochTracker.setRecordCountTarget(((AsyncDeterminant) nextDeterminant).getRecordCount());
+		//checkFinished();
 	}
 
 	private boolean isFinished() {

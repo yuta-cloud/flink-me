@@ -95,7 +95,7 @@ public final class EpochTrackerImpl implements EpochTracker {
 		recordCount = 0;
 		currentEpoch = epochID;
 		if (LOG.isDebugEnabled())
-			LOG.debug("startNewEpoch: epoch={}, current={}, target={}", epochID, recordCount, recordCountTarget);
+			LOG.debug("startNewEpoch: epoch={}, current={}, target={}, epochStartListeners={}", epochID, recordCount, recordCountTarget, epochStartListeners.size());
 		for (EpochStartListener listener : epochStartListeners)
 			listener.notifyEpochStart(epochID);
 		//check if async event is first event of the epoch

@@ -84,6 +84,7 @@ public class LogReplayerImpl implements LogReplayer {
 
 	@Override
 	public synchronized int replayRandomInt() {
+		LOG.debug("LogReplay replayRandomInt called.");
 		deserializeNext();
 		assert nextDeterminant instanceof RNGDeterminant;
 		final RNGDeterminant rngDeterminant = (RNGDeterminant) nextDeterminant;
@@ -95,6 +96,7 @@ public class LogReplayerImpl implements LogReplayer {
 
 	@Override
 	public synchronized byte replayNextChannel() {
+		LOG.debug("LogReplay replayNextChannel called.");
 		deserializeNext();
 		assert nextDeterminant instanceof OrderDeterminant;
 		final OrderDeterminant orderDeterminant = ((OrderDeterminant) nextDeterminant);
@@ -106,6 +108,7 @@ public class LogReplayerImpl implements LogReplayer {
 
 	@Override
 	public synchronized  long replayNextTimestamp() {
+		LOG.debug("LogReplay replayNextTimestamp called.");
 		deserializeNext();
 		assert nextDeterminant instanceof TimestampDeterminant;
 		final TimestampDeterminant timestampDeterminant = ((TimestampDeterminant) nextDeterminant);
@@ -117,6 +120,7 @@ public class LogReplayerImpl implements LogReplayer {
 
 	@Override
 	public synchronized Object replaySerializableDeterminant() {
+		LOG.debug("LogReplay replaySerializableDeterminant called.");
 		deserializeNext();
 		assert nextDeterminant instanceof SerializableDeterminant;
 		final SerializableDeterminant serializableDeterminant = (SerializableDeterminant) nextDeterminant;
@@ -129,6 +133,7 @@ public class LogReplayerImpl implements LogReplayer {
 
 	@Override
 	public synchronized void triggerAsyncEvent() {
+		LOG.debug("LogReplay triggerAsyncEvent called.");
 		deserializeNext();
 		assert nextDeterminant instanceof AsyncDeterminant;
 		AsyncDeterminant asyncDeterminant = (AsyncDeterminant) nextDeterminant;

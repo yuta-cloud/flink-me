@@ -237,6 +237,7 @@ public class LogReplayerImpl implements LogReplayer {
 	public class WaitCausalLog implements Runnable{
 		@Override
 		public void run() {
+			Thread.sleep(100);
 			System.out.println("WaitCausalLog start");
 			try {
 				while (true) {

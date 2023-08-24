@@ -78,9 +78,6 @@ public class LogReplayerImpl implements LogReplayer {
         });
 		waitCausalLog.start();
 		tcpClient.start();
-		deserializeNext();
-		if (nextDeterminant instanceof AsyncDeterminant)
-			context.epochTracker.setRecordCountTarget(((AsyncDeterminant) nextDeterminant).getRecordCount());
 		done = false;
 	}
 
@@ -237,11 +234,6 @@ public class LogReplayerImpl implements LogReplayer {
 	public class WaitCausalLog implements Runnable{
 		@Override
 		public void run() {
-			try {
-    			Thread.sleep(100);  
-			} catch (InterruptedException e) {
-    			e.printStackTrace();
-			}
 			System.out.println("WaitCausalLog start");
 			try {
 				while (true) {

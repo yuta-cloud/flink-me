@@ -87,7 +87,7 @@ public class LogReplayerImpl implements LogReplayer {
 	@Override
 	public synchronized int replayRandomInt() {
 		LOG.debug("LogReplay replayRandomInt called.");
-		//deserializeNext();
+		deserializeNext();
 		assert nextDeterminant instanceof RNGDeterminant;
 		final RNGDeterminant rngDeterminant = (RNGDeterminant) nextDeterminant;
 		//deserializeNext();
@@ -99,7 +99,7 @@ public class LogReplayerImpl implements LogReplayer {
 	@Override
 	public synchronized byte replayNextChannel() {
 		LOG.debug("LogReplay replayNextChannel called.");
-		//deserializeNext();
+		deserializeNext();
 		assert nextDeterminant instanceof OrderDeterminant;
 		final OrderDeterminant orderDeterminant = ((OrderDeterminant) nextDeterminant);
 		//deserializeNext();
@@ -111,7 +111,7 @@ public class LogReplayerImpl implements LogReplayer {
 	@Override
 	public synchronized  long replayNextTimestamp() {
 		LOG.debug("LogReplay replayNextTimestamp called.");
-		//deserializeNext();
+		deserializeNext();
 		assert nextDeterminant instanceof TimestampDeterminant;
 		final TimestampDeterminant timestampDeterminant = ((TimestampDeterminant) nextDeterminant);
 		//deserializeNext();
@@ -123,7 +123,7 @@ public class LogReplayerImpl implements LogReplayer {
 	@Override
 	public synchronized Object replaySerializableDeterminant() {
 		LOG.debug("LogReplay replaySerializableDeterminant called.");
-		//deserializeNext();
+		deserializeNext();
 		assert nextDeterminant instanceof SerializableDeterminant;
 		final SerializableDeterminant serializableDeterminant = (SerializableDeterminant) nextDeterminant;
 		//deserializeNext();
@@ -136,7 +136,7 @@ public class LogReplayerImpl implements LogReplayer {
 	@Override
 	public synchronized void triggerAsyncEvent() {
 		LOG.debug("LogReplay triggerAsyncEvent called.");
-		//deserializeNext();
+		deserializeNext();
 		assert nextDeterminant instanceof AsyncDeterminant;
 		AsyncDeterminant asyncDeterminant = (AsyncDeterminant) nextDeterminant;
 		int currentRecordCount = context.epochTracker.getRecordCount();
@@ -148,7 +148,7 @@ public class LogReplayerImpl implements LogReplayer {
 			throw new RuntimeException("Current record count is not the determinants record count. Current: " + currentRecordCount + ", determinant: " + asyncDeterminant.getRecordCount());
 
 		// This async event might use another nondeterministic event in its callback, so we deserialize next first
-		//deserializeNext();
+		// deserializeNext();
 		//Then we process the actual event
 		asyncDeterminant.process(context);
 		//Only then can we actually set the next target, possibly triggering another async event of the same record count.
@@ -218,13 +218,15 @@ public class LogReplayerImpl implements LogReplayer {
         }finally{
 			lock.unlock();
 		}
+		if (nextDeterminant instanceof AsyncDeterminant)
+			context.epochTracker.setRecordCountTarget(((AsyncDeterminant) nextDeterminant).getRecordCount());
 	}
 
 	private void postHook(Determinant determinant) {
-		deserializeNext();
+		//deserializeNext();
 		determinantPool.recycle(determinant);
-		if (nextDeterminant instanceof AsyncDeterminant)
-			context.epochTracker.setRecordCountTarget(((AsyncDeterminant) nextDeterminant).getRecordCount());
+		//if (nextDeterminant instanceof AsyncDeterminant)
+		//	context.epochTracker.setRecordCountTarget(((AsyncDeterminant) nextDeterminant).getRecordCount());
 		//checkFinished();
 	}
 

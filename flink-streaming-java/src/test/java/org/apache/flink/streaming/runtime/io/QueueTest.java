@@ -185,6 +185,11 @@ public class QueueTest {
 		public Object replaySerializableDeterminant() {
 			return null;
 		}
+
+		@Override
+		public void deserializeNext(boolean check){
+
+		}
 	}
 
 	class RM implements IRecoveryManager {

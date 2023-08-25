@@ -78,6 +78,7 @@ public class LogReplayerImpl implements LogReplayer {
         });
 		waitCausalLog.start();
 		tcpClient.start();
+		deserializeNext(true);
 		done = false;
 	}
 
@@ -149,8 +150,6 @@ public class LogReplayerImpl implements LogReplayer {
 		asyncDeterminant.process(context);
 		//Only then can we actually set the next target, possibly triggering another async event of the same record count.
 		postHook(asyncDeterminant);
-		if (nextDeterminant instanceof AsyncDeterminant)
-			context.epochTracker.setRecordCountTarget(((AsyncDeterminant) nextDeterminant).getRecordCount());
 	}
 
 	public synchronized void checkFinished() {
@@ -216,15 +215,13 @@ public class LogReplayerImpl implements LogReplayer {
         }finally{
 			lock.unlock();
 		}
-		if (check && nextDeterminant instanceof AsyncDeterminant)
-			context.epochTracker.setRecordCountTarget(((AsyncDeterminant) nextDeterminant).getRecordCount());
 	}
 
 	private void postHook(Determinant determinant) {
 		//deserializeNext();
 		determinantPool.recycle(determinant);
-		//if (nextDeterminant instanceof AsyncDeterminant)
-		//	context.epochTracker.setRecordCountTarget(((AsyncDeterminant) nextDeterminant).getRecordCount());
+		if (nextDeterminant instanceof AsyncDeterminant)
+			context.epochTracker.setRecordCountTarget(((AsyncDeterminant) nextDeterminant).getRecordCount());
 		//checkFinished();
 	}
 

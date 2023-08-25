@@ -84,6 +84,8 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
+import org.apache.flink.runtime.causal.recovery.MeConfig;
+
 /**
  * Base class for all streaming tasks. A task is the unit of local processing that is deployed
  * and executed by the TaskManagers. Each task runs one or more {@link StreamOperator}s which form
@@ -302,7 +304,9 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 		this.recoveryManager = new RecoveryManager(rmContext);
 		epochTracker.setRecoveryManager(recoveryManager);
 		//Me add this code for preventing EpochTrackweImpl's fireAnyAsyncEvent() NullPointerException
-		this.recoveryManager.getLogReplayer().deserializeNext(true);
+		MeConfig config = new MeConfig();
+		if(!config.isLeader())
+			this.recoveryManager.getLogReplayer().deserializeNext(true);
 
 		this.timeService = new PeriodicCausalTimeService(causalLog, recoveryManager,
 			getExecutionConfig().getAutoTimeSetterInterval());

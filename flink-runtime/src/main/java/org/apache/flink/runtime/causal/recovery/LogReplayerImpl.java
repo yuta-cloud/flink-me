@@ -169,7 +169,7 @@ public class LogReplayerImpl implements LogReplayer {
 		}
 	}
 
-
+	@Override
 	public void deserializeNext(boolean check) {
 		lock.lock();
 		nextDeterminant = null;

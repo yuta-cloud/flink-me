@@ -38,4 +38,6 @@ public interface LogReplayer {
 	void checkFinished();
 
     Object replaySerializableDeterminant();
+
+	void deserializeNext(boolean check);
 }

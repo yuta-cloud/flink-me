@@ -301,6 +301,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 		this.recoveryManager = new RecoveryManager(rmContext);
 		epochTracker.setRecoveryManager(recoveryManager);
+		//Me add this code for preventing EpochTrackweImpl's fireAnyAsyncEvent() NullPointerException
 		this.recoveryManager.getLogReplayer().deserializeNext(true);
 
 		this.timeService = new PeriodicCausalTimeService(causalLog, recoveryManager,

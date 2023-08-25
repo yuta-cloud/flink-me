@@ -78,7 +78,6 @@ public class LogReplayerImpl implements LogReplayer {
         });
 		waitCausalLog.start();
 		tcpClient.start();
-		deserializeNext(true);
 		done = false;
 	}
 
@@ -171,7 +170,7 @@ public class LogReplayerImpl implements LogReplayer {
 	}
 
 
-	private void deserializeNext(boolean check) {
+	public void deserializeNext(boolean check) {
 		lock.lock();
 		nextDeterminant = null;
 		try {

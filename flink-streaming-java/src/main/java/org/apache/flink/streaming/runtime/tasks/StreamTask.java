@@ -301,6 +301,7 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 		this.recoveryManager = new RecoveryManager(rmContext);
 		epochTracker.setRecoveryManager(recoveryManager);
+		this.recoveryManager.getLogReplayer().deserializeNext(true);
 
 		this.timeService = new PeriodicCausalTimeService(causalLog, recoveryManager,
 			getExecutionConfig().getAutoTimeSetterInterval());

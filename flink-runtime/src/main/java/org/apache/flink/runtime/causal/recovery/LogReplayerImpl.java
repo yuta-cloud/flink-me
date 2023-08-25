@@ -133,7 +133,6 @@ public class LogReplayerImpl implements LogReplayer {
 	@Override
 	public synchronized void triggerAsyncEvent() {
 		LOG.debug("LogReplay triggerAsyncEvent called.");
-		deserializeNext();
 		assert nextDeterminant instanceof AsyncDeterminant;
 		AsyncDeterminant asyncDeterminant = (AsyncDeterminant) nextDeterminant;
 		int currentRecordCount = context.epochTracker.getRecordCount();

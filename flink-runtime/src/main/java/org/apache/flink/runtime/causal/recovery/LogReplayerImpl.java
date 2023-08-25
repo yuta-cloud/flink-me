@@ -78,16 +78,17 @@ public class LogReplayerImpl implements LogReplayer {
         });
 		waitCausalLog.start();
 		tcpClient.start();
+		deserializeNext(true);
 		done = false;
 	}
 
 	@Override
 	public synchronized int replayRandomInt() {
 		LOG.debug("LogReplay replayRandomInt called.");
-		deserializeNext(true);
+		//deserializeNext(true);
 		assert nextDeterminant instanceof RNGDeterminant;
 		final RNGDeterminant rngDeterminant = (RNGDeterminant) nextDeterminant;
-		//deserializeNext();
+		deserializeNext(true);
 		int toReturn = rngDeterminant.getNumber();
 		postHook(rngDeterminant);
 		return toReturn;
@@ -96,10 +97,10 @@ public class LogReplayerImpl implements LogReplayer {
 	@Override
 	public synchronized byte replayNextChannel() {
 		LOG.debug("LogReplay replayNextChannel called.");
-		deserializeNext(true);
+		//deserializeNext(true);
 		assert nextDeterminant instanceof OrderDeterminant;
 		final OrderDeterminant orderDeterminant = ((OrderDeterminant) nextDeterminant);
-		//deserializeNext();
+		deserializeNext(true);
 		byte toReturn = orderDeterminant.getChannel();
 		postHook(orderDeterminant);
 		return toReturn;
@@ -108,10 +109,10 @@ public class LogReplayerImpl implements LogReplayer {
 	@Override
 	public synchronized  long replayNextTimestamp() {
 		LOG.debug("LogReplay replayNextTimestamp called.");
-		deserializeNext(true);
+		//deserializeNext(true);
 		assert nextDeterminant instanceof TimestampDeterminant;
 		final TimestampDeterminant timestampDeterminant = ((TimestampDeterminant) nextDeterminant);
-		//deserializeNext();
+		deserializeNext(true);
 		long toReturn = timestampDeterminant.getTimestamp();
 		postHook(timestampDeterminant);
 		return toReturn;
@@ -120,10 +121,10 @@ public class LogReplayerImpl implements LogReplayer {
 	@Override
 	public synchronized Object replaySerializableDeterminant() {
 		LOG.debug("LogReplay replaySerializableDeterminant called.");
-		deserializeNext(true);
+		//deserializeNext();
 		assert nextDeterminant instanceof SerializableDeterminant;
 		final SerializableDeterminant serializableDeterminant = (SerializableDeterminant) nextDeterminant;
-		//deserializeNext();
+		deserializeNext(true);
 		Object toReturn = serializableDeterminant.getDeterminant();
 		postHook(serializableDeterminant);
 		return toReturn;

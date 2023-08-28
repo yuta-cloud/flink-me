@@ -137,8 +137,9 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 		buf.writeByte(Determinant.ORDER_DETERMINANT_TAG);
 		buf.writeByte(orderDeterminant.getChannel());
 		//Send order determinant to followers
-		ByteBuf buf_me = Unpooled.buffer(orderDeterminant.getEncodedSizeInBytes() + 2);
+		ByteBuf buf_me = Unpooled.buffer(orderDeterminant.getEncodedSizeInBytes() + 6);
 		buf_me.writeShort(vertexID);
+		buf_me.writeInt(orderDeterminant.getEncodedSizeInBytes());
 		buf_me.writeByte(Determinant.ORDER_DETERMINANT_TAG);
 		buf_me.writeByte(orderDeterminant.getChannel());
 		sendQueue.add(buf_me);
@@ -164,8 +165,9 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 		buf.writeByte(Determinant.TIMESTAMP_DETERMINANT_TAG);
 		buf.writeLong(timestampDeterminant.getTimestamp());
 		//Send timestamp determinant to followers
-		ByteBuf buf_me = Unpooled.buffer(timestampDeterminant.getEncodedSizeInBytes() + 2);
+		ByteBuf buf_me = Unpooled.buffer(timestampDeterminant.getEncodedSizeInBytes() + 6);
 		buf_me.writeShort(vertexID);
+		buf_me.writeInt(timestampDeterminant.getEncodedSizeInBytes());
 		buf_me.writeByte(Determinant.TIMESTAMP_DETERMINANT_TAG);
 		buf_me.writeLong(timestampDeterminant.getTimestamp());
 		sendQueue.add(buf_me);
@@ -192,8 +194,9 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 		buf.writeByte(Determinant.RNG_DETERMINANT_TAG);
 		buf.writeInt(rngDeterminant.getNumber());
 		//Send random seed determinant to followers
-		ByteBuf buf_me = Unpooled.buffer(rngDeterminant.getEncodedSizeInBytes() + 2);
+		ByteBuf buf_me = Unpooled.buffer(rngDeterminant.getEncodedSizeInBytes() + 6);
 		buf_me.writeShort(vertexID);
+		buf_me.writeInt(rngDeterminant.getEncodedSizeInBytes());
 		buf_me.writeByte(Determinant.RNG_DETERMINANT_TAG);
 		buf_me.writeInt(rngDeterminant.getNumber());
 		sendQueue.add(buf_me);
@@ -220,8 +223,9 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 		buf.writeByte(Determinant.BUFFER_BUILT_TAG);
 		buf.writeInt(bufferBuiltDeterminant.getNumberOfBytes());
 		//Send buffer built determinant to followers
-		ByteBuf buf_me = Unpooled.buffer(bufferBuiltDeterminant.getEncodedSizeInBytes() + 2);
+		ByteBuf buf_me = Unpooled.buffer(bufferBuiltDeterminant.getEncodedSizeInBytes() + 6);
 		buf_me.writeShort(vertexID);
+		buf_me.writeInt(bufferBuiltDeterminant.getEncodedSizeInBytes());
 		buf_me.writeByte(Determinant.BUFFER_BUILT_TAG);
 		buf_me.writeInt(bufferBuiltDeterminant.getNumberOfBytes());
 		sendQueue.add(buf_me);
@@ -248,8 +252,9 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 		}
 
 		//Send timer trigger determinant to followers
-		ByteBuf buf_me = Unpooled.buffer(determinant.getEncodedSizeInBytes() + 2);
+		ByteBuf buf_me = Unpooled.buffer(determinant.getEncodedSizeInBytes() + 6);
 		buf_me.writeShort(vertexID);
+		buf_me.writeInt(determinant.getEncodedSizeInBytes());
 		buf_me.writeByte(Determinant.TIMER_TRIGGER_DETERMINANT);
 		buf_me.writeInt(determinant.getRecordCount());
 		buf_me.writeLong(determinant.getTimestamp());
@@ -305,8 +310,9 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 		}
 
 		//Send encode source checkpoint determinant to followers
-		ByteBuf buf_me = Unpooled.buffer(det.getEncodedSizeInBytes() + 2);
+		ByteBuf buf_me = Unpooled.buffer(det.getEncodedSizeInBytes() + 6);
 		buf_me.writeShort(vertexID);
+		buf_me.writeInt(det.getEncodedSizeInBytes());
 		buf_me.writeByte(Determinant.SOURCE_CHECKPOINT_DETERMINANT);
 		buf_me.writeInt(det.getRecordCount());
 		buf_me.writeLong(det.getCheckpointID());
@@ -356,8 +362,9 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 		buf.writeLong(det.getCheckpointID());
 
 		//send encode ignore checkpoint determinant to followers
-		ByteBuf buf_me = Unpooled.buffer(det.getEncodedSizeInBytes() + 2);
+		ByteBuf buf_me = Unpooled.buffer(det.getEncodedSizeInBytes() + 6);
 		buf_me.writeShort(vertexID);
+		buf_me.writeInt(det.getEncodedSizeInBytes());
 		buf_me.writeByte(Determinant.IGNORE_CHECKPOINT_DETERMINANT);
 		buf_me.writeInt(det.getRecordCount());
 		buf_me.writeLong(det.getCheckpointID());
@@ -393,8 +400,9 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 			oos.writeObject(serializableDeterminant.getDeterminant());
 
 			//Send serializable determinant to followers
-			ByteBuf buf_me = Unpooled.buffer(serializableDeterminant.getEncodedSizeInBytes() + 2);
+			ByteBuf buf_me = Unpooled.buffer(serializableDeterminant.getEncodedSizeInBytes() + 6);
 			buf_me.writeShort(vertexID);
+			buf_me.writeInt(serializableDeterminant.getEncodedSizeInBytes());
 			buf_me.writeByte(Determinant.SERIALIZABLE_DETERMINANT_TAG);
 			ByteBufOutputStream bbos_me = new ByteBufOutputStream(buf_me);
 			ObjectOutputStream oos_me = new ObjectOutputStream(bbos_me);

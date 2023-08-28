@@ -31,6 +31,7 @@ import org.apache.flink.shaded.netty4.io.netty.channel.*;
 import org.apache.flink.shaded.netty4.io.netty.channel.nio.*;
 import org.apache.flink.shaded.netty4.io.netty.channel.socket.*;
 import org.apache.flink.shaded.netty4.io.netty.channel.socket.nio.*;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 
 import java.util.concurrent.*;
 
@@ -59,6 +60,7 @@ public class MeTCPClient{
             bootstrap.handler(new ChannelInitializer<SocketChannel>() {
                 @Override
                 public void initChannel(SocketChannel ch) throws Exception {
+                    ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 2, 4, 0, 6));
                     ch.pipeline().addLast(new SimpleChannelInboundHandler<ByteBuf>() {
 
                         @Override

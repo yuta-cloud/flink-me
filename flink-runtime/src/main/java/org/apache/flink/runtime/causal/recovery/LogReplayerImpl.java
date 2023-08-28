@@ -110,6 +110,9 @@ public class LogReplayerImpl implements LogReplayer {
 	public synchronized  long replayNextTimestamp() {
 		LOG.debug("LogReplay replayNextTimestamp called.");
 		//deserializeNext(true);
+		//TimerTriggerDeterminant may be appended before startNewEpoch called
+		if (nextDeterminant instanceof AsyncDeterminant)
+			context.epochTracker.setRecordCountTarget(((AsyncDeterminant) nextDeterminant).getRecordCount());
 		assert nextDeterminant instanceof TimestampDeterminant;
 		final TimestampDeterminant timestampDeterminant = ((TimestampDeterminant) nextDeterminant);
 		deserializeNext(true);

@@ -190,7 +190,7 @@ public class LogReplayerImpl implements LogReplayer {
 					//(determinantVertexID + " : " + log.toString());
 					nextDeterminant = determinantEncoder.decodeNext(log, determinantPool);
 					if (LOG.isDebugEnabled())
-						LOG.debug("Deserialized nextDeterminant: {}", nextDeterminant);
+						LOG.debug("Deserialized nextDeterminant: {}, {}", determinantVertexID, nextDeterminant);
 					break;
 				}
 			}
@@ -209,7 +209,7 @@ public class LogReplayerImpl implements LogReplayer {
 					//System.out.println(determinantVertexID + " : " + log.toString());
 					nextDeterminant = determinantEncoder.decodeNext(log, determinantPool);
 					if (LOG.isDebugEnabled())
-						LOG.debug("Deserialized nextDeterminant (await): {}", nextDeterminant);
+						LOG.debug("Deserialized nextDeterminant (await): {}, {}", determinantVertexID, nextDeterminant);
 					break;
 				}
 			}

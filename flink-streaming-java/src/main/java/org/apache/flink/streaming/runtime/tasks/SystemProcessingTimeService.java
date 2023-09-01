@@ -511,6 +511,7 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 		}
 
 		private void runTask(long timestamp) {
+			LOG.debug("RepeatedTriggerTask runTask called! timestamp: " + timestamp);
 			synchronized (lock) {
 				try {
 					if (serviceStatus.get() == STATUS_ALIVE) {

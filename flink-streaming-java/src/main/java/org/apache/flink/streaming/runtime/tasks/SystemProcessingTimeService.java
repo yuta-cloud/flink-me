@@ -512,25 +512,25 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 
 		private void runTask(long timestamp) {
 			LOG.debug("RepeatedTriggerTask runTask called! timestamp: " + timestamp);
-			synchronized (lock) {
-				try {
-					if (serviceStatus.get() == STATUS_ALIVE) {
-						causalLog.appendDeterminant(
-							timerTriggerDeterminantToUse.replace(
-								epochTracker.getRecordCount(),
-								target.getID(),
-								timestamp),
-							epochTracker.getCurrentEpoch());
-						target.onProcessingTime(nextTimestamp);
-					}
-
-					nextTimestamp = timestamp + period;
-				} catch (Throwable t) {
-					TimerException asyncException = new TimerException(t);
-					exceptionHandler.handleAsyncException("Caught exception while processing repeated timer task.",
-						asyncException);
+			//synchronized (lock) {
+			try {
+				if (serviceStatus.get() == STATUS_ALIVE) {
+					causalLog.appendDeterminant(
+						timerTriggerDeterminantToUse.replace(
+							epochTracker.getRecordCount(),
+							target.getID(),
+							timestamp),
+						epochTracker.getCurrentEpoch());
+					target.onProcessingTime(nextTimestamp);
 				}
+
+				nextTimestamp = timestamp + period;
+			} catch (Throwable t) {
+				TimerException asyncException = new TimerException(t);
+				exceptionHandler.handleAsyncException("Caught exception while processing repeated timer task.",
+					asyncException);
 			}
+			//}
 		}
 
 		public ProcessingTimeCallback getTarget() {

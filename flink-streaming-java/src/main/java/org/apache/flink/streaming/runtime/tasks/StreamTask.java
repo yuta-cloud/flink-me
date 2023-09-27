@@ -402,6 +402,11 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 
 			recoveryManager.getContext().setProcessingTimeService((ProcessingTimeForceable) timerService);
 
+			//TODO don't like this, timeService should schedule itself ideally
+			if (timeService instanceof PeriodicCausalTimeService) {
+				timerService.scheduleAtFixedRate(new TimeSetterTask(((PeriodicCausalTimeService) timeService).getCurrentTime()), 10,
+					((PeriodicCausalTimeService) timeService).getInterval());
+			}
 
 			operatorChain = new OperatorChain<>(this, streamRecordWriters);
 			headOperator = operatorChain.getHeadOperator();
@@ -409,12 +414,6 @@ public abstract class StreamTask<OUT, OP extends StreamOperator<OUT>>
 			// task specific initialization
 			init();
 
-			//TODO don't like this, timeService should schedule itself ideally
-			//Me change this code from 404
-			if (timeService instanceof PeriodicCausalTimeService) {
-				timerService.scheduleAtFixedRate(new TimeSetterTask(((PeriodicCausalTimeService) timeService).getCurrentTime()), 10,
-					((PeriodicCausalTimeService) timeService).getInterval());
-			}
 
 			// save the work of reloading state, etc, if the task is already canceled
 			if (canceled) {

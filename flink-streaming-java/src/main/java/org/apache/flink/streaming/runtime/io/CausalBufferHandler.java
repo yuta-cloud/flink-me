@@ -62,9 +62,9 @@ public class CausalBufferHandler implements CheckpointBarrierHandler {
 	public BufferOrEvent getNextNonBlocked() throws Exception {
 		//We lock to guarantee that async events don't try to write to the causal log at the same time as the
 		// order service.
-		synchronized (lock) {
+		//synchronized (lock) {
 			return bufferOrderService.getNextBuffer();
-		}
+		//}
 	}
 
 

@@ -37,6 +37,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 import java.io.Serializable;
 
@@ -240,7 +241,7 @@ public class LogReplayerImpl implements LogReplayer {
 			System.out.println("WaitCausalLog start");
 			try {
 				while (true) {
-					ByteBuf value = new ByteBuf();
+					ByteBuf value;
 					if(firstRead){
 						value = queue.take();
 						firstRead = false;

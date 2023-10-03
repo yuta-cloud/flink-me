@@ -49,6 +49,8 @@ public class LogReplayerImpl implements LogReplayer {
 	private final ByteBuf log;
 	private final ByteBuf log_before;
 	private final int CAUSAL_BUFFER_SIZE = 10485760; //リーダから受信するCausal Logのバッファサイズ (10 MB)
+	private final int TIMEOUT = 150;
+	private boolean firstRead = true;
 
 	// Use ReentrantLock for guaranteeing wait order
 	private final Lock lock = new ReentrantLock(true); 
@@ -238,7 +240,13 @@ public class LogReplayerImpl implements LogReplayer {
 			System.out.println("WaitCausalLog start");
 			try {
 				while (true) {
-					ByteBuf value = queue.take();
+					ByteBuf value = new ByteBuf();
+					if(firstRead){
+						value = queue.take();
+						firstRead = false;
+					}else{
+						value = queue.poll(TIMEOUT, TimeUnit.MILLISECONDS);
+					}
 					//System.out.println(value.toString());
 					/*
 					short determinantVertexID = value.readShort();
@@ -248,6 +256,14 @@ public class LogReplayerImpl implements LogReplayer {
 						continue;
 					}
 					*/
+
+					//リーダがタイムアウトした場合
+					if(value == null){
+						System.out.println("Change status to RUNNING bacause of timeout");
+						context.owner.setState(new RunningState(context.owner, context));
+						break;
+					}
+
 					lock.lock();
 					try {
 						log.writeBytes(value);

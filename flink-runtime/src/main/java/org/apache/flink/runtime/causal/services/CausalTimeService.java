@@ -52,8 +52,8 @@ public class CausalTimeService extends AbstractCausalService implements TimeServ
 	public long currentTimeMillis() {
 		long toReturn;
 
-		//if (isRecovering()) {
-		if(!config.isLeader()){
+		if (isRecovering()) {
+		//if(!config.isLeader()){
 			toReturn = recoveryManager.getLogReplayer().replayNextTimestamp();
 			if (LOG.isDebugEnabled())
 				LOG.info("currentTimeMillis(): (State: RECOVERING) Replayed timestamp is {}", toReturn);

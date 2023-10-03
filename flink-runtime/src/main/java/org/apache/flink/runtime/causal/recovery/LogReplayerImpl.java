@@ -175,14 +175,14 @@ public class LogReplayerImpl implements LogReplayer {
 	}
 
 	public synchronized void checkFinishedMe() {
+		lock.lock();
+		try {
+			log.writeShort(-1);
+			notEmpty.signal(); // resume waiting thread
+		} finally {
+			lock.unlock();
+		}
 		if (!done) {
-			lock.lock();
-			try {
-				log.writeShort(-1);
-				notEmpty.signal(); // resume waiting thread
-			} finally {
-				lock.unlock();
-			}
 			done = true;
 			//Safety check that recovery brought us to the exact same causal log state as pre-failure
 			log.release();

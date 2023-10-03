@@ -50,7 +50,7 @@ public class LogReplayerImpl implements LogReplayer {
 	private final ByteBuf log;
 	private final ByteBuf log_before;
 	private final int CAUSAL_BUFFER_SIZE = 10485760; //リーダから受信するCausal Logのバッファサイズ (10 MB)
-	private final int TIMEOUT = 150;
+	private final int TIMEOUT = 200;
 	private boolean firstRead = true;
 
 	// Use ReentrantLock for guaranteeing wait order
@@ -174,14 +174,35 @@ public class LogReplayerImpl implements LogReplayer {
 		}
 	}
 
+	public synchronized void checkFinishedMe() {
+		if (!done) {
+			lock.lock();
+			try {
+				log.writeShort(-1);
+				notEmpty.signal(); // resume waiting thread
+			} finally {
+				lock.unlock();
+			}
+			done = true;
+			//Safety check that recovery brought us to the exact same causal log state as pre-failure
+			log.release();
+			LOG.info("Finished recovering main thread! Transitioning to RunningState!");
+			context.owner.setState(new RunningState(context.owner, context));
+		}
+	}
+
 	@Override
 	public void deserializeNext(boolean check) {
 		lock.lock();
+		LOG.debug("LOCK wait now!");
 		nextDeterminant = null;
 		try {
 			if (log != null && log.isReadable()) {
 				while(log.isReadable()){
 					short determinantVertexID = log.readShort();
+					if(determinantVertexID < 0){
+						break;
+					}
 					//System.out.println("bytebuf vertex ID: " + determinantVertexID);
 					if(determinantVertexID != context.vertexGraphInformation.getThisTasksVertexID().getVertexID()){
 						determinantEncoder.decodeNext(log, determinantPool);
@@ -202,6 +223,9 @@ public class LogReplayerImpl implements LogReplayer {
 				notEmpty.await(); // wait for leader causal log
 				while(log.isReadable()){
 					short determinantVertexID = log.readShort();
+					if(determinantVertexID < 0){
+						break;
+					}
 					if(determinantVertexID != context.vertexGraphInformation.getThisTasksVertexID().getVertexID()){
 						determinantEncoder.decodeNext(log, determinantPool);
 						if(!log.isReadable()){
@@ -220,6 +244,7 @@ public class LogReplayerImpl implements LogReplayer {
             Thread.currentThread().interrupt();
         }finally{
 			lock.unlock();
+			LOG.debug("UNLOCK now!");
 		}
 	}
 
@@ -261,7 +286,7 @@ public class LogReplayerImpl implements LogReplayer {
 					//リーダがタイムアウトした場合
 					if(value == null){
 						System.out.println("Change status to RUNNING bacause of timeout");
-						context.owner.setState(new RunningState(context.owner, context));
+						checkFinishedMe();
 						break;
 					}
 

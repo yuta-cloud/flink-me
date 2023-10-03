@@ -47,15 +47,15 @@ public class LogReplayerImpl implements LogReplayer {
 
 	private final DeterminantEncoder determinantEncoder;
 
-	private final ByteBuf log;
+	private final static ByteBuf log;
 	private final ByteBuf log_before;
 	private final int CAUSAL_BUFFER_SIZE = 10485760; //リーダから受信するCausal Logのバッファサイズ (10 MB)
 	private final int TIMEOUT = 200;
 	private boolean firstRead = true;
 
 	// Use ReentrantLock for guaranteeing wait order
-	private final Lock lock = new ReentrantLock(true); 
-	private final Condition notEmpty = lock.newCondition();
+	private final static Lock lock = new ReentrantLock(true); 
+	private final static Condition notEmpty = lock.newCondition();
 	
 	private final Thread tcpClient;
 	private final BlockingQueue<ByteBuf> queue = new LinkedBlockingQueue<>(); //wait queue for leader causal logs
@@ -223,6 +223,7 @@ public class LogReplayerImpl implements LogReplayer {
 				notEmpty.await(); // wait for leader causal log
 				while(log.isReadable()){
 					short determinantVertexID = log.readShort();
+					System.out.println("bytebuf vertex ID: " + determinantVertexID);
 					if(determinantVertexID < 0){
 						break;
 					}

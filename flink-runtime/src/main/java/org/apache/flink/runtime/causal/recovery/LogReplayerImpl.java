@@ -54,7 +54,7 @@ public class LogReplayerImpl implements LogReplayer {
 	private boolean firstRead = true;
 
 	// Use ReentrantLock for guaranteeing wait order
-	private final Lock lock = new ReentrantLock(true); 
+	private final Lock lock = new ReentrantLock(); 
 	private final Condition notEmpty = lock.newCondition();
 	
 	private final Thread tcpClient;

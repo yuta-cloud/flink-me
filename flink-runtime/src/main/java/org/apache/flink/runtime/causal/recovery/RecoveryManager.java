@@ -112,7 +112,7 @@ public class RecoveryManager implements IRecoveryManager {
 	public synchronized void setState(State state) {
 		this.currentState = state;
 		LOG.info("called setState");
-		//this.currentState.executeEnter();
+		this.currentState.executeEnter();
 	}
 
 	//============== Check state ==========================

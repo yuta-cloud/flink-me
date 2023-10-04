@@ -68,7 +68,7 @@ public class LogReplayerImpl implements LogReplayer {
 	Determinant nextDeterminant;
 
 	private boolean done;
-	private static boolean checkFlag;
+	private static volatile boolean checkFlag;
 
 	public LogReplayerImpl(ByteBuf log, RecoveryManagerContext recoveryManagerContext) {
 		this.context = recoveryManagerContext;

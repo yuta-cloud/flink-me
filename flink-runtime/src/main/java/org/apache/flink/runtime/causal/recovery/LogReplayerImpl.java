@@ -177,6 +177,7 @@ public class LogReplayerImpl implements LogReplayer {
 	}
 
 	public synchronized void checkFinishedMe() {
+		LOG.info("Enter checkFinishedMe");
 		lock.lock();
 		try {
 			checkFlag = true;
@@ -191,6 +192,7 @@ public class LogReplayerImpl implements LogReplayer {
 			log.release();
 			LOG.info("Finished recovering main thread! Transitioning to RunningState!");
 			context.owner.setState(new RunningState(context.owner, context));
+			LOG.info("Finished-2 set RunningState!");
 		}
 	}
 

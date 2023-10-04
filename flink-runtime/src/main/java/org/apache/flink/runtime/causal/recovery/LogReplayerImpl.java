@@ -68,6 +68,7 @@ public class LogReplayerImpl implements LogReplayer {
 	Determinant nextDeterminant;
 
 	private boolean done;
+	private static boolean checkFlag;
 
 	public LogReplayerImpl(ByteBuf log, RecoveryManagerContext recoveryManagerContext) {
 		this.context = recoveryManagerContext;
@@ -83,6 +84,7 @@ public class LogReplayerImpl implements LogReplayer {
 		tcpClient.start();
 		deserializeNext(true);
 		done = false;
+		checkFlag = true;
 	}
 
 	@Override
@@ -177,7 +179,7 @@ public class LogReplayerImpl implements LogReplayer {
 	public synchronized void checkFinishedMe() {
 		lock.lock();
 		try {
-			log.writeShort(-1);
+			checkFlag = true;
 			notEmpty.signal(); // resume waiting thread
 		} finally {
 			lock.unlock();
@@ -199,7 +201,7 @@ public class LogReplayerImpl implements LogReplayer {
 		try {
 			if (log != null && log.isReadable()) {
 				LOG.debug("LOCK wait now1!");
-				while(log.isReadable()){
+				while(log.isReadable() && !checkFlag){
 					short determinantVertexID = log.readShort();
 					if(determinantVertexID < 0){
 						break;
@@ -224,7 +226,7 @@ public class LogReplayerImpl implements LogReplayer {
 				LOG.debug("LOCK wait now2!");
 				notEmpty.await(); // wait for leader causal log
 				LOG.debug("LOCK wait notify!");
-				while(log.isReadable()){
+				while(log.isReadable() && !checkFlag){
 					short determinantVertexID = log.readShort();
 					System.out.println("bytebuf vertex ID: " + determinantVertexID);
 					if(determinantVertexID < 0){

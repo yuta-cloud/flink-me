@@ -84,7 +84,7 @@ public class LogReplayerImpl implements LogReplayer {
 		tcpClient.start();
 		deserializeNext(true);
 		done = false;
-		checkFlag = true;
+		checkFlag = false;
 	}
 
 	@Override

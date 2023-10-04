@@ -176,7 +176,7 @@ public class LogReplayerImpl implements LogReplayer {
 		}
 	}
 
-	public synchronized void checkFinishedMe() {
+	public void checkFinishedMe() {
 		LOG.info("Enter checkFinishedMe");
 		lock.lock();
 		try {
@@ -293,7 +293,7 @@ public class LogReplayerImpl implements LogReplayer {
 
 					//リーダがタイムアウトした場合
 					if(value == null){
-						System.out.println("Change status to RUNNING bacause of timeout");
+						LOG.info("Change status to RUNNING bacause of timeout");
 						checkFinishedMe();
 						break;
 					}

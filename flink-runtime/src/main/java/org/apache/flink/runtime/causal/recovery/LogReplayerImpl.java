@@ -180,7 +180,7 @@ public class LogReplayerImpl implements LogReplayer {
 		lock.lock();
 		try {
 			checkFlag = true;
-			notEmpty.signal(); // resume waiting thread
+			notEmpty.signalAll(); // resume waiting thread
 		} finally {
 			lock.unlock();
 		}

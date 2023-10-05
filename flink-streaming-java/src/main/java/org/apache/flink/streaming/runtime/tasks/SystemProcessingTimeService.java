@@ -384,14 +384,16 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 			LOG.debug("Preregistered timer: {}", preregisteredTimer);
 			if (preregisteredTimer.task instanceof TriggerTask)
 				registerTimerRunning((TriggerTask) preregisteredTimer.task, preregisteredTimer.delay);
-			else if (preregisteredTimer.task instanceof RepeatedTriggerTask)//register using period as delay, since it
+			else if (preregisteredTimer.task instanceof RepeatedTriggerTask){//register using period as delay, since it
 				// has been executed a few times already
-				preregisteredTimer.task.addTimestamp(TIMEOUT);
+				RepeatedTriggerTask preregisteredTask = (RepeatedTriggerTask) preregisteredTimer.task;
+				preregisteredTask.addTimestamp(TIMEOUT);
 				registerAtFixedRateRunning(
 					((RepeatedTriggerTask) preregisteredTimer.task).period,
 					((RepeatedTriggerTask) preregisteredTimer.task).period,
 					//10,10,
 					(RepeatedTriggerTask) preregisteredTimer.task);
+			}
 		}
 		preregisteredTimerTasks.clear();
 	}

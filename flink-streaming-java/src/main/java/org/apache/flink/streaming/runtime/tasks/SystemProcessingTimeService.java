@@ -54,6 +54,7 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 	private static final int STATUS_ALIVE = 0;
 	private static final int STATUS_QUIESCED = 1;
 	private static final int STATUS_SHUTDOWN = 2;
+	private static final int TIMEOUT = 200;
 
 	// ------------------------------------------------------------------------
 
@@ -385,6 +386,7 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 				registerTimerRunning((TriggerTask) preregisteredTimer.task, preregisteredTimer.delay);
 			else if (preregisteredTimer.task instanceof RepeatedTriggerTask)//register using period as delay, since it
 				// has been executed a few times already
+				preregisteredTimer.task.addTimestamp(TIMEOUT);
 				registerAtFixedRateRunning(
 					((RepeatedTriggerTask) preregisteredTimer.task).period,
 					((RepeatedTriggerTask) preregisteredTimer.task).period,
@@ -544,6 +546,11 @@ public class SystemProcessingTimeService extends ProcessingTimeService implement
 
 		public long getNextTimestamp() {
 			return nextTimestamp;
+		}
+
+		//Consider timeout
+		public void addTimestamp(int add){
+			this.nextTimestamp = this.nextTimestamp + add;
 		}
 	}
 

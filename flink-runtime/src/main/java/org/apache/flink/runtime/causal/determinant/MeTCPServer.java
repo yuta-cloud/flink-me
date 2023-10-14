@@ -31,6 +31,7 @@ import org.apache.flink.shaded.netty4.io.netty.bootstrap.*;
 import org.apache.flink.shaded.netty4.io.netty.buffer.*;
 import org.apache.flink.shaded.netty4.io.netty.channel.*;
 import org.apache.flink.shaded.netty4.io.netty.channel.nio.*;
+import org.apache.flink.shaded.netty4.io.netty.channel.epoll.*;
 import org.apache.flink.shaded.netty4.io.netty.channel.socket.*;
 import org.apache.flink.shaded.netty4.io.netty.channel.socket.nio.*;
 import org.apache.flink.shaded.netty4.io.netty.channel.group.DefaultChannelGroup;
@@ -58,12 +59,12 @@ public class MeTCPServer{
     
     public void run(){
         System.out.println("MeTCPServer start!");
-        EventLoopGroup bossGroup = new NioEventLoopGroup();
-        EventLoopGroup workerGroup = new NioEventLoopGroup();
+        EventLoopGroup bossGroup = new EpollEventLoopGroup();
+        EventLoopGroup workerGroup = new EpollEventLoopGroup();
         try {
             ServerBootstrap b = new ServerBootstrap();
             b.group(bossGroup, workerGroup);
-            b.channel(NioServerSocketChannel.class);
+            b.channel(EpollServerSocketChannel.class);
             b.childHandler(new ChannelInitializer<SocketChannel>() {
                 @Override
                 public void initChannel(SocketChannel ch) throws Exception {
@@ -92,7 +93,7 @@ public class MeTCPServer{
                     });
                 }
             })
-            .option(UnixChannelOption.SO_REUSEPORT, true);
+            .option(EpollChannelOption.SO_REUSEPORT, true);
 
             ChannelFuture f = b.bind(port).sync();  // Bind and start to accept incoming connections.
 

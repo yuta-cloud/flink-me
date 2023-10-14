@@ -29,6 +29,7 @@ import org.apache.flink.shaded.netty4.io.netty.bootstrap.*;
 import org.apache.flink.shaded.netty4.io.netty.buffer.*;
 import org.apache.flink.shaded.netty4.io.netty.channel.*;
 import org.apache.flink.shaded.netty4.io.netty.channel.nio.*;
+import org.apache.flink.shaded.netty4.io.netty.channel.epoll.*;
 import org.apache.flink.shaded.netty4.io.netty.channel.socket.*;
 import org.apache.flink.shaded.netty4.io.netty.channel.socket.nio.*;
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.LengthFieldBasedFrameDecoder;
@@ -51,7 +52,7 @@ public class MeTCPClient{
 
     public void run(){
         System.out.println("MeTCPClient start!");
-        EventLoopGroup workerGroup = new NioEventLoopGroup();
+        EventLoopGroup workerGroup = new EpollEventLoopGroup();
 
         try {
             Bootstrap bootstrap = new Bootstrap();

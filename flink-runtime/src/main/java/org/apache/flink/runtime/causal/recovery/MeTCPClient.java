@@ -57,7 +57,7 @@ public class MeTCPClient{
         try {
             Bootstrap bootstrap = new Bootstrap();
             bootstrap.group(workerGroup);
-            bootstrap.channel(NioSocketChannel.class);
+            bootstrap.channel(EpollServerSocketChannel.class);
             bootstrap.handler(new ChannelInitializer<SocketChannel>() {
                 @Override
                 public void initChannel(SocketChannel ch) throws Exception {

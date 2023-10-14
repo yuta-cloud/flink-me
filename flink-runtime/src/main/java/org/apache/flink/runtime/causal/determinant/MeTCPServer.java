@@ -35,6 +35,7 @@ import org.apache.flink.shaded.netty4.io.netty.channel.socket.*;
 import org.apache.flink.shaded.netty4.io.netty.channel.socket.nio.*;
 import org.apache.flink.shaded.netty4.io.netty.channel.group.DefaultChannelGroup;
 import org.apache.flink.shaded.netty4.io.netty.channel.group.ChannelGroup;
+import org.apache.flink.shaded.netty4.io.netty.channel.unix.UnixChannelOption;
 import org.apache.flink.shaded.netty4.io.netty.util.concurrent.GlobalEventExecutor;
 import org.apache.flink.shaded.netty4.io.netty.util.CharsetUtil;
 import java.util.concurrent.*;
@@ -90,7 +91,8 @@ public class MeTCPServer{
 
                     });
                 }
-            });
+            })
+            .option(UnixChannelOption.SO_REUSEPORT, true);
 
             ChannelFuture f = b.bind(port).sync();  // Bind and start to accept incoming connections.
 

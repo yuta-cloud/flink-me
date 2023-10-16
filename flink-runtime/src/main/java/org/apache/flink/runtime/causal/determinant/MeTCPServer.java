@@ -51,7 +51,7 @@ public class MeTCPServer{
     private static final ChannelGroup channels = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE); //All Follower Channel
     private BlockingQueue<ByteBuf> queue; //Master BlockingQueue
     private int firstClient = 0;
-    private final int meNum = 6;
+    private final int meNum = 2;
 
     public MeTCPServer(BlockingQueue<ByteBuf> queue){
         this.queue = queue;
@@ -80,7 +80,7 @@ public class MeTCPServer{
                             System.out.println("add client");
                             channels.add(ctx.channel()); //Add Follower to channels
                             firstClient++;
-                            if(firstClient >= meNum){
+                            if(firstClient == meNum){
                                 new Thread(new Runnable() {
                                     @Override
                                     public void run() {

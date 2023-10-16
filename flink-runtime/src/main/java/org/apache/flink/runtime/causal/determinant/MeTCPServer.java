@@ -51,7 +51,7 @@ public class MeTCPServer{
     private static final ChannelGroup channels = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE); //All Follower Channel
     private BlockingQueue<ByteBuf> queue; //Master BlockingQueue
     private int firstClient = 0;
-    private final int meNum = 2;
+    private final int meNum = 6;
 
     public MeTCPServer(BlockingQueue<ByteBuf> queue){
         this.queue = queue;

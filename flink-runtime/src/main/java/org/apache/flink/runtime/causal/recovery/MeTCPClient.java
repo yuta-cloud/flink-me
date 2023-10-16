@@ -68,7 +68,7 @@ public class MeTCPClient{
                         protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg) throws Exception {
                             // Put ByteBuf to BlockingQueue
                             queue.put(msg.copy());
-                            msg.release();
+                            // msg.release();
                         }
                     });
                 }

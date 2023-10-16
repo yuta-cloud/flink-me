@@ -111,7 +111,7 @@ public class MeTCPServer{
         try {
             while (true) {
                 ByteBuf data = queue.take();
-                channels.writeAndFlush(data);
+                channels.writeAndFlush(data.retainedDuplicate());
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

@@ -69,8 +69,7 @@ public class MeTCPClient{
                             // Put ByteBuf to BlockingQueue
                             ByteBuf copiedMsg = msg.copy();
                             queue.put(copiedMsg);
-                            msg.release();
-                            // msg.release();
+                            //msg.release();
                         }
                     });
                 }

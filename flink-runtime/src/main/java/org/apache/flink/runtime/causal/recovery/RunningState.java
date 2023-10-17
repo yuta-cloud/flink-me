@@ -51,7 +51,7 @@ public class RunningState extends AbstractState {
 
 	@Override
 	public void executeEnter() {
-		context.processingTimeForceable.concludeReplay();
+		//context.processingTimeForceable.concludeReplay();
 
 		for (AsyncDeterminant delayedRPCRequest : context.unansweredRPCRequests) {
 			//TODO I think this may block? Or at least cause problems.Should probably execute these async

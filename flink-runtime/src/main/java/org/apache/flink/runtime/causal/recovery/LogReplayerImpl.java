@@ -50,7 +50,7 @@ public class LogReplayerImpl implements LogReplayer {
 	private final ByteBuf log;
 	private final ByteBuf log_before;
 	private final int CAUSAL_BUFFER_SIZE = 104857600; //リーダから受信するCausal Logのバッファサイズ (10 MB)
-	private final int TIMEOUT = 250;
+	private final int TIMEOUT = 300;
 	private boolean firstRead = true;
 
 	// Use ReentrantLock for guaranteeing wait order
@@ -206,8 +206,6 @@ public class LogReplayerImpl implements LogReplayer {
 				while(log.isReadable() && !checkFlag){
 					short determinantVertexID = log.readShort();
 					if(determinantVertexID < 0){
-						LOG.info("Change status to RUNNING bacause of timeout");
-						checkFinishedMe();
 						break;
 					}
 					//System.out.println("bytebuf vertex ID: " + determinantVertexID);
@@ -232,10 +230,8 @@ public class LogReplayerImpl implements LogReplayer {
 				LOG.debug("LOCK wait notify!");
 				while(log.isReadable() && !checkFlag){
 					short determinantVertexID = log.readShort();
-					System.out.println("bytebuf vertex ID: " + determinantVertexID);
+					// System.out.println("bytebuf vertex ID: " + determinantVertexID);
 					if(determinantVertexID < 0){
-						LOG.info("Change status to RUNNING bacause of timeout");
-						checkFinishedMe();
 						break;
 					}
 					if(determinantVertexID != context.vertexGraphInformation.getThisTasksVertexID().getVertexID()){
@@ -283,8 +279,7 @@ public class LogReplayerImpl implements LogReplayer {
 						value = queue.take();
 						firstRead = false;
 					}else{
-						//value = queue.poll(TIMEOUT, TimeUnit.MILLISECONDS);
-						value = queue.take();
+						value = queue.poll(TIMEOUT, TimeUnit.MILLISECONDS);
 					}
 					//System.out.println(value.toString());
 					/*

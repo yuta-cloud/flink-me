@@ -206,6 +206,8 @@ public class LogReplayerImpl implements LogReplayer {
 				while(log.isReadable() && !checkFlag){
 					short determinantVertexID = log.readShort();
 					if(determinantVertexID < 0){
+						LOG.info("Change status to RUNNING bacause of timeout");
+						checkFinishedMe();
 						break;
 					}
 					//System.out.println("bytebuf vertex ID: " + determinantVertexID);
@@ -232,6 +234,8 @@ public class LogReplayerImpl implements LogReplayer {
 					short determinantVertexID = log.readShort();
 					System.out.println("bytebuf vertex ID: " + determinantVertexID);
 					if(determinantVertexID < 0){
+						LOG.info("Change status to RUNNING bacause of timeout");
+						checkFinishedMe();
 						break;
 					}
 					if(determinantVertexID != context.vertexGraphInformation.getThisTasksVertexID().getVertexID()){
@@ -279,7 +283,8 @@ public class LogReplayerImpl implements LogReplayer {
 						value = queue.take();
 						firstRead = false;
 					}else{
-						value = queue.poll(TIMEOUT, TimeUnit.MILLISECONDS);
+						//value = queue.poll(TIMEOUT, TimeUnit.MILLISECONDS);
+						value = queue.take();
 					}
 					//System.out.println(value.toString());
 					/*

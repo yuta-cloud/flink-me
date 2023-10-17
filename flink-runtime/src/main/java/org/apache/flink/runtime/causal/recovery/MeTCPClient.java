@@ -72,6 +72,13 @@ public class MeTCPClient{
                         }
                     });
                 }
+
+                @Override
+                public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+                    ByteBuf end = Unpooled.buffer(2);
+                    end.writeShort(-1);
+                    queue.put(end);
+                }
             });
 
             // Start the client.

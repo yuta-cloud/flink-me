@@ -281,6 +281,7 @@ public class LogReplayerImpl implements LogReplayer {
 					}else{
 						value = queue.poll(TIMEOUT, TimeUnit.MILLISECONDS);
 					}
+					value.retain();
 					//System.out.println(value.toString());
 					/*
 					short determinantVertexID = value.readShort();

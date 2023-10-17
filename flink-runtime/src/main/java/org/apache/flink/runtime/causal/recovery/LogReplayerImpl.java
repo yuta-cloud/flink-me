@@ -51,7 +51,8 @@ public class LogReplayerImpl implements LogReplayer {
 	private final ByteBuf log_before;
 	private final int CAUSAL_BUFFER_SIZE = 104857600; //リーダから受信するCausal Logのバッファサイズ (10 MB)
 	private final int TIMEOUT = 300;
-	private boolean firstRead = true;
+	private final int FIRST_READ = 200;
+	private int firstRead = 0;
 
 	// Use ReentrantLock for guaranteeing wait order
 	private final Lock lock = new ReentrantLock(); 
@@ -275,9 +276,9 @@ public class LogReplayerImpl implements LogReplayer {
 			try {
 				while (true) {
 					ByteBuf value;
-					if(firstRead){
+					if(firstRead < FIRST_READ){
 						value = queue.take();
-						firstRead = false;
+						firstRead += 1;
 					}else{
 						value = queue.poll(TIMEOUT, TimeUnit.MILLISECONDS);
 					}

@@ -305,6 +305,7 @@ public class LogReplayerImpl implements LogReplayer {
 						notEmpty.signal(); // resume waiting thread
 					} finally {
 						lock.unlock();
+						value.release();
 					}
 				}
 			} catch (InterruptedException e) {

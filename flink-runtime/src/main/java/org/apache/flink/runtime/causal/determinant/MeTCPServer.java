@@ -65,9 +65,9 @@ public class MeTCPServer{
             ServerBootstrap b = new ServerBootstrap();
             b.group(bossGroup, workerGroup);
             b.channel(EpollServerSocketChannel.class);
-            b.childHandler(new ChannelInitializer<SocketChannel>() {
+            b.childHandler(new ChannelInitializer<EpollSocketChannel>() {
                 @Override
-                public void initChannel(SocketChannel ch) throws Exception {
+                public void initChannel(EpollSocketChannel ch) throws Exception {
                     ch.pipeline().addLast(new SimpleChannelInboundHandler<ByteBuf>() {
 
                         @Override

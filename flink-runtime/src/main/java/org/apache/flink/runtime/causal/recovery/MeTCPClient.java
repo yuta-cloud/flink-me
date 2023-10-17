@@ -58,16 +58,16 @@ public class MeTCPClient{
             Bootstrap bootstrap = new Bootstrap();
             bootstrap.group(workerGroup);
             bootstrap.channel(EpollSocketChannel.class);
-            bootstrap.handler(new ChannelInitializer<SocketChannel>() {
+            bootstrap.handler(new ChannelInitializer<EpollSocketChannel>() {
                 @Override
-                public void initChannel(SocketChannel ch) throws Exception {
+                public void initChannel(EpollSocketChannel ch) throws Exception {
                     ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, 4, 0, 4));
                     ch.pipeline().addLast(new SimpleChannelInboundHandler<ByteBuf>() {
 
                         @Override
                         protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg) throws Exception {
                             // Put ByteBuf to BlockingQueue
-                            queue.put(msg.retainedDuplicate());
+                            queue.put(msg.copy());
                             // msg.release();
                         }
                     });

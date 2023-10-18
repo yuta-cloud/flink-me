@@ -35,6 +35,8 @@ import org.apache.flink.shaded.netty4.io.netty.channel.socket.nio.*;
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 
 import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.List;
 
 public class MeTCPClient{
     //TODO: Must configurable
@@ -95,7 +97,7 @@ public class MeTCPClient{
                     i--;
                 }
             }
-            
+
             for (Channel channel : channels) {
                 channel.closeFuture().sync();
             }

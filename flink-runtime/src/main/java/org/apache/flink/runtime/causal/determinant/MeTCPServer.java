@@ -31,14 +31,15 @@ import org.apache.flink.shaded.netty4.io.netty.bootstrap.*;
 import org.apache.flink.shaded.netty4.io.netty.buffer.*;
 import org.apache.flink.shaded.netty4.io.netty.channel.*;
 import org.apache.flink.shaded.netty4.io.netty.channel.nio.*;
-import org.apache.flink.shaded.netty4.io.netty.channel.epoll.*;
-import org.apache.flink.shaded.netty4.io.netty.channel.socket.*;
 import org.apache.flink.shaded.netty4.io.netty.channel.socket.nio.*;
 import org.apache.flink.shaded.netty4.io.netty.channel.group.DefaultChannelGroup;
 import org.apache.flink.shaded.netty4.io.netty.channel.group.ChannelGroup;
 import org.apache.flink.shaded.netty4.io.netty.channel.unix.UnixChannelOption;
 import org.apache.flink.shaded.netty4.io.netty.util.concurrent.GlobalEventExecutor;
 import org.apache.flink.shaded.netty4.io.netty.util.CharsetUtil;
+import org.apache.flink.shaded.netty4.io.netty.channel.epoll.EpollSocketChannel;
+import org.apache.flink.shaded.netty4.io.netty.channel.socket.SocketChannel;
+import org.apache.flink.shaded.netty4.io.netty.channel.epoll.EpollEventLoopGroup;
 import java.util.concurrent.*;
 
 public class MeTCPServer{
@@ -65,9 +66,9 @@ public class MeTCPServer{
             ServerBootstrap b = new ServerBootstrap();
             b.group(bossGroup, workerGroup);
             b.channel(EpollServerSocketChannel.class);
-            b.childHandler(new ChannelInitializer<EpollSocketChannel>() {
+            b.childHandler(new ChannelInitializer<SocketChannel>() {
                 @Override
-                public void initChannel(EpollSocketChannel ch) throws Exception {
+                public void initChannel(SocketChannel ch) throws Exception {
                     ch.pipeline().addLast(new SimpleChannelInboundHandler<ByteBuf>() {
 
                         @Override

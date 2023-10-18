@@ -88,7 +88,7 @@ public class MeTCPClient{
 
            List<Channel> channels = new ArrayList<>();
 
-            for (int i = 0; i < 2; i++) {
+            for (int i = 0; i < 1; i++) {
                 ChannelFuture future = bootstrap.connect(serverAddr, serverPort).sync();
                 if (future.isSuccess()) {
                     channels.add(future.channel());

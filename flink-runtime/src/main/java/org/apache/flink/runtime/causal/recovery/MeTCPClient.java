@@ -76,11 +76,30 @@ public class MeTCPClient{
 
             });
 
+            /*
             // Start the client.
             ChannelFuture f = bootstrap.connect(serverAddr, serverPort).sync(); // Use the correct IP and port
 
             // Wait until the connection is closed.
             f.channel().closeFuture().sync();
+            */
+
+           List<Channel> channels = new ArrayList<>();
+
+            for (int i = 0; i < 2; i++) {
+                ChannelFuture future = bootstrap.connect(serverAddr, serverPort).sync();
+                if (future.isSuccess()) {
+                    channels.add(future.channel());
+                    System.out.println("Connected to server " + (i + 1));
+                } else {
+                    i--;
+                }
+            }
+            
+            for (Channel channel : channels) {
+                channel.closeFuture().sync();
+            }
+
         } catch (InterruptedException e) {
             e.printStackTrace();
         }finally {

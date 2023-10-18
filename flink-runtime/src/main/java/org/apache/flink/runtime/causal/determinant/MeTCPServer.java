@@ -40,6 +40,7 @@ import org.apache.flink.shaded.netty4.io.netty.util.CharsetUtil;
 import org.apache.flink.shaded.netty4.io.netty.channel.epoll.EpollSocketChannel;
 import org.apache.flink.shaded.netty4.io.netty.channel.socket.SocketChannel;
 import org.apache.flink.shaded.netty4.io.netty.channel.epoll.EpollEventLoopGroup;
+import org.apache.flink.shaded.netty4.io.netty.channel.epoll.EpollChannelOption;
 import java.util.concurrent.*;
 
 public class MeTCPServer{

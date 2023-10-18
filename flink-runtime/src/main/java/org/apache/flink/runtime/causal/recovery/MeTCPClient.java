@@ -29,10 +29,10 @@ import org.apache.flink.shaded.netty4.io.netty.bootstrap.*;
 import org.apache.flink.shaded.netty4.io.netty.buffer.*;
 import org.apache.flink.shaded.netty4.io.netty.channel.*;
 import org.apache.flink.shaded.netty4.io.netty.channel.nio.*;
-import org.apache.flink.shaded.netty4.io.netty.channel.epoll.*;
-import org.apache.flink.shaded.netty4.io.netty.channel.socket.*;
-import org.apache.flink.shaded.netty4.io.netty.channel.socket.nio.*;
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.LengthFieldBasedFrameDecoder;
+import org.apache.flink.shaded.netty4.io.netty.channel.epoll.EpollSocketChannel;
+import org.apache.flink.shaded.netty4.io.netty.channel.socket.SocketChannel;
+import org.apache.flink.shaded.netty4.io.netty.channel.epoll.EpollEventLoopGroup;
 
 import java.util.concurrent.*;
 import java.util.ArrayList;
@@ -60,9 +60,9 @@ public class MeTCPClient{
             Bootstrap bootstrap = new Bootstrap();
             bootstrap.group(workerGroup);
             bootstrap.channel(EpollSocketChannel.class);
-            bootstrap.handler(new ChannelInitializer<EpollSocketChannel>() {
+            bootstrap.handler(new ChannelInitializer<SocketChannel>() {
                 @Override
-                public void initChannel(EpollSocketChannel ch) throws Exception {
+                public void initChannel(SocketChannel ch) throws Exception {
                     ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, 4, 0, 4));
                     ch.pipeline().addLast(new SimpleChannelInboundHandler<ByteBuf>() {
 

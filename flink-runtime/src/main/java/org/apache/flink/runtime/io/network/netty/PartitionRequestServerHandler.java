@@ -120,7 +120,8 @@ class PartitionRequestServerHandler extends SimpleChannelInboundHandler<NettyMes
 				TaskEventRequest request = (TaskEventRequest) msg;
 
 				if (!taskEventDispatcher.publish(request.partitionId, request.event)) {
-					respondWithError(ctx, new IllegalArgumentException("Task event receiver not found."), request.receiverId);
+					//Me ignore for killed task
+					//respondWithError(ctx, new IllegalArgumentException("Task event receiver not found."), request.receiverId);
 				}
 			} else if (msgClazz == CancelPartitionRequest.class) {
 				CancelPartitionRequest request = (CancelPartitionRequest) msg;

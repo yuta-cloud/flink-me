@@ -62,6 +62,8 @@ public class WaitingConnectionsState extends AbstractState{
 		}
 
 		logInfoWithVertexID("Waiting for new connections!");
+		//ME add this code for no connection and no state app
+		maybeGoToWaitingDeterminantsState();
 	}
 
 

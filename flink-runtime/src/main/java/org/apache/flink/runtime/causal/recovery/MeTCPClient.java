@@ -25,14 +25,17 @@
 
 package org.apache.flink.runtime.causal.recovery;
 
-import org.apache.flink.shaded.netty4.io.netty.bootstrap.*;
-import org.apache.flink.shaded.netty4.io.netty.buffer.*;
-import org.apache.flink.shaded.netty4.io.netty.channel.*;
-import org.apache.flink.shaded.netty4.io.netty.channel.nio.*;
-import org.apache.flink.shaded.netty4.io.netty.handler.codec.LengthFieldBasedFrameDecoder;
-import org.apache.flink.shaded.netty4.io.netty.channel.epoll.EpollSocketChannel;
-import org.apache.flink.shaded.netty4.io.netty.channel.socket.SocketChannel;
-import org.apache.flink.shaded.netty4.io.netty.channel.epoll.EpollEventLoopGroup;
+import io.netty.bootstrap.*;
+import io.netty.buffer.*;
+import io.netty.channel.*;
+import io.netty.channel.nio.*;
+import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
+import io.netty.channel.epoll.EpollSocketChannel;
+import io.netty.channel.socket.SocketChannel;
+import io.netty.channel.epoll.EpollEventLoopGroup;
+import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
+import org.apache.flink.shaded.netty4.io.netty.buffer.Unpooled;
+
 
 import java.util.concurrent.*;
 import java.util.ArrayList;
@@ -42,10 +45,10 @@ public class MeTCPClient{
     //TODO: Must configurable
     private final int serverPort; //TCP server port
     private final String serverAddr; //TCP server addr
-    private final BlockingQueue<ByteBuf> queue;
+    private final BlockingQueue<org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf> queue;
     private final MeConfig config;
 
-    public MeTCPClient(BlockingQueue<ByteBuf> queue, MeConfig config){
+    public MeTCPClient(BlockingQueue<org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf> queue, MeConfig config){
         this.queue = queue;
         this.config = config;
         serverAddr = config.getServerAddr();
@@ -64,12 +67,18 @@ public class MeTCPClient{
                 @Override
                 public void initChannel(SocketChannel ch) throws Exception {
                     ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, 4, 0, 4));
-                    ch.pipeline().addLast(new SimpleChannelInboundHandler<ByteBuf>() {
+                    ch.pipeline().addLast(new SimpleChannelInboundHandler<io.netty.buffer.ByteBuf>() {
 
                         @Override
-                        protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg) throws Exception {
+                        protected void channelRead0(ChannelHandlerContext ctx, io.netty.buffer.ByteBuf msg) throws Exception {
                             // Put ByteBuf to BlockingQueue
-                            ByteBuf copiedMsg = msg.copy();
+                            //io.netty.buffer.ByteBuf copiedMsg = msg.copy();
+                            org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf copiedMsg = org.apache.flink.shaded.netty4.io.netty.buffer.Unpooled.buffer();
+                            if (msg.isReadable()) {
+                                byte[] data = new byte[msg.readableBytes()];
+                                msg.readBytes(data);
+                                copiedMsg.writeBytes(data);
+                            }
                             queue.put(copiedMsg);
                             //msg.release();
                         }

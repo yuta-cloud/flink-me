@@ -27,21 +27,23 @@ package org.apache.flink.runtime.causal.determinant;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.apache.flink.shaded.netty4.io.netty.bootstrap.*;
-import org.apache.flink.shaded.netty4.io.netty.buffer.*;
-import org.apache.flink.shaded.netty4.io.netty.channel.*;
-import org.apache.flink.shaded.netty4.io.netty.channel.nio.*;
-import org.apache.flink.shaded.netty4.io.netty.channel.socket.nio.*;
-import org.apache.flink.shaded.netty4.io.netty.channel.group.DefaultChannelGroup;
-import org.apache.flink.shaded.netty4.io.netty.channel.group.ChannelGroup;
-import org.apache.flink.shaded.netty4.io.netty.channel.unix.UnixChannelOption;
-import org.apache.flink.shaded.netty4.io.netty.util.concurrent.GlobalEventExecutor;
-import org.apache.flink.shaded.netty4.io.netty.util.CharsetUtil;
-import org.apache.flink.shaded.netty4.io.netty.channel.epoll.EpollSocketChannel;
-import org.apache.flink.shaded.netty4.io.netty.channel.epoll.EpollServerSocketChannel;
-import org.apache.flink.shaded.netty4.io.netty.channel.socket.SocketChannel;
-import org.apache.flink.shaded.netty4.io.netty.channel.epoll.EpollEventLoopGroup;
-import org.apache.flink.shaded.netty4.io.netty.channel.epoll.EpollChannelOption;
+import io.netty.bootstrap.*;
+import io.netty.buffer.*;
+import io.netty.channel.*;
+import io.netty.channel.nio.*;
+import io.netty.channel.socket.nio.*;
+import io.netty.channel.group.DefaultChannelGroup;
+import io.netty.channel.group.ChannelGroup;
+import io.netty.channel.unix.UnixChannelOption;
+import io.netty.util.concurrent.GlobalEventExecutor;
+import io.netty.util.CharsetUtil;
+import io.netty.channel.epoll.EpollSocketChannel;
+import io.netty.channel.epoll.EpollServerSocketChannel;
+import io.netty.channel.socket.SocketChannel;
+import io.netty.channel.epoll.EpollEventLoopGroup;
+import io.netty.channel.epoll.EpollChannelOption;
+import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
+
 import java.util.concurrent.*;
 
 public class MeTCPServer{
@@ -52,11 +54,11 @@ public class MeTCPServer{
     //TODO: Must configurable
     private final int port = 7000; //TCP server porta
     private static final ChannelGroup channels = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE); //All Follower Channel
-    private BlockingQueue<ByteBuf> queue; //Master BlockingQueue
+    private BlockingQueue<org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf> queue; //Master BlockingQueue
     private int firstClient = 0;
     private final int meNum = 2;
 
-    public MeTCPServer(BlockingQueue<ByteBuf> queue){
+    public MeTCPServer(BlockingQueue<org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf> queue){
         this.queue = queue;
     }
     
@@ -113,7 +115,7 @@ public class MeTCPServer{
     public void processQueue() {
         try {
             while (true) {
-                ByteBuf data = queue.take();
+                org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf data = queue.take();
                 //channels.writeAndFlush(data.retainedDuplicate());
                 for (Channel channel : channels) {
                     channel.writeAndFlush(data.retainedDuplicate());

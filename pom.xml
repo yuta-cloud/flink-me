@@ -274,6 +274,12 @@ under the License.
 				<version>4.1.24.Final-${flink.shaded.version}</version>
 			</dependency>
 
+			<dependency>
+				<groupId>io.netty</groupId>
+				<artifactId>netty-all</artifactId>
+				<version>4.1.24.Final</version>
+			</dependency>
+
 			<!-- This manages the 'javax.annotation' annotations (JSR305) -->
 			<dependency>
 				<groupId>com.google.code.findbugs</groupId>

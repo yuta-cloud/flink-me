@@ -84,6 +84,10 @@ under the License.
 			<artifactId>flink-shaded-netty</artifactId>
 		</dependency>
 		<dependency>
+			<groupId>io.netty</groupId>
+			<artifactId>netty-all</artifactId>
+		</dependency>
+		<dependency>
 			<groupId>org.apache.flink</groupId>
 			<artifactId>flink-shaded-guava</artifactId>
 		</dependency>

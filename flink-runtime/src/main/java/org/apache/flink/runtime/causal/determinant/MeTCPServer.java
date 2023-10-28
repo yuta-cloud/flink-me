@@ -116,9 +116,15 @@ public class MeTCPServer{
         try {
             while (true) {
                 org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf data = queue.take();
+                io.netty.buffer.ByteBuf copiedMsg = io.netty.buffer.Unpooled.buffer();
+                if (data.isReadable()) {
+                    byte[] data_b = new byte[data.readableBytes()];
+                    data.readBytes(data_b);
+                    copiedMsg.writeBytes(data_b);
+                }
                 //channels.writeAndFlush(data.retainedDuplicate());
                 for (Channel channel : channels) {
-                    channel.writeAndFlush(data.retainedDuplicate());
+                    channel.writeAndFlush(copiedMsg);
                 }
             }
         } catch (InterruptedException e) {

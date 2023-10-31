@@ -56,7 +56,7 @@ public class MeTCPServer{
     private static final ChannelGroup channels = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE); //All Follower Channel
     private BlockingQueue<org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf> queue; //Master BlockingQueue
     private int firstClient = 0;
-    private final int meNum = 2;
+    private final int meNum = 1;
 
     public MeTCPServer(BlockingQueue<org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf> queue){
         this.queue = queue;

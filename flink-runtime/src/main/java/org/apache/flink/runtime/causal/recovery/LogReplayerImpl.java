@@ -40,6 +40,11 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 import java.io.Serializable;
+import java.io.*;
+import java.util.*;
+import java.util.concurrent.*;
+import java.net.*;
+import org.json.*;
 
 public class LogReplayerImpl implements LogReplayer {
 
@@ -52,13 +57,16 @@ public class LogReplayerImpl implements LogReplayer {
 	private final int CAUSAL_BUFFER_SIZE = 104857600; //リーダから受信するCausal Logのバッファサイズ (10 MB)
 	private final int TIMEOUT = 200;
 	private final int FIRST_READ = 200;
+	private final String MULTI_ADDRESS = "224.0.0.0";
+    private final int PORT = 6000;
+	private final int LENGTH = 1024;
 	private int firstRead = 0;
 
 	// Use ReentrantLock for guaranteeing wait order
 	private final Lock lock = new ReentrantLock(); 
 	private final Condition notEmpty = lock.newCondition();
 	
-	private final Thread tcpClient;
+	private Thread tcpClient;
 	private final BlockingQueue<ByteBuf> queue = new LinkedBlockingQueue<>(); //wait queue for leader causal logs
 	private Thread waitCausalLog;
 	final MeConfig meConfig = new MeConfig();
@@ -70,6 +78,7 @@ public class LogReplayerImpl implements LogReplayer {
 
 	private boolean done;
 	private boolean checkFlag;
+	private InetAddress localAddr;
 
 	public LogReplayerImpl(ByteBuf log, RecoveryManagerContext recoveryManagerContext) {
 		this.context = recoveryManagerContext;
@@ -77,6 +86,11 @@ public class LogReplayerImpl implements LogReplayer {
 		this.log_before = log;
 		this.log = Unpooled.buffer(CAUSAL_BUFFER_SIZE);
 		this.determinantPool = new DeterminantPool();
+		try{
+			localAddr = InetAddress.getLocalHost();
+		} catch (UnknownHostException e) {
+                e.printStackTrace();
+        }
 		waitCausalLog = new Thread(() -> {new WaitCausalLog().run();});
 		tcpClient = new Thread(() -> {
             new MeTCPClient(queue, meConfig).run();
@@ -294,8 +308,17 @@ public class LogReplayerImpl implements LogReplayer {
 
 					//リーダがタイムアウトした場合
 					if(value == null){
-						LOG.info("Change status to RUNNING bacause of timeout");
-						checkFinishedMe();
+						LOG.info("Change status to PENDING bacause of timeout");
+						if(meConfig.getServerAddr().equals(localAddr.getHostAddress())){
+							LOG.info("This node will be Leader!");
+							checkFinishedMe();
+						}else{
+							LOG.info("This node will be Follower -> " + meConfig.getServerAddr());
+							tcpClient = new Thread(() -> {
+								new MeTCPClient(queue, meConfig).run();
+							});
+							tcpClient.start();
+						}
 						break;
 					}
 
@@ -312,6 +335,46 @@ public class LogReplayerImpl implements LogReplayer {
 				System.out.println("TCPWriter interrupted!");
 				//e.printStackTrace();
 			}
+		}
+	}
+
+	public class CheckHeartBeat implements Runnable{
+		private String serverAddr;
+		private int serverTerm;
+		private int status;
+		public void run(){
+			MulticastSocket socket = null;
+			try{
+            	socket = new MulticastSocket(PORT);
+            	InetAddress group = InetAddress.getByName(MULTI_ADDRESS);
+				socket.joinGroup(group);
+			
+
+				while(true){
+					byte[] buffer = new byte[LENGTH];
+					DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+					socket.receive(packet);
+					String message = new String(packet.getData(), 0, packet.getLength());
+					JSONObject json = new JSONObject(message);
+					if(json.isNull("ip") || json.isNull("term") || json.isNull("status")){
+						continue;
+					}
+					serverAddr = json.getString("ip");
+					serverTerm = json.getInt("term");
+					status = json.getInt("status");
+					if(status == 3 && !serverAddr.equals(localAddr.getHostAddress())){
+						meConfig.setServerAddr(serverAddr);
+					}
+				}
+			} catch (UnknownHostException e) {
+                e.printStackTrace();
+            } catch (SocketException e){
+                e.printStackTrace();
+            } catch (IOException e){
+                e.printStackTrace();
+            } finally {
+                if(socket != null)socket.close();
+            }
 		}
 	}
 }

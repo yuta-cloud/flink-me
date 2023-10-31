@@ -65,6 +65,10 @@ public class MeConfig implements Serializable {
 		return config.getBoolean(ME_LEADER);
 	}
 
+	public void setServerAddr(String newAddr){
+		config.setString(ME_SERVER_ADDR, newAddr);
+	}
+
 
 
 	@Override

@@ -88,6 +88,11 @@ under the License.
 			<artifactId>netty-all</artifactId>
 		</dependency>
 		<dependency>
+            <groupId>org.json</groupId>
+            <artifactId>json</artifactId>
+            <version>20230227</version>
+        </dependency>
+		<dependency>
 			<groupId>org.apache.flink</groupId>
 			<artifactId>flink-shaded-guava</artifactId>
 		</dependency>

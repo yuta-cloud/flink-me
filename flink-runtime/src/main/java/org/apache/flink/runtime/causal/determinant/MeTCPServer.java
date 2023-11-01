@@ -81,7 +81,7 @@ public class MeTCPServer{
                         protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg) throws Exception {
                             byte[] receivedData = new byte[msg.readableBytes()];
                             msg.readBytes(receivedData);
-                            LOG.debug("Receive " + Arrays.toString(receivedData)));
+                            LOG.debugs("Receive " + Arrays.toString(receivedData)));
                             if ("ACK".equals(Arrays.toString(receivedData))) {
                                 ackReceiver.receiveAck();
                             }

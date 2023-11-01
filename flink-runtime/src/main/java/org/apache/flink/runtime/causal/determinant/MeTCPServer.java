@@ -133,7 +133,7 @@ public class MeTCPServer{
                 }
                 //channels.writeAndFlush(data.retainedDuplicate());
                 for (Channel channel : channels) {
-                    channel.writeAndFlush(copiedMsg);
+                    channel.writeAndFlush(copiedMsg.retain());
                 }
             }
         } catch (InterruptedException e) {

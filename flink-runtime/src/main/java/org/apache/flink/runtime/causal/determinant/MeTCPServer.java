@@ -55,11 +55,13 @@ public class MeTCPServer{
     private final int port = 7000; //TCP server porta
     private static final ChannelGroup channels = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE); //All Follower Channel
     private BlockingQueue<org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf> queue; //Master BlockingQueue
+    private final AckReceiver ackReceiver;
     private int firstClient = 0;
     private final int meNum = 1;
 
-    public MeTCPServer(BlockingQueue<org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf> queue){
+    public MeTCPServer(BlockingQueue<org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf> queue, AckReceiver receiver){
         this.queue = queue;
+        this.ackReceiver = receiver;
     }
     
     public void run(){
@@ -77,7 +79,9 @@ public class MeTCPServer{
 
                         @Override
                         protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg) throws Exception {
-
+                            if ("ACK".equals(msg)) {
+                                ackReceiver.receiveAck();
+                            }
                         }
 
                         @Override

@@ -81,6 +81,7 @@ public class MeTCPClient{
                             }
                             queue.put(copiedMsg);
                             //msg.release();
+                            ctx.writeAndFlush("ACK\n");
                         }
                     });
                 }

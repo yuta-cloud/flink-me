@@ -32,12 +32,14 @@ import java.util.concurrent.*;
 
 public class SimpleDeterminantEncoder implements DeterminantEncoder {
 	private final BlockingQueue<ByteBuf> sendQueue; //Causal Log send queue
-
+	private final AckReceiver ackReceiver;
 	//Constractor for MeTCPServer
 	public SimpleDeterminantEncoder(){
+
 		sendQueue = new LinkedBlockingQueue<>();
+		ackReceiver = new AckReceiver();
 		Thread serverThread = new Thread(() -> {
-            new MeTCPServer(sendQueue).run();
+            new MeTCPServer(sendQueue, ackReceiver).run();
         });
         serverThread.start();
 	}
@@ -143,6 +145,11 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 		buf_me.writeByte(Determinant.ORDER_DETERMINANT_TAG);
 		buf_me.writeByte(orderDeterminant.getChannel());
 		sendQueue.add(buf_me);
+		try {
+            ackReceiver.waitForAck();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
 	}
 
 	private byte[] encodeOrderDeterminant(OrderDeterminant orderDeterminant) {
@@ -171,6 +178,11 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 		buf_me.writeByte(Determinant.TIMESTAMP_DETERMINANT_TAG);
 		buf_me.writeLong(timestampDeterminant.getTimestamp());
 		sendQueue.add(buf_me);
+		try {
+            ackReceiver.waitForAck();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
 	}
 
 	private byte[] encodeTimestampDeterminant(TimestampDeterminant timestampDeterminant) {
@@ -200,6 +212,11 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 		buf_me.writeByte(Determinant.RNG_DETERMINANT_TAG);
 		buf_me.writeInt(rngDeterminant.getNumber());
 		sendQueue.add(buf_me);
+		try {
+            ackReceiver.waitForAck();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
 	}
 
 	private byte[] encodeRNGDeterminant(RNGDeterminant rngDeterminant) {
@@ -229,6 +246,11 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 		buf_me.writeByte(Determinant.BUFFER_BUILT_TAG);
 		buf_me.writeInt(bufferBuiltDeterminant.getNumberOfBytes());
 		sendQueue.add(buf_me);
+		try {
+            ackReceiver.waitForAck();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
 	}
 
 	private byte[] encodeBufferBuiltDeterminant(BufferBuiltDeterminant bufferBuiltDeterminant) {
@@ -264,6 +286,11 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 			buf_me.writeBytes(id.getName().getBytes());
 		}
 		sendQueue.add(buf_me);
+		try {
+            ackReceiver.waitForAck();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
 	}
 
 	private byte[] encodeTimerTriggerDeterminant(TimerTriggerDeterminant determinant) {
@@ -324,6 +351,11 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 			buf_me.writeBytes(ref);
 		}
 		sendQueue.add(buf_me);
+		try {
+            ackReceiver.waitForAck();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
 	}
 
 	private byte[] encodeSourceCheckpointDeterminant(SourceCheckpointDeterminant det) {
@@ -369,6 +401,11 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 		buf_me.writeInt(det.getRecordCount());
 		buf_me.writeLong(det.getCheckpointID());
 		sendQueue.add(buf_me);
+		try {
+            ackReceiver.waitForAck();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
 	}
 
 	private byte[] encodeIgnoreCheckpointDeterminant(IgnoreCheckpointDeterminant det) {
@@ -408,6 +445,11 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 			ObjectOutputStream oos_me = new ObjectOutputStream(bbos_me);
 			oos_me.writeObject(serializableDeterminant.getDeterminant());
 			sendQueue.add(buf_me);
+			try {
+				ackReceiver.waitForAck();
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
 		}catch (Exception e){e.printStackTrace();}
 	}
 	private byte[] encodeSerializableDeterminant(SerializableDeterminant serializableDeterminant) {

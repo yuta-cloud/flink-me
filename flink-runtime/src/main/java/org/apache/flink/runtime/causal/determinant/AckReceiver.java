@@ -34,8 +34,14 @@ public class AckReceiver {
     private final Lock lock = new ReentrantLock();
     private final Condition receivedAck = lock.newCondition();
     private boolean ackReceived = false;
+    private int waitCount = 0;
+    private int ackCount = 0;
+    private final int firstCount = 10000;
 
     public void waitForAck() throws InterruptedException {
+        waitCount++;
+        if(waitCount < firstCount)
+            return;
         lock.lock();
         try {
             while (!ackReceived) {
@@ -47,6 +53,9 @@ public class AckReceiver {
         }
     }
     public void receiveAck() {
+        ackCount++;
+        if(ackCount < firstCount)
+            return;
         lock.lock();
         try {
             ackReceived = true;

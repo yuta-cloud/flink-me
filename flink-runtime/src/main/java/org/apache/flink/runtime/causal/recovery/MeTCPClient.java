@@ -48,6 +48,7 @@ public class MeTCPClient{
     private final String serverAddr; //TCP server addr
     private final BlockingQueue<org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf> queue;
     private final MeConfig config;
+    private static final List<Channel> channels = new ArrayList<>();
 
     public MeTCPClient(BlockingQueue<org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf> queue, MeConfig config){
         this.queue = queue;
@@ -82,7 +83,9 @@ public class MeTCPClient{
                             }
                             queue.put(copiedMsg);
                             //msg.release();
-                            ctx.writeAndFlush(Unpooled.copiedBuffer("ACK", CharsetUtil.UTF_8));
+                            for (Channel channel : channels) {
+                                channnel.writeAndFlush(Unpooled.copiedBuffer("ACK", CharsetUtil.UTF_8));
+                            }
                         }
                     });
                 }
@@ -97,7 +100,7 @@ public class MeTCPClient{
             f.channel().closeFuture().sync();
             */
 
-           List<Channel> channels = new ArrayList<>();
+
 
             for (int i = 0; i < 1; i++) {
                 ChannelFuture future = bootstrap.connect(serverAddr, serverPort).sync();

@@ -78,7 +78,7 @@ public class MeTCPServer{
                     ch.pipeline().addLast(new SimpleChannelInboundHandler<ByteBuf>() {
 
                         @Override
-                        protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg) throws Exception {
+                        protected void channelRead0(ChannelHandlerContext ctx, String msg) throws Exception {
                             if ("ACK".equals(msg)) {
                                 ackReceiver.receiveAck();
                             }

@@ -84,7 +84,7 @@ public class MeTCPClient{
                             queue.put(copiedMsg);
                             //msg.release();
                             for (Channel channel : channels) {
-                                channnel.writeAndFlush(Unpooled.copiedBuffer("ACK", CharsetUtil.UTF_8));
+                                channel.writeAndFlush(Unpooled.copiedBuffer("ACK", CharsetUtil.UTF_8));
                             }
                         }
                     });

@@ -33,6 +33,7 @@ import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.channel.epoll.EpollSocketChannel;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.epoll.EpollEventLoopGroup;
+import io.netty.util.CharsetUtil;
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
 import org.apache.flink.shaded.netty4.io.netty.buffer.Unpooled;
 

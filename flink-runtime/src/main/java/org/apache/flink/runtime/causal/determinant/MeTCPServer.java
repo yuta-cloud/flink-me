@@ -75,11 +75,14 @@ public class MeTCPServer{
             b.childHandler(new ChannelInitializer<SocketChannel>() {
                 @Override
                 public void initChannel(SocketChannel ch) throws Exception {
-                    ch.pipeline().addLast(new SimpleChannelInboundHandler<String>() {
+                    ch.pipeline().addLast(new SimpleChannelInboundHandler<ByteBuf>() {
 
                         @Override
-                        protected void channelRead0(ChannelHandlerContext ctx, String msg) throws Exception {
-                            if ("ACK".equals(msg)) {
+                        protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg) throws Exception {
+                            byte[] receivedData = new byte[msg.readableBytes()];
+                            msg.readBytes(receivedData);
+                            LOG.debug("Receive " + Arrays.toString(receivedData)));
+                            if ("ACK".equals(Arrays.toString(receivedData))) {
                                 ackReceiver.receiveAck();
                             }
                         }

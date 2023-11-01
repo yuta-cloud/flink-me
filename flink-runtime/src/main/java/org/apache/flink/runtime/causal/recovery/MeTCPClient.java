@@ -81,7 +81,7 @@ public class MeTCPClient{
                             }
                             queue.put(copiedMsg);
                             //msg.release();
-                            ctx.writeAndFlush("ACK");
+                            ctx.writeAndFlush(Unpooled.copiedBuffer("ACK", CharsetUtil.UTF_8));
                         }
                     });
                 }

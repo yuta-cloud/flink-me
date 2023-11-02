@@ -121,6 +121,7 @@ public class MeTCPServer{
     //send causal log to all client
     public void processQueue() {
         try {
+            int count = 0;
             while (true) {
                 org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf data = queue.take();
                 io.netty.buffer.ByteBuf copiedMsg = io.netty.buffer.Unpooled.buffer();
@@ -133,6 +134,8 @@ public class MeTCPServer{
                 for (Channel channel : channels) {
                     channel.writeAndFlush(copiedMsg.retain());
                 }
+                System.out.println("DeQueue N: " + count + "size: " + queue.size());
+                count++;
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

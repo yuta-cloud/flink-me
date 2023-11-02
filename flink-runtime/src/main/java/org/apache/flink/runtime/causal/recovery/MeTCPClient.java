@@ -87,7 +87,9 @@ public class MeTCPClient{
                             //msg.release();
                             ByteBuf buf = Unpooled.buffer(4);
                             buf.writeInt(vertexID);
-                            ctx.channel().writeAndFlush(buf);
+                            String[] remoteIp = ctx.channel().remoteAddress().toString().split("/");
+                            System.out.printf("[+]received(%s)", remoteIp[1]);
+                            ctx.writeAndFlush(buf);
                         }
                     });
                 }

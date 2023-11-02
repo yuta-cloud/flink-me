@@ -60,7 +60,7 @@ public class MeTCPServer{
     private BlockingQueue<org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf> queue; //Master BlockingQueue
     private final AckReceiver ackReceiver;
     private int firstClient = 0;
-    private final int meNum = 1;
+    private final int meNum = 2;
 
     public MeTCPServer(BlockingQueue<org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf> queue, AckReceiver receiver){
         this.queue = queue;
@@ -78,10 +78,10 @@ public class MeTCPServer{
             b.childHandler(new ChannelInitializer<SocketChannel>() {
                 @Override
                 public void initChannel(SocketChannel ch) throws Exception {
-                    ch.pipeline().addLast(new SimpleChannelInboundHandler<ByteBuf>() {
+                    ch.pipeline().addLast(new SimpleChannelInboundHandler<io.netty.buffer.ByteBuf>() {
 
                         @Override
-                        protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg) throws Exception {
+                        protected void channelRead0(ChannelHandlerContext ctx, io.netty.buffer.ByteBuf msg) throws Exception {
                             int id = msg.readInt();
                             System.out.println("ReceiveAck: " + id);
                             ackReceiver.receiveAck(id);

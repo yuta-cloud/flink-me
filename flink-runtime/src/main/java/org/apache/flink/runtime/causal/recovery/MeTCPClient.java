@@ -88,8 +88,20 @@ public class MeTCPClient{
                             ByteBuf buf = Unpooled.buffer(4);
                             buf.writeInt(vertexID);
                             String[] remoteIp = ctx.channel().remoteAddress().toString().split("/");
-                            System.out.printf("[+]received(%s): %d", remoteIp[1], vertexID);
-                            channel.writeAndFlush(buf);
+                            ChannelFuture future = ctx.writeAndFlush(data);
+                            future.addListener(new ChannelFutureListener() {
+                                @Override
+                                public void operationComplete(ChannelFuture future) throws Exception {
+                                    if (future.isSuccess()) {
+                                        System.out.println("Message was successfully sent!");
+                                    } else {
+                                        System.out.println("Failed to send message");
+                                        if (future.cause() != null) {
+                                            future.cause().printStackTrace();
+                                        }
+                                    }
+                                }
+                            });
                         }
                     });
                 }

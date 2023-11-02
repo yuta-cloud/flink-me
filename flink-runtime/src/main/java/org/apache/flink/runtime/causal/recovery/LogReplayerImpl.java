@@ -51,7 +51,7 @@ public class LogReplayerImpl implements LogReplayer {
 	private final ByteBuf log_before;
 	private final int CAUSAL_BUFFER_SIZE = 104857600; //リーダから受信するCausal Logのバッファサイズ (10 MB)
 	private final int TIMEOUT = 200;
-	private final int FIRST_READ = 200;
+	private final int FIRST_READ = 10010;
 	private int firstRead = 0;
 
 	// Use ReentrantLock for guaranteeing wait order

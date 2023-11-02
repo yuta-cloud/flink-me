@@ -88,7 +88,7 @@ public class MeTCPClient{
                             ByteBuf buf = Unpooled.buffer(4);
                             buf.writeInt(vertexID);
                             String[] remoteIp = ctx.channel().remoteAddress().toString().split("/");
-                            ChannelFuture future = ctx.writeAndFlush(data);
+                            ChannelFuture future = ctx.writeAndFlush(buf);
                             future.addListener(new ChannelFutureListener() {
                                 @Override
                                 public void operationComplete(ChannelFuture future) throws Exception {

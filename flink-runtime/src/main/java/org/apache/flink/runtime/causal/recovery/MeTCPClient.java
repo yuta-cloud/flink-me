@@ -49,7 +49,7 @@ public class MeTCPClient{
     private final BlockingQueue<org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf> queue;
     private final MeConfig config;
     private final int vertexID;
-    private static final List<Channel> channels = new ArrayList<>();
+    private static final Channel channel;
 
     public MeTCPClient(BlockingQueue<org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf> queue, MeConfig config, int vertexID){
         this.queue = queue;
@@ -88,24 +88,22 @@ public class MeTCPClient{
                             ByteBuf buf = Unpooled.buffer(4);
                             buf.writeInt(vertexID);
                             String[] remoteIp = ctx.channel().remoteAddress().toString().split("/");
-                            System.out.printf("[+]received(%s)", remoteIp[1]);
-                            ctx.writeAndFlush(buf);
+                            System.out.printf("[+]received(%s): %d", remoteIp[1], vertexID);
+                            channel.writeAndFlush(buf);
                         }
                     });
                 }
 
             });
 
-            /*
             // Start the client.
             ChannelFuture f = bootstrap.connect(serverAddr, serverPort).sync(); // Use the correct IP and port
-
+            channel = f.channel();
             // Wait until the connection is closed.
-            f.channel().closeFuture().sync();
-            */
+            channel.closeFuture().sync();
 
 
-
+            /*
             for (int i = 0; i < 1; i++) {
                 ChannelFuture future = bootstrap.connect(serverAddr, serverPort).sync();
                 if (future.isSuccess()) {
@@ -119,6 +117,7 @@ public class MeTCPClient{
             for (Channel channel : channels) {
                 channel.closeFuture().sync();
             }
+            */
 
         } catch (InterruptedException e) {
             e.printStackTrace();

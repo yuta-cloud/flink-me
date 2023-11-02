@@ -83,7 +83,7 @@ public class MeTCPServer{
                         @Override
                         protected void channelRead0(ChannelHandlerContext ctx, io.netty.buffer.ByteBuf msg) throws Exception {
                             int id = msg.readInt();
-                            System.out.println("ReceiveAck: " + id);
+                            //System.out.println("ReceiveAck: " + id);
                             ackReceiver.receiveAck(id);
                         }
 
@@ -104,8 +104,8 @@ public class MeTCPServer{
 
                     });
                 }
-            });
-            //.option(EpollChannelOption.SO_REUSEPORT, true);
+            })
+            .option(EpollChannelOption.SO_REUSEPORT, true);
 
             ChannelFuture f = b.bind(port).sync();  // Bind and start to accept incoming connections.
 

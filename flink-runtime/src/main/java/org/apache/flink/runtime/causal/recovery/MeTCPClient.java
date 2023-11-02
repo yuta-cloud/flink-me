@@ -88,6 +88,8 @@ public class MeTCPClient{
                             io.netty.buffer.ByteBuf buf = io.netty.buffer.Unpooled.buffer(4);
                             buf.writeInt(vertexID);
                             String[] remoteIp = ctx.channel().remoteAddress().toString().split("/");
+                            ctx.writeAndFlush(buf);
+                            /*
                             ChannelFuture future = ctx.writeAndFlush(buf);
                             future.addListener(new ChannelFutureListener() {
                                 @Override
@@ -102,6 +104,7 @@ public class MeTCPClient{
                                     }
                                 }
                             });
+                            */
                         }
                     });
                 }

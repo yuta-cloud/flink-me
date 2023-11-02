@@ -48,11 +48,13 @@ public class MeTCPClient{
     private final String serverAddr; //TCP server addr
     private final BlockingQueue<org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf> queue;
     private final MeConfig config;
+    private final int vertexID;
     private static final List<Channel> channels = new ArrayList<>();
 
-    public MeTCPClient(BlockingQueue<org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf> queue, MeConfig config){
+    public MeTCPClient(BlockingQueue<org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf> queue, MeConfig config, int vertexID){
         this.queue = queue;
         this.config = config;
+        this.vertexID = vertexID;
         serverAddr = config.getServerAddr();
         serverPort = config.getServerPort();
     }
@@ -83,9 +85,9 @@ public class MeTCPClient{
                             }
                             queue.put(copiedMsg);
                             //msg.release();
-                            for (Channel channel : channels) {
-                                channel.writeAndFlush(Unpooled.copiedBuffer("ACK", CharsetUtil.UTF_8));
-                            }
+                            ByteBuf buf = Unpooled.buffer(4);
+                            buf.writeInt(vertexID);
+                            ctx.channel().writeAndFlush(buf);
                         }
                     });
                 }

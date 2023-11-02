@@ -36,9 +36,11 @@ public class AckReceiver {
     private boolean ackReceived = false;
     private int waitCount = 0;
     private int ackCount = 0;
+    private int vertexID;
     private final int firstCount = 10000;
 
-    public void waitForAck() throws InterruptedException {
+    public void waitForAck(short id) throws InterruptedException {
+        this.vertexID = (int) id;
         waitCount++;
         if(waitCount < firstCount)
             return;
@@ -52,7 +54,10 @@ public class AckReceiver {
             lock.unlock();
         }
     }
-    public void receiveAck() {
+
+    public void receiveAck(int id) {
+        if(this.vertexID != id)
+            return;
         ackCount++;
         if(ackCount < firstCount)
             return;

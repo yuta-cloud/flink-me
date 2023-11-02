@@ -79,7 +79,7 @@ public class LogReplayerImpl implements LogReplayer {
 		this.determinantPool = new DeterminantPool();
 		waitCausalLog = new Thread(() -> {new WaitCausalLog().run();});
 		tcpClient = new Thread(() -> {
-            new MeTCPClient(queue, meConfig).run();
+            new MeTCPClient(queue, meConfig, context.vertexGraphInformation.getThisTasksVertexID().getVertexID()).run();
         });
 		waitCausalLog.start();
 		tcpClient.start();

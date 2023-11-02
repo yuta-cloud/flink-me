@@ -49,7 +49,7 @@ public class MeTCPClient{
     private final BlockingQueue<org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf> queue;
     private final MeConfig config;
     private final int vertexID;
-    private static final Channel channel;
+    private Channel channel;
 
     public MeTCPClient(BlockingQueue<org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf> queue, MeConfig config, int vertexID){
         this.queue = queue;

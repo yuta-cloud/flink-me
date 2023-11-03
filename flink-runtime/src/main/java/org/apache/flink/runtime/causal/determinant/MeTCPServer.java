@@ -61,6 +61,7 @@ public class MeTCPServer{
     private final AckReceiver ackReceiver;
     private int firstClient = 0;
     private final int meNum = 2;
+    private final Object mutex = new Object();
 
     public MeTCPServer(BlockingQueue<org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf> queue, AckReceiver receiver){
         this.queue = queue;
@@ -87,7 +88,9 @@ public class MeTCPServer{
                             for(int i = 0; i < msg_size; i++){
                                 int id = msg.readInt();
                                 //System.out.println("ReceiveAck: " + id);
-                                ackReceiver.receiveAck(id);
+                                synchronized (mutex) {
+                                    ackReceiver.receiveAck(id);
+                                }
                             }
                         }
 

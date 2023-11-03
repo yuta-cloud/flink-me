@@ -58,11 +58,11 @@ public class AckReceiver {
     }
 
     public void receiveAck(int id) {
-        System.out.println("receive ack: " + ackCount + " id: " + id + " thisID: " + vertexID);
+        //System.out.println("receive ack: " + ackCount + " id: " + id + " thisID: " + vertexID);
         if(this.vertexID != id)
             return;
         ackCount++;
-        System.out.println("receive2 ack: " + waitCount + " id: " + id);
+        //System.out.println("receive2 ack: " + waitCount + " id: " + id);
         if(ackCount < firstCount)
             return;
         lock.lock();

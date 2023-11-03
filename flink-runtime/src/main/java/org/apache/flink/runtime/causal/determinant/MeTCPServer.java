@@ -82,6 +82,7 @@ public class MeTCPServer{
 
                         @Override
                         protected void channelRead0(ChannelHandlerContext ctx, io.netty.buffer.ByteBuf msg) throws Exception {
+                            System.out.println("ReceiveSize: " + msg.readableBytes());
                             int id = msg.readInt();
                             //System.out.println("ReceiveAck: " + id);
                             ackReceiver.receiveAck(id);

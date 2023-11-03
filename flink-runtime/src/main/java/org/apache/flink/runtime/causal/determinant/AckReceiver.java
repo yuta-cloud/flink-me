@@ -28,6 +28,8 @@ package org.apache.flink.runtime.causal.determinant;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.Condition;
+import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
+import java.util.concurrent.*;
 
 public class AckReceiver {
 
@@ -43,12 +45,12 @@ public class AckReceiver {
         waitCount++;
         System.out.println("wait ack: " + waitCount + " id: " + id);
         if(waitCount < firstCount){
-            sendQueue.add(buf_me);
+            sendQueue.add(buf);
             return;
         }
         lock.lock();
         try {
-            sendQueue.add(buf_me);
+            sendQueue.add(buf);
             this.vertexID = (int) id;
             while (!ackReceived) {
                 receivedAck.await();

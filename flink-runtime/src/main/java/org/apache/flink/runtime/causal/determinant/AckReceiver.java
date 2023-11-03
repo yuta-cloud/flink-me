@@ -30,6 +30,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.Condition;
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
 import java.util.concurrent.*;
+import org.apache.flink.runtime.causal.recovery.MeConfig;
 
 public class AckReceiver {
 
@@ -40,8 +41,13 @@ public class AckReceiver {
     private int ackCount = 0;
     private int vertexID;
     private final int firstCount = 10000;
+    final MeConfig meConfig = new MeConfig();
 
     public void waitForAck(short id, BlockingQueue<ByteBuf> sendQueue, ByteBuf buf) throws InterruptedException {
+        if (!meConfig.isLeader()){
+            sendQueue.add(buf);
+            return;
+        }
         waitCount++;
         //System.out.println("wait ack: " + waitCount + " id: " + id);
         if(waitCount < firstCount){

@@ -43,7 +43,7 @@ public class AckReceiver {
 
     public void waitForAck(short id, BlockingQueue<ByteBuf> sendQueue, ByteBuf buf) throws InterruptedException {
         waitCount++;
-        System.out.println("wait ack: " + waitCount + " id: " + id);
+        //System.out.println("wait ack: " + waitCount + " id: " + id);
         if(waitCount < firstCount){
             sendQueue.add(buf);
             return;
@@ -55,7 +55,7 @@ public class AckReceiver {
             while (!ackReceived) {
                 receivedAck.await();
             }
-            System.out.println("release lock: " + waitCount + " id: " + id);
+            //System.out.println("release lock: " + waitCount + " id: " + id);
             ackReceived = false;
         } finally {
             lock.unlock();
@@ -64,7 +64,7 @@ public class AckReceiver {
 
     public void receiveAck(int id) {
         ackCount++;
-        System.out.println("receive ack: " + ackCount + " id: " + id);
+        //System.out.println("receive ack: " + ackCount + " id: " + id);
         if(ackCount < firstCount * 2 - 1)
             return;
         if(this.vertexID != id)

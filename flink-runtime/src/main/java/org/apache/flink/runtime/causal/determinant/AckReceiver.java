@@ -59,7 +59,7 @@ public class AckReceiver {
 
     public void receiveAck(int id) {
         ackCount++;
-        System.out.println("receive ack: " + ackCount + " id: " + id);
+        //System.out.println("receive ack: " + ackCount + " id: " + id);
         if(ackCount < firstCount * 2 - 1)
             return;
         if(this.vertexID != id)

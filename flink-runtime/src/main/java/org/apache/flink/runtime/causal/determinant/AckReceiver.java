@@ -43,13 +43,13 @@ public class AckReceiver {
     private final int firstCount = 10000;
     final MeConfig meConfig = new MeConfig();
 
-    public void waitForAck(short id, BlockingQueue<ByteBuf> sendQueue, ByteBuf buf) throws InterruptedException {
+    public synchronized void waitForAck(short id, BlockingQueue<ByteBuf> sendQueue, ByteBuf buf) throws InterruptedException {
         if (!meConfig.isLeader()){
             sendQueue.add(buf);
             return;
         }
         waitCount++;
-        //System.out.println("wait ack: " + waitCount + " id: " + id);
+        System.out.println("wait ack: " + waitCount + " id: " + id);
         if(waitCount < firstCount){
             sendQueue.add(buf);
             return;
@@ -61,7 +61,7 @@ public class AckReceiver {
             while (!ackReceived) {
                 receivedAck.await();
             }
-            //System.out.println("release lock: " + waitCount + " id: " + id);
+            System.out.println("release lock: " + waitCount + " id: " + id);
             ackReceived = false;
         } finally {
             lock.unlock();

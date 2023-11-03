@@ -144,9 +144,9 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 		buf_me.writeShort(vertexID);
 		buf_me.writeByte(Determinant.ORDER_DETERMINANT_TAG);
 		buf_me.writeByte(orderDeterminant.getChannel());
-		sendQueue.add(buf_me);
+		//sendQueue.add(buf_me);
 		try {
-            ackReceiver.waitForAck(vertexID);
+            ackReceiver.waitForAck(vertexID, sendQueue, buf_me);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
@@ -177,9 +177,9 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 		buf_me.writeShort(vertexID);
 		buf_me.writeByte(Determinant.TIMESTAMP_DETERMINANT_TAG);
 		buf_me.writeLong(timestampDeterminant.getTimestamp());
-		sendQueue.add(buf_me);
+		//sendQueue.add(buf_me);
 		try {
-            ackReceiver.waitForAck(vertexID);
+            ackReceiver.waitForAck(vertexID, sendQueue, buf_me);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
@@ -211,9 +211,9 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 		buf_me.writeShort(vertexID);
 		buf_me.writeByte(Determinant.RNG_DETERMINANT_TAG);
 		buf_me.writeInt(rngDeterminant.getNumber());
-		sendQueue.add(buf_me);
+		//sendQueue.add(buf_me);
 		try {
-            ackReceiver.waitForAck(vertexID);
+            ackReceiver.waitForAck(vertexID, sendQueue, buf_me);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
@@ -245,9 +245,9 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 		buf_me.writeShort(vertexID);
 		buf_me.writeByte(Determinant.BUFFER_BUILT_TAG);
 		buf_me.writeInt(bufferBuiltDeterminant.getNumberOfBytes());
-		sendQueue.add(buf_me);
+		//sendQueue.add(buf_me);
 		try {
-            ackReceiver.waitForAck(vertexID);
+            ackReceiver.waitForAck(vertexID, sendQueue, buf_me);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
@@ -285,9 +285,9 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 			buf_me.writeInt(id.getName().getBytes().length);
 			buf_me.writeBytes(id.getName().getBytes());
 		}
-		sendQueue.add(buf_me);
+		//sendQueue.add(buf_me);
 		try {
-            ackReceiver.waitForAck(vertexID);
+            ackReceiver.waitForAck(vertexID, sendQueue, buf_me);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
@@ -350,9 +350,9 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 			buf_me.writeInt(ref.length);
 			buf_me.writeBytes(ref);
 		}
-		sendQueue.add(buf_me);
+		//sendQueue.add(buf_me);
 		try {
-            ackReceiver.waitForAck(vertexID);
+            ackReceiver.waitForAck(vertexID, sendQueue, buf_me);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
@@ -400,9 +400,9 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 		buf_me.writeByte(Determinant.IGNORE_CHECKPOINT_DETERMINANT);
 		buf_me.writeInt(det.getRecordCount());
 		buf_me.writeLong(det.getCheckpointID());
-		sendQueue.add(buf_me);
+		//sendQueue.add(buf_me);
 		try {
-            ackReceiver.waitForAck(vertexID);
+            ackReceiver.waitForAck(vertexID, sendQueue, buf_me);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
@@ -444,9 +444,9 @@ public class SimpleDeterminantEncoder implements DeterminantEncoder {
 			ByteBufOutputStream bbos_me = new ByteBufOutputStream(buf_me);
 			ObjectOutputStream oos_me = new ObjectOutputStream(bbos_me);
 			oos_me.writeObject(serializableDeterminant.getDeterminant());
-			sendQueue.add(buf_me);
+			//sendQueue.add(buf_me);
 			try {
-				ackReceiver.waitForAck(vertexID);
+				ackReceiver.waitForAck(vertexID, sendQueue, buf_me);
 			} catch (InterruptedException e) {
 				e.printStackTrace();
 			}

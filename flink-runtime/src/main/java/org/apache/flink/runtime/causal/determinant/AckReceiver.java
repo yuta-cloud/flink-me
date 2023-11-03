@@ -39,13 +39,16 @@ public class AckReceiver {
     private int vertexID;
     private final int firstCount = 10000;
 
-    public void waitForAck(short id) throws InterruptedException {
+    public void waitForAck(short id, BlockingQueue<ByteBuf> sendQueue, ByteBuf buf) throws InterruptedException {
         waitCount++;
         System.out.println("wait ack: " + waitCount + " id: " + id);
-        if(waitCount < firstCount)
+        if(waitCount < firstCount){
+            sendQueue.add(buf_me);
             return;
+        }
         lock.lock();
         try {
+            sendQueue.add(buf_me);
             this.vertexID = (int) id;
             while (!ackReceived) {
                 receivedAck.await();
@@ -59,7 +62,7 @@ public class AckReceiver {
 
     public void receiveAck(int id) {
         ackCount++;
-        //System.out.println("receive ack: " + ackCount + " id: " + id);
+        System.out.println("receive ack: " + ackCount + " id: " + id);
         if(ackCount < firstCount * 2 - 1)
             return;
         if(this.vertexID != id)

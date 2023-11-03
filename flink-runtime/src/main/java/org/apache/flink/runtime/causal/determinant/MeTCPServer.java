@@ -138,7 +138,7 @@ public class MeTCPServer{
                 for (Channel channel : channels) {
                     channel.writeAndFlush(copiedMsg.retain());
                 }
-                System.out.println("DeQueue N: " + count + " size: " + queue.size() + " dataSize: " + data.readableBytes() + " channnel: " + channels.size());
+                //System.out.println("DeQueue N: " + count + " size: " + queue.size() + " dataSize: " + data.readableBytes() + " channnel: " + channels.size());
                 count++;
             }
         } catch (InterruptedException e) {

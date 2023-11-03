@@ -34,27 +34,21 @@ public class AckReceiver {
     private final Lock lock = new ReentrantLock();
     private final Condition receivedAck = lock.newCondition();
     private boolean ackReceived = false;
-    private boolean waitNow = false;
     private int waitCount = 0;
     private int ackCount = 0;
     private int vertexID;
     private final int firstCount = 10000;
 
     public void waitForAck(short id) throws InterruptedException {
-        this.vertexID = (int) id;
-        waitCount++;
         System.out.println("wait ack: " + waitCount + " id: " + id);
         if(waitCount < firstCount)
             return;
-        if(waitNow)
-            receiveAck.await();
         lock.lock();
         try {
+            this.vertexID = (int) id;
             while (!ackReceived) {
-                waitNow = true;
                 receivedAck.await();
             }
-            waitNow = false;
             System.out.println("release lock: " + waitCount + " id: " + id);
             ackReceived = false;
         } finally {

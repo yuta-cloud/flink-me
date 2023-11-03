@@ -40,6 +40,7 @@ public class AckReceiver {
     private final int firstCount = 10000;
 
     public void waitForAck(short id) throws InterruptedException {
+        waitCount++;
         System.out.println("wait ack: " + waitCount + " id: " + id);
         if(waitCount < firstCount)
             return;
